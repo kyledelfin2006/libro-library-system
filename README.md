@@ -414,7 +414,7 @@ If you prefer to run the application directly on the host machine, start only Po
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 64 unit tests cover entity and DTO validation, service-layer entity-validation enforcement, mapper behavior, service-layer behavior, and global REST exception translation without starting Spring, Hibernate, PostgreSQL, or Docker.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 65 unit tests cover entity and DTO validation, service-layer validation enforcement, mapper behavior, service-layer behavior, and global REST exception translation without starting Spring, Hibernate, PostgreSQL, or Docker.
 
 - `BookTest` verifies book construction and request DTO constraints.
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.

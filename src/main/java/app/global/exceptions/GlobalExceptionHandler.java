@@ -1,6 +1,7 @@
 package app.global.exceptions;
 
 import app.book.exceptions.BookNotFoundException;
+import app.book.exceptions.BookValidationException;
 import app.global.responses.ErrorResponse;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +52,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(buildValidationErrorResponse(ex.getMessage()));
     }
 
+    /** Handles validation failures specific to book write operations. */
+    @ExceptionHandler(BookValidationException.class)
+    public ResponseEntity<ErrorResponse> handleBookValidation(BookValidationException ex) {
+        log.warn("Book validation failed: {}", ex.getMessage());
+        return ResponseEntity.badRequest().body(buildValidationErrorResponse(ex.getMessage()));
+    }
 
     /**
      * Handles validation failures for {@code @Valid} annotated request bodies.

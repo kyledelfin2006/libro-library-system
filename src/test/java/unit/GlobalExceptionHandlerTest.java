@@ -2,6 +2,7 @@ package unit;
 
 import app.book.entity.Book;
 import app.book.exceptions.BookNotFoundException;
+import app.book.exceptions.BookValidationException;
 import app.global.exceptions.GlobalExceptionHandler;
 import app.global.responses.ErrorResponse;
 import jakarta.validation.ConstraintViolation;
@@ -99,6 +100,16 @@ class GlobalExceptionHandlerTest {
 
         assertError(response, HttpStatus.BAD_REQUEST, "Validation failed",
                 "Title cannot be empty, Price must be greater than 0");
+    }
+
+    /** Verifies book business validation has its own HTTP 400 handler. */
+    @Test
+    void shouldReturnBadRequestWhenBookValidationExceptionThrown() {
+        BookValidationException exception = new BookValidationException("Price must be greater than 0");
+
+        ResponseEntity<ErrorResponse> response = handler.handleBookValidation(exception);
+
+        assertError(response, HttpStatus.BAD_REQUEST, "Validation failed", "Price must be greater than 0");
     }
 
     /** Verifies service-layer entity violations use the standard validation response contract. */

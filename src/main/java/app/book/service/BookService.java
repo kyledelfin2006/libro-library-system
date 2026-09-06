@@ -3,6 +3,7 @@ package app.book.service;
 import app.book.dto.BookResponseDTO;
 import app.book.dto.LibraryStatisticsDTO;
 import app.book.exceptions.BookNotFoundException;
+import app.book.exceptions.BookValidationException;
 import app.book.entity.Book;
 import app.book.dto.BookRequestDTO;
 import app.book.mapper.BookMapper;
@@ -127,7 +128,7 @@ public class BookService {
      * @param updates the DTO containing the fields to update (others remain unchanged)
      * @return the updated {@link Book} entity (managed, persisted by dirty checking)
      * @throws BookNotFoundException      if the book does not exist
-     * @throws IllegalArgumentException   if the provided price is ≤ 0
+     * @throws BookValidationException if the provided price is ≤ 0
      */
     // Partial updates
     @Transactional
@@ -148,7 +149,7 @@ public class BookService {
         }
         if (updates.getPrice() != null) {
             if (updates.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalArgumentException("Price must be greater than 0");
+                throw new BookValidationException("Price must be greater than 0");
             }
             existingBook.setPrice(updates.getPrice());
         }
@@ -172,26 +173,26 @@ public class BookService {
      * @param updates the DTO containing the complete new data (must be valid)
      * @return the updated {@link Book} entity (managed)
      * @throws BookNotFoundException    if the book does not exist
-     * @throws IllegalArgumentException if the DTO is {@code null} or contains invalid data
-     *                                  (e.g., blank title, negative price)
+     * @throws BookValidationException if the DTO is {@code null} or contains invalid data
+     *                                 (e.g., blank title, negative price)
      */
     @Transactional
     public Book replaceBook(Long id, BookRequestDTO updates) {
         // 1. Validate the incoming DTO (replace requires a complete, valid payload)
         if (updates == null) {
-            throw new IllegalArgumentException("Book data must not be null");
+            throw new BookValidationException("Book data must not be null");
         }
         if (!hasText(updates.getTitle())) {
-            throw new IllegalArgumentException("Title must not be blank");
+            throw new BookValidationException("Title must not be blank");
         }
         if (!hasText(updates.getAuthor())) {
-            throw new IllegalArgumentException("Author must not be blank");
+            throw new BookValidationException("Author must not be blank");
         }
         if (!hasText(updates.getGenre())) {
-            throw new IllegalArgumentException("Genre must not be blank");
+            throw new BookValidationException("Genre must not be blank");
         }
         if (updates.getPrice() == null || updates.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Price must be greater than 0");
+            throw new BookValidationException("Price must be greater than 0");
         }
 
         // 2. Fetch the existing book (throws 404 if not found)
@@ -208,7 +209,7 @@ public class BookService {
     }
 
     /**
-     * Enforces the validation constraints declared on {@link Book} before a write reaches the
+     * Enforces the validation constraints declared on {@link Book} before write reaches the
      * persistence boundary. This protects service callers that do not pass through controller
      * DTO validation and makes entity constraints independent of provider lifecycle callbacks.
      *

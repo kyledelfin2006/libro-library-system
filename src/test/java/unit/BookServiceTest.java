@@ -1,6 +1,7 @@
 package unit;
 
 import app.book.exceptions.BookNotFoundException;
+import app.book.exceptions.BookValidationException;
 import app.book.mapper.BookMapper;
 import app.book.service.BookService;
 import app.book.entity.Book;
@@ -224,21 +225,21 @@ class BookServiceTest {
 
     /** Verifies that a negative PATCH price is rejected before persistence. */
     @Test
-    void patchBook_whenPriceIsZeroOrNegative_shouldThrowIllegalArgumentException() {
+    void patchBook_whenPriceIsZeroOrNegative_shouldThrowBookValidationException() {
         when(repository.findById(BOOK_ID)).thenReturn(Optional.of(sampleBook));
         BookRequestDTO updates = new BookRequestDTO(null, null, null, new BigDecimal("-5.0"));
 
-        assertThrows(IllegalArgumentException.class, () -> bookService.patchBook(BOOK_ID, updates));
+        assertThrows(BookValidationException.class, () -> bookService.patchBook(BOOK_ID, updates));
         verify(repository, never()).save(any());
     }
 
     /** Verifies that zero is rejected because prices must be strictly positive. */
     @Test
-    void patchBook_whenPriceIsExactlyZero_shouldThrowIllegalArgumentException() {
+    void patchBook_whenPriceIsExactlyZero_shouldThrowBookValidationException() {
         when(repository.findById(BOOK_ID)).thenReturn(Optional.of(sampleBook));
         BookRequestDTO updates = new BookRequestDTO(null, null, null, BigDecimal.ZERO);
 
-        assertThrows(IllegalArgumentException.class, () -> bookService.patchBook(BOOK_ID, updates));
+        assertThrows(BookValidationException.class, () -> bookService.patchBook(BOOK_ID, updates));
         verify(repository, never()).save(any());
     }
 
@@ -268,80 +269,80 @@ class BookServiceTest {
 
     /** Verifies that a null replacement payload is rejected before repository interaction. */
     @Test
-    void replaceBook_whenDtoIsNull_shouldThrowIllegalArgumentException() {
-        assertThrows(IllegalArgumentException.class, () -> bookService.replaceBook(BOOK_ID, null));
+    void replaceBook_whenDtoIsNull_shouldThrowBookValidationException() {
+        assertThrows(BookValidationException.class, () -> bookService.replaceBook(BOOK_ID, null));
         verify(repository, never()).save(any());
     }
 
     /** Verifies that PUT requires a non-null title. */
     @Test
-    void replaceBook_whenDtoHasNullTitle_shouldThrowIllegalArgumentException() {
+    void replaceBook_whenDtoHasNullTitle_shouldThrowBookValidationException() {
         BookRequestDTO invalidDto = new BookRequestDTO(null, "Author", "Genre", new BigDecimal("20.0"));
 
-        assertThrows(IllegalArgumentException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
+        assertThrows(BookValidationException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
         verify(repository, never()).save(any());
     }
 
     /** Verifies that PUT rejects titles containing only whitespace. */
     @Test
-    void replaceBook_whenDtoHasEmptyTitle_shouldThrowIllegalArgumentException() {
+    void replaceBook_whenDtoHasEmptyTitle_shouldThrowBookValidationException() {
         BookRequestDTO invalidDto = new BookRequestDTO("   ", "Author", "Genre", new BigDecimal("20.0"));
 
-        assertThrows(IllegalArgumentException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
+        assertThrows(BookValidationException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
         verify(repository, never()).save(any());
     }
 
     /** Verifies that PUT requires a non-null author. */
     @Test
-    void replaceBook_whenDtoHasNullAuthor_shouldThrowIllegalArgumentException() {
+    void replaceBook_whenDtoHasNullAuthor_shouldThrowBookValidationException() {
         BookRequestDTO invalidDto = new BookRequestDTO("Title", null, "Genre", new BigDecimal("20.0"));
 
-        assertThrows(IllegalArgumentException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
+        assertThrows(BookValidationException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
         verify(repository, never()).save(any());
     }
 
     /** Verifies that PUT rejects blank authors. */
     @Test
-    void replaceBook_whenDtoHasEmptyAuthor_shouldThrowIllegalArgumentException() {
+    void replaceBook_whenDtoHasEmptyAuthor_shouldThrowBookValidationException() {
         BookRequestDTO invalidDto = new BookRequestDTO("Title", "", "Genre", new BigDecimal("20.0"));
 
-        assertThrows(IllegalArgumentException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
+        assertThrows(BookValidationException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
         verify(repository, never()).save(any());
     }
 
     /** Verifies that PUT requires a non-null genre. */
     @Test
-    void replaceBook_whenDtoHasNullGenre_shouldThrowIllegalArgumentException() {
+    void replaceBook_whenDtoHasNullGenre_shouldThrowBookValidationException() {
         BookRequestDTO invalidDto = new BookRequestDTO("Title", "Author", null, new BigDecimal("20.0"));
 
-        assertThrows(IllegalArgumentException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
+        assertThrows(BookValidationException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
         verify(repository, never()).save(any());
     }
 
     /** Verifies that PUT rejects genres containing only whitespace. */
     @Test
-    void replaceBook_whenDtoHasEmptyGenre_shouldThrowIllegalArgumentException() {
+    void replaceBook_whenDtoHasEmptyGenre_shouldThrowBookValidationException() {
         BookRequestDTO invalidDto = new BookRequestDTO("Title", "Author", "  ", new BigDecimal("20.0"));
 
-        assertThrows(IllegalArgumentException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
+        assertThrows(BookValidationException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
         verify(repository, never()).save(any());
     }
 
     /** Verifies that PUT rejects a zero price. */
     @Test
-    void replaceBook_whenDtoHasPriceZero_shouldThrowIllegalArgumentException() {
+    void replaceBook_whenDtoHasPriceZero_shouldThrowBookValidationException() {
         BookRequestDTO invalidDto = new BookRequestDTO("Title", "Author", "Genre", BigDecimal.ZERO);
 
-        assertThrows(IllegalArgumentException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
+        assertThrows(BookValidationException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
         verify(repository, never()).save(any());
     }
 
     /** Verifies that PUT rejects a negative price. */
     @Test
-    void replaceBook_whenDtoHasNegativePrice_shouldThrowIllegalArgumentException() {
+    void replaceBook_whenDtoHasNegativePrice_shouldThrowBookValidationException() {
         BookRequestDTO invalidDto = new BookRequestDTO("Title", "Author", "Genre", new BigDecimal("-10.0"));
 
-        assertThrows(IllegalArgumentException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
+        assertThrows(BookValidationException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
         verify(repository, never()).save(any());
     }
 
