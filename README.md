@@ -130,7 +130,6 @@ src/main/resources/
     migration/
       V1_create_books_table.sql
       V2_create_users_table.sql
-      V3__add_created_at_to_books.sql
 
 src/test/java/
   unit/
