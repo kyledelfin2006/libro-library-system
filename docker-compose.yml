@@ -9,15 +9,21 @@ services:
     ports:
       - "5432:5432" # Maps host port 5432 to container port 5432
     volumes:
-      - postgres_data:/var/lib/postgresql/data # Persistent data volume
-      - ./src/main/resources/db/migration/V1_create_books_table.sql:/docker-entrypoint-initdb.d/V1_create_books_table.sql # Runs DB schema init on first startup
+      - postgres_data:/var/lib/postgresql # Persistent data volume
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
     restart: unless-stopped
 
   app: # Spring Boot application service
     build: . # Builds image locally via dockerfile
     container_name: library-app
-    depends_on: # Ensures that the database starts first before the app
-      - db
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB} # References the db container above
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}

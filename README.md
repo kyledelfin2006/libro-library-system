@@ -128,8 +128,8 @@ src/main/resources/
   application.properties
   db/
     migration/
-      V1_create_books_table.sql
-      V2_create_users_table.sql
+      V1__create_books_table.sql
+      V2__create_users_table.sql
 
 src/test/java/
   unit/
@@ -228,10 +228,12 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 
 ### Startup flow
 
-1. Spring Boot starts `app.LibraryApplication`.
-2. Flyway runs the versioned migrations in order, including `V3__add_created_at_to_books.sql` when it is pending.
-3. `SecurityConfig` allows all requests and disables CSRF.
-4. The API becomes ready at `http://localhost:8080`.
+1. Compose waits until PostgreSQL passes `pg_isready`.
+2. Spring Boot starts `app.LibraryApplication`.
+3. The Spring Boot Flyway starter runs pending migrations before JPA initializes.
+4. Hibernate validates the migrated schema with `ddl-auto=validate`.
+5. `SecurityConfig` allows all requests and disables CSRF.
+6. The API becomes ready at `http://localhost:8080`.
 
 ## Code Highlights
 
@@ -391,6 +393,10 @@ If you prefer to run the application directly on the host machine, start only Po
 | `Invalid Number Format` | Non-numeric values were sent to a numeric endpoint | Use numeric values for `price`, `minPrice`, `maxPrice`, and similar fields |
 | `Method not allowed` | Wrong HTTP verb was used | Match the method listed in the endpoint table |
 | Docker app container fails to start | The jar was not built before `docker compose up --build` | Run `mvn clean package` first |
+| Swagger UI loads but API calls fail, or `library-app` keeps restarting | Inspect `docker compose logs app`; the old empty development volume may have `books.id` as `INTEGER` while Hibernate expects `BIGINT` | Rebuild the jar, remove the disposable pre-release volume with `docker compose down -v`, then run `docker compose up -d --build` |
+| No Flyway messages or `flyway_schema_history` table | The Boot 4 Flyway starter is absent, or the container contains an old jar | Keep `spring-boot-starter-flyway`, rebuild the jar, and rebuild the image |
+
+The complete diagnosis, pre-release reset procedure, clean-install behavior, and production-data warning are in [Docker/Flyway 500-error runbook](docs/docker-flyway-500-fix.md).
 
 ## Quick Start
 
@@ -403,8 +409,10 @@ If you prefer to run the application directly on the host machine, start only Po
 
 - PostgreSQL 18 stores all book records.
 - Flyway manages schema changes via versioned SQL migrations in `src/main/resources/db/migration/`.
-  - `V1_create_books_table.sql` creates the `books` table with the `created_at` column and indexes.
-  - `V2_create_users_table.sql` currently has no SQL content (placeholder for future users table).
+  - `V1__create_books_table.sql` creates the `books` table with the `created_at` column and indexes.
+  - `V2__create_users_table.sql` currently has no SQL content (placeholder for future users table).
+- Compose no longer mounts SQL into PostgreSQL's init directory; Flyway is the only schema owner.
+- V1 uses `BIGSERIAL`, matching the entity's Java `Long`/SQL `BIGINT` mapping from the first migration.
 - The app uses JPA and Hibernate for entity persistence with `ddl-auto=validate`.
 - `Book.createdAt` maps to `books.created_at` and is set automatically on insert. It is intentionally omitted from `BookResponseDTO`, so clients do not receive it and cannot provide it through create, patch, or replace requests.
 - Updates rely on Hibernate dirty checking inside transactional service methods.
@@ -454,6 +462,7 @@ These are isolated unit tests. Controller routing and serialization, repository 
 
 ## Problems I Solved
 
+- **Docker API 500 / restart loop**: The database used PostgreSQL `SERIAL` (`INTEGER`) for `books.id`, while the entity uses Java `Long` and Hibernate 7 expects `BIGINT`. In addition, direct `flyway-core` usage did not activate Flyway auto-configuration under Spring Boot 4, and PostgreSQL's init script competed with Flyway. Because the application is still pre-release and contains no data, the fix corrects V1 to `BIGSERIAL`, installs `spring-boot-starter-flyway`, makes Flyway the only schema authority, and waits for PostgreSQL health before starting the app. See the [incident runbook](docs/docker-flyway-500-fix.md).
 - **Slow Unit-Test Feedback Loop**: The 61-test suite had been observed taking approximately 54 seconds on its first run and 24 seconds on a subsequent run. I kept the same 61 tests and behavioral assertions while removing repeated fixture initialization, reusing and resetting the service-layer mock safely, sharing and closing the Jakarta Validator factory, replacing unnecessary exception mocks with real objects, suppressing test-only log noise, and running independent test classes concurrently. The optimized suite completed a verified warm Maven run in 5.098 seconds on the development machine.
 - **Tight Coupling**: Solved by using constructor-based dependency injection, interface-driven design (`BookService`, `BookRepository`), and the `BookMapper` component. The controller depends on abstractions rather than concrete implementations, making the codebase testable and easy to extend.
 - **Memory Leaking**: Solved by using `@Modifying(clearAutomatically = true)` on the delete query to flush and clear the persistence context, preventing stale entity accumulation. Pagination on `/app/books/all` also prevents loading the entire table into memory.
@@ -464,7 +473,6 @@ These are isolated unit tests. Controller routing and serialization, repository 
 
 ## Upcoming Improvements
 
-- Add OpenAPI/Swagger documentation for interactive API discovery.
 - Add controller-level integration tests alongside the existing unit tests.
 - Expand search capabilities with more flexible filtering and sorting combinations.
 - Add authentication and authorization if the API is exposed beyond local development.

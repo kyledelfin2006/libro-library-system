@@ -19,6 +19,7 @@
         <maven.compiler.source>25</maven.compiler.source>
         <maven.compiler.target>25</maven.compiler.target>
         <lombok.version>1.18.46</lombok.version>
+        <flyway.version>13.3.0</flyway.version>
     </properties>
 
     <dependencies>
@@ -83,22 +84,17 @@
             <scope>compile</scope>
         </dependency>
 
-        <!-- flyway for database migrations -->
-        <!-- Source: https://mvnrepository.com/artifact/org.flywaydb/flyway-core -->
+        <!-- Spring Boot 4 requires its Flyway starter to activate migration auto-configuration. -->
         <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
-            <version>13.3.0</version>
-            <scope>compile</scope>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
         </dependency>
 
-        <!-- flyway for postgresql migrations -->
-        <!-- Source: https://mvnrepository.com/artifact/org.flywaydb/flyway-database-postgresql -->
+        <!-- PostgreSQL-specific Flyway support. -->
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
-            <version>13.3.0</version>
-            <scope>compile</scope>
+            <scope>runtime</scope>
         </dependency>
 
         <dependency>

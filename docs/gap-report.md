@@ -4,7 +4,7 @@
 |---|---|
 | Scope | Repository-level code and architecture assessment |
 | Status | Active; gaps are grouped by architectural layer |
-| Last updated | September 6, 2026 |
+| Last updated | September 9, 2026 |
 | Register policy | Detailed sections contain active gaps only; resolved IDs move to the resolution register and are never reused |
 | Counting basis | Severity totals include active gaps only; resolved gaps remain traceable in the portfolio summary |
 
@@ -61,11 +61,9 @@
 
 | # | Gap | Location | Impact | Why it matters |
 |---|-----|----------|--------|-----------------|
-| 5.1 | **Missing semicolon on V1 migration** | `src/main/resources/db/migration/V1_create_books_table.sql` (line 14) | `CREATE INDEX idx_created_at ON books(created_at)` lacks a trailing semicolon | PostgreSQL's `psql` / Flyway may handle this, but it's a syntax inconsistency. Other SQL dialects or import tools might fail. |
+| 5.1 | **Missing semicolon on V1 migration** | `../src/main/resources/db/migration/V1__create_books_table.sql` (line 14) | `CREATE INDEX idx_created_at ON books(created_at)` lacks a trailing semicolon | PostgreSQL's `psql` / Flyway may handle this, but it's a syntax inconsistency. Other SQL dialects or import tools might fail. |
 | 5.2 | **No `CHECK (price > 0)` constraint** | V1 migration (line 6: `price DECIMAL(10,2) NOT NULL`) | The database accepts zero or negative prices if data is inserted directly | AGENTS.md explicitly documents this: "The database enforces `NOT NULL` for price but not a positive-value check; application validation is the current positive-price guard." If the application is bypassed (direct DB access, migration, bulk import), invalid prices enter the system. |
-| 5.3 | **Dual schema initialization (Docker mount + Flyway)** | `docker-compose.yml` (line 13: mounts V1 to `/docker-entrypoint-initdb.d/`) + application runs Flyway from JAR | V1 schema is applied twice in fresh Docker deployments — once by PostgreSQL's init process, once by Flyway | AGENTS.md notes: "Docker Compose currently mounts V1 into `/docker-entrypoint-initdb.d` while the application also runs Flyway from its JAR." This is redundant and could cause issues if the two diverge. Flyway should be the sole schema authority. |
 | 5.4 | **No connection pool configuration** | `application.properties` — no HikariCP settings | Uses Spring Boot defaults (max 10 connections, no custom pool name) | Adequate for development, but no visibility into pool saturation in production. No metrics exposure for pool utilization. |
-| 5.5 | **No Flyway locations or baseline configuration** | `application.properties` — only `spring.flyway.enabled=true` | Uses Flyway defaults (`classpath:db/migration`, baseline disabled) | This is functional but fragile — if the default changes or the project structure diverges, migrations will silently fail to run. Explicit `spring.flyway.locations=classpath:db/migration` would make the intent clear. |
 
 ---
 
@@ -74,7 +72,6 @@
 | # | Gap | Location | Impact | Why it matters |
 |---|-----|----------|--------|-----------------|
 | 6.1 | **Dockerfile is not multi-stage and requires pre-built JAR** | `Dockerfile` (line 3: `COPY target/*.jar app.jar`) | `docker compose build` fails if `mvn package` hasn't been run first | AGENTS.md notes: "The Dockerfile is not a multi-stage build." This creates a two-step build process that is error-prone for CI/CD pipelines and new contributors. A multi-stage Dockerfile would `mvn package` in the builder stage and copy the resulting JAR. |
-| 6.2 | **Docker Compose has no health check** | `docker-compose.yml` — no `healthcheck` on `db` or `app` services | `depends_on` starts the app before PostgreSQL is ready to accept connections | AGENTS.md: "The Compose `depends_on` directive controls startup order but does not wait for database readiness." The app will crash-loop until PostgreSQL is ready, then recover. A health check + `condition: service_healthy` would provide deterministic startup. |
 | 6.3 | **`envFileExample` template uses placeholder defaults** | `envFileExample` (lines 1–3) | Values like `libraryDb`, `change_role`, `change_me` are not production-safe | While the file is a template (not committed credentials), the default values are weakly suggestive rather than explicitly marked as "replace-me." |
 | 6.4 | **No production profile or externalized configuration** | `application.properties` has no profile-specific files | Same config for dev and prod — no way to tune database pool size, Flyway locations, or logging levels per environment | Spring Boot profiles (`application-prod.properties`, `application-dev.properties`) would allow environment-specific tuning without code changes. |
 | 6.5 | **DevTools dependency included in all builds** | `pom.xml` (lines 64–69) | Spring Boot DevTools refreshes the application on classpath changes — useful for development but unnecessary (and slightly insecure) in production | Should be scoped or conditionally excluded for production images. |
@@ -98,9 +95,8 @@
 | 8.1 | **Repository query methods use raw `Object[]` projections** | `BookRepository.getGenres()` returns `List<Object[]>` (line 100), `getCountAndTotalValue()` returns `Object[]` (line 116) | The service must cast indexes manually (`row[0]`, `row[1]`) with no type safety | AGENTS.md notes: "Aggregate repository methods currently return low-level shapes (`Object[]` and `List<Object[]>`)." A `Class`-based or Spring Data projection would provide compile-time safety and eliminate `ClassCastException` risk. |
 | 8.2 | **No `@Slf4j` on controller layer** | `BookAPI` — no logging annotation | Controller-level events (request received, response returned, errors) are only logged at the service layer | The service logs `"Processing request to add book: {}"` but the controller has no logging. For debugging, knowing the HTTP method and path from the controller would complement the service-level business log. |
 | 8.3 | **`ApiResponse.data` is mutable** | `ApiResponse` (line 6: `private T data;`) | Although `success`, `message`, and `timestamp` are final, `data` has a setter-less mutable declaration that could confuse (it's actually never mutated) | The class has no explicit setters, so `data` is effectively immutable, but the inconsistent mutability declaration (`final` on most fields, not on `data`) makes the class's immutability contract unclear. |
-| 8.4 | **Empty V2 migration** | `src/main/resources/db/migration/V2_create_users_table.sql` — 0 bytes | Flyway records `V2` as applied, but it does nothing | Documented in AGENTS.md: "V2 is currently empty and may already be recorded in persistent databases." This is harmless unless a real users table needs to be added later — at that point, V2 cannot be edited to add the table; a new V3+ migration is required. |
+| 8.4 | **Empty V2 migration** | `../src/main/resources/db/migration/V2__create_users_table.sql` — 0 bytes | Flyway records `V2` as applied, but it does nothing | Documented in AGENTS.md: "V2 is currently empty and may already be recorded in persistent databases." This is harmless unless a real users table needs to be added later — at that point, V2 cannot be edited to add the table; a new V3+ migration is required. |
 | 8.5 | **Hardcoded allowlist for sort fields** | `BookService.getBooksSortedBy` (line 305: `Set.of("title", "author", "id", "price", "genre")`) | Adding a new sortable field requires editing the service, not just the entity | This is actually correct (security: sort fields should be allowlisted), but it's not documented that adding a sortable entity field requires updating this set. A comment or constant would make the dependency clear. |
-| 8.6 | **No OpenAPI/Swagger dependency** | `pom.xml` — no `springdoc-openapi` or `springfox` | No interactive API documentation, no machine-readable schema | AGENTS.md "Upcoming Improvements" lists this. Without generated OpenAPI docs, API consumers rely on README examples which may drift from implementation. |
 
 ---
 
@@ -122,6 +118,10 @@
 | 1.1 | Injected Jakarta `Validator` into `BookService`, enforced `Book` constraints before create/PATCH/PUT persistence, and mapped `ConstraintViolationException` to the standard validation response | September 5, 2026 | Entity annotations now execute for every service write, including callers that bypass controller `@Valid`; unit coverage verifies enforcement before repository save and HTTP 400 translation |
 | 1.2 | Removed the inaccurate `buildValidationErrorResponse` helper contract from `AGENTS.md` | September 3, 2026 | Documentation now matches the current handler implementation; the API contract is unchanged |
 | 1.3 | Added a domain-specific `BookValidationException` for PATCH/PUT service rules and a dedicated handler that uses the shared validation-response builder | September 6, 2026 | Book write-validation failures are distinct from unrelated argument errors while retaining the established HTTP 400 `Validation failed` response; unit tests verify the exception type and response contract |
+| 5.3 | Removed the PostgreSQL init-script mount and made Flyway the sole schema authority | September 9, 2026 | Fresh and existing schemas now follow one tracked migration path |
+| 5.5 | Explicitly configured `classpath:db/migration` and corrected V1 before persistent data existed | September 9, 2026 | Fresh databases run a deterministic Flyway-owned schema history without automatic baselining |
+| 6.2 | Added `pg_isready` health checking and `condition: service_healthy` | September 9, 2026 | The app starts only after PostgreSQL is ready to accept connections |
+| 8.6 | Added springdoc OpenAPI/Swagger UI support | September 9, 2026 | Interactive and machine-readable API documentation is available |
 
 ### Portfolio summary
 
@@ -131,18 +131,17 @@
 | Security | 4 | 0 | 4 | 0 | 1 | 2 | 1 |
 | API Design & Consistency | 8 | 0 | 8 | 0 | 2 | 4 | 2 |
 | Testing & Coverage | 5 | 0 | 5 | 0 | 1 | 3 | 1 |
-| Database & Migrations | 5 | 0 | 5 | 0 | 2 | 2 | 1 |
-| Infrastructure & Deployment | 5 | 0 | 5 | 0 | 1 | 2 | 2 |
+| Database & Migrations | 3 | 2 | 5 | 0 | 1 | 1 | 1 |
+| Infrastructure & Deployment | 4 | 1 | 5 | 0 | 1 | 1 | 2 |
 | Observability & Monitoring | 3 | 0 | 3 | 0 | 1 | 2 | 0 |
-| Code Quality & Maintainability | 6 | 0 | 6 | 0 | 0 | 4 | 2 |
+| Code Quality & Maintainability | 5 | 1 | 6 | 0 | 0 | 3 | 2 |
 | Concurrency & Data Integrity | 2 | 0 | 2 | 0 | 0 | 1 | 1 |
-| **Total** | **40** | **3** | **43** | **0** | **7** | **22** | **11** |
+| **Total** | **36** | **7** | **43** | **0** | **7** | **18** | **11** |
 
 Severity columns count active gaps only.
 
 **No critical vulnerabilities** were found. The highest-priority gaps are:
 1. **Testing coverage** — no integration, MVC, or JPA tests exist (Gap 4.1–4.2)
 2. **Security** — all endpoints public, no rate limiting (Gaps 2.1–2.3)
-3. **Schema authority** — dual init (Docker mount + Flyway) risks divergence (Gap 5.3)
-4. **Response envelope inconsistency** — 8 different response shapes across endpoints (Gap 3.1)
-5. **Database positive-price constraint** — missing `CHECK(price > 0)` (Gap 5.2)
+3. **Response envelope inconsistency** — 8 different response shapes across endpoints (Gap 3.1)
+4. **Database positive-price constraint** — missing `CHECK(price > 0)` (Gap 5.2)

@@ -63,9 +63,8 @@ library-api-system/
     |   `-- resources/
     |       |-- application.properties
     |       `-- db/migration/
-    |           |-- V1_create_books_table.sql
-    |           |-- V2_create_users_table.sql
-    |           `-- V3__add_created_at_to_books.sql
+    |           |-- V1__create_books_table.sql
+    |           `-- V2__create_users_table.sql
     `-- test/
         |-- java/unit/
         |   |-- BookMapperTest.java
@@ -170,7 +169,7 @@ Aggregate repository methods currently return low-level shapes (`Object[]` and `
 
 | Java field | Java type | Database definition | Constraints |
 |---|---|---|---|
-| `id` | `Long` | `SERIAL PRIMARY KEY` | Generated with `IDENTITY` |
+| `id` | `Long` | `BIGSERIAL PRIMARY KEY` | Generated with `IDENTITY` |
 | `title` | `String` | `VARCHAR(100)` | Nonblank, not null |
 | `author` | `String` | `VARCHAR(50)` | Nonblank, not null |
 | `genre` | `String` | `VARCHAR(50)` | Nonblank, not null |
@@ -273,11 +272,11 @@ Runtime driver used by the datasource to communicate with PostgreSQL. It is not 
 
 An in-memory database driver declared at runtime for development/testing. The current default configuration still requires explicit `SPRING_DATASOURCE_*` values and does not define an H2 profile. Therefore, the dependency alone does not make the application or tests automatically run against H2. Add a deliberate test/profile configuration before relying on it.
 
-### Flyway core and PostgreSQL module
+### Spring Boot Flyway starter and PostgreSQL module
 
-Flyway 13.3.0 discovers versioned scripts in `classpath:db/migration`, records applied versions in `flyway_schema_history`, and migrates the database before JPA validation. The PostgreSQL module supplies database-specific Flyway support.
+`spring-boot-starter-flyway` supplies the Boot 4 migration auto-configuration. Flyway 13.3.0 discovers versioned scripts in `classpath:db/migration`, records applied versions in `flyway_schema_history`, and migrates the database before JPA validation. The PostgreSQL module supplies database-specific Flyway support.
 
-Never edit a migration that may have been applied to a shared or persistent database. Add the next versioned migration (`V3__description.sql`, and so on). Existing filenames use a single underscore after the version; use Flyway's conventional double underscore for new files unless the repository deliberately standardizes otherwise, and verify discovery during startup.
+Never edit a migration that may have been applied to a shared or persistent database. Add the next versioned migration (`V4__description.sql`, and so on). Migration filenames use Flyway's required double underscore between version and description; verify discovery during startup.
 
 ### Lombok
 
@@ -309,13 +308,14 @@ Important persistence settings:
 
 - `spring.jpa.hibernate.ddl-auto=validate`: Hibernate checks entity/schema compatibility but does not create or alter tables.
 - `spring.flyway.enabled=true`: Flyway owns migration execution.
+- `spring.flyway.locations=classpath:db/migration`: migration discovery is explicit.
 - `spring.sql.init.mode=never`: legacy `schema.sql`/`data.sql` initialization is disabled.
 - `spring.data.web.pageable.max-page-size=100`: limits API-requested pages.
 - MVC missing-handler settings route unknown endpoints into JSON exception handling.
 
 ## Database Migration Rules
 
-`V1_create_books_table.sql` creates `books` with the `created_at` column and its indexes. `V2_create_users_table.sql` currently has no SQL content. The V3 migration has been removed.
+`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` currently has no SQL content. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
 
 For every schema change:
 
@@ -325,7 +325,7 @@ For every schema change:
 4. Start the application with `ddl-auto=validate` to catch drift.
 5. Add integration coverage for nontrivial queries or constraints.
 
-Docker Compose currently mounts V1 into `/docker-entrypoint-initdb.d` while the application also runs Flyway from its JAR. PostgreSQL init scripts run only when the data volume is first created; Flyway runs on application startup. Avoid adding more Docker init mounts. Prefer Flyway as the single schema authority, and consider removing the V1 mount in a focused infrastructure change after validating fresh startup behavior.
+Docker Compose does not mount migrations into `/docker-entrypoint-initdb.d`; Flyway is the single schema authority. There is no automatic baseline for non-empty unmanaged schemas. During pre-release development, recreate the explicitly disposable empty volume after a V1 correction. Once persistent data exists, use a new forward migration instead.
 
 ## Build and Run Workflows
 
@@ -348,7 +348,7 @@ mvn clean package
 docker compose up --build
 ```
 
-The app is exposed on port 8080 and PostgreSQL on 5432. The Compose `depends_on` directive controls startup order but does not wait for database readiness. Spring/containers may restart until PostgreSQL accepts connections. A production-quality change should add a database health check and conditional dependency rather than relying on timing.
+The app is exposed on port 8080 and PostgreSQL on 5432. PostgreSQL has a `pg_isready` health check, and the app depends on the database reaching the healthy state before startup.
 
 Persistent data lives in the `postgres_data` Docker volume. `docker compose down` retains it; `docker compose down -v` deletes it. Never run the latter on behalf of a user unless data destruction is explicitly requested and confirmed.
 
@@ -495,8 +495,6 @@ When a breaking change is intended, document migration guidance and update all e
 - CSRF is disabled.
 - H2 is declared but has no dedicated application profile or integration-test setup.
 - The Docker image requires a prebuilt JAR and does not build source itself.
-- Compose startup ordering does not guarantee PostgreSQL readiness.
-- Schema initialization is split conceptually between a Docker V1 init mount and application Flyway; Flyway should become the sole authority.
 - V2 is currently empty and may already be recorded in persistent databases.
 - Test coverage is predominantly unit-level; HTTP, JPA, migration, security, and container paths lack automated integration coverage.
 - Success response shapes are inconsistent across endpoints.
