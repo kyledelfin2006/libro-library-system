@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS users (
     -- Store an IT major; this must be null for non-IT students and faculty.
     infotech_major VARCHAR(10),
 
+    -- Timestamp automatically assigned when the account is created.
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
     -- Restrict user roles to the values represented by the Java UserRole enum.
     CONSTRAINT chk_user_role
         CHECK (user_role IN ('STUDENT', 'FACULTY')),

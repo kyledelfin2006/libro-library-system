@@ -12,6 +12,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
+
 @Getter @Setter
 @NoArgsConstructor
 @AllArgsConstructor
@@ -62,6 +64,9 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(name = "infotech_major")
     private UserITMajor major;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    LocalDateTime createdAt;
 
 
 
