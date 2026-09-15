@@ -117,3 +117,6 @@ Thumbs.db
 proposed.project.structured.txt
 .run/
 .kilo
+
+# Keep local planning notes out of version control.
+internal-docs/
