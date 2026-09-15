@@ -142,6 +142,7 @@ public class UserService {
             throw new IllegalArgumentException("University ID cannot be null or blank");
         }
 
+        // checks id if it follows the required pattern
         if (!normalizedUniversityId.matches("\\d{4}-\\d{4}")) {
             throw new IllegalArgumentException(
                     "University ID must follow this format: 2025-4321"
