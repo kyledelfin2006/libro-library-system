@@ -19,7 +19,6 @@ import java.util.List;
 public class UserMapper {
 
 
-
     /**
      * Converts a create request to a new entity.
      *
