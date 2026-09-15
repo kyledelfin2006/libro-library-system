@@ -18,6 +18,33 @@ import java.util.List;
 @Component
 public class UserMapper {
 
+
+
+    /**
+     * Converts a create request to a new entity.
+     *
+     * @param request the create request
+     * @param encodedPasswordHash the hash produced by PasswordEncoder
+     * @return a new user entity, or {@code null} when the request is null
+     */
+    public User toEntity(UserCreateRequestDTO request, String encodedPasswordHash) {
+        if (request == null) {
+            return null;
+        }
+
+        User user = new User();
+        user.setUniversityId(request.getUniversityId());
+        user.setPasswordHash(encodedPasswordHash);
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
+        user.setMiddleInitial(request.getMiddleInitial());
+        user.setEmail(request.getEmail());
+        user.setUserRole(request.getUserRole());
+        user.setUserCourse(request.getUserCourse());
+        user.setMajor(request.getMajor());
+        return user;
+    }
+
     /**
      * Converts a {@link User} to a response DTO.
      * Password fields are intentionally not included in the response DTO.
@@ -58,28 +85,4 @@ public class UserMapper {
                 .toList();
     }
 
-    /**
-     * Converts a create request to a new entity.
-     *
-     * @param request the create request
-     * @param encodedPasswordHash the hash produced by PasswordEncoder
-     * @return a new user entity, or {@code null} when the request is null
-     */
-    public User toEntity(UserCreateRequestDTO request, String encodedPasswordHash) {
-        if (request == null) {
-            return null;
-        }
-
-        User user = new User();
-        user.setUniversityId(request.getUniversityId());
-        user.setPasswordHash(encodedPasswordHash);
-        user.setFirstName(request.getFirstName());
-        user.setLastName(request.getLastName());
-        user.setMiddleInitial(request.getMiddleInitial());
-        user.setEmail(request.getEmail());
-        user.setUserRole(request.getUserRole());
-        user.setUserCourse(request.getUserCourse());
-        user.setMajor(request.getMajor());
-        return user;
-    }
 }
