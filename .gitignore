@@ -120,3 +120,4 @@ proposed.project.structured.txt
 
 # Keep local planning notes out of version control.
 internal-docs/
+internal-docs/TODO.md
