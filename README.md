@@ -5,7 +5,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
 
-Libro is a Spring Boot REST API for managing books with CRUD operations, search, pagination, sorting, range filtering, genre analytics, and statistics. It uses DTO-driven validation, centralized exception handling, and a Docker-first workflow backed by PostgreSQL 18 with Flyway database migrations.
+Libro is a Spring Boot REST API for managing books with CRUD operations, search, pagination, sorting, range filtering, genre analytics, and statistics. It also contains the foundation of a user domain with academic-role rules and password hashing, although user and loan HTTP APIs are not yet exposed. It uses DTO-driven validation, centralized exception handling, and a Docker-first workflow backed by PostgreSQL 18 with Flyway database migrations.
 
 The API also exposes generated OpenAPI documentation through Springdoc: Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running.
 
@@ -121,12 +121,26 @@ src/main/java/app/
       BookMapper.java
     exceptions/
       BookNotFoundException.java
-  global/
-    exceptions/
-      GlobalExceptionHandler.java
-    responses/
-      ApiResponse.java
-      ErrorResponse.java
+    global/
+      exceptions/
+        GlobalExceptionHandler.java
+      responses/
+        ApiResponse.java
+        ErrorResponse.java
+  user/
+    beans/PasswordConfig.java
+    dto/
+      UserCreateRequestDTO.java
+      UserResponseDTO.java
+    entity/
+      User.java
+      enums/
+        UserCourse.java
+        UserITMajor.java
+        UserRole.java
+    mapper/UserMapper.java
+    repository/UserRepository.java
+    service/UserService.java
 
 src/main/resources/
   application.properties
@@ -207,6 +221,7 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 - Budget filtering through `GET /app/books/budget`.
 - Statistics endpoints for total books, total library value, average price, and the most expensive book.
 - Genre distribution endpoint.
+- User-domain foundation with role/course/major enums, duplicate checks, academic business rules, and BCrypt password hashing; no user controller exists yet.
 - OpenAPI 3 documentation through Springdoc Swagger UI and `/v3/api-docs`.
 - Validation with `@Valid` on create and replace requests.
 - Global handling for `BookNotFoundException`, validation errors, malformed JSON, number format errors, database issues, and unsupported methods.
@@ -420,7 +435,7 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 - PostgreSQL 18 stores all book records.
 - Flyway manages schema changes via versioned SQL migrations in `src/main/resources/db/migration/`.
   - `V1__create_books_table.sql` creates the `books` table with the `created_at` column and indexes.
-  - `V2__create_users_table.sql` currently has no SQL content (placeholder for future users table).
+  - `V2__create_users_table.sql` creates the users table with role, course, major, identity-format, uniqueness, and relationship constraints.
 - Compose no longer mounts SQL into PostgreSQL's init directory; Flyway is the only schema owner.
 - V1 uses `BIGSERIAL`, matching the entity's Java `Long`/SQL `BIGINT` mapping from the first migration.
 - The app uses JPA and Hibernate for entity persistence with `ddl-auto=validate`.
@@ -428,15 +443,18 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 - Updates rely on Hibernate dirty checking inside transactional service methods.
 - `BookRequestDTO` is used for request validation, while `BookResponseDTO` and `LibraryStatisticsDTO` are used for response shaping.
 - `BookMapper` centralizes conversion between entities and DTOs.
+- `UserService` normalizes university IDs and email addresses, checks duplicate identity values, enforces academic rules, and persists only BCrypt-hashed passwords.
+- User DTO annotations exist, but there is no `UserController` yet; HTTP-boundary validation and user API serialization still need integration coverage.
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 67 unit tests cover entity and DTO validation, service-layer validation enforcement, mapper behavior, service-layer behavior, typed statistics projections, and global REST exception translation without starting Spring, Hibernate, PostgreSQL, or Docker.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 67 unit tests cover the book entity and DTO, book service behavior, typed statistics projections, mapper behavior, and global REST exception translation. The current suite has no user-domain, controller, JPA, Flyway, or PostgreSQL integration tests.
 
 - `BookTest` verifies book construction and request DTO constraints.
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.
 - `BookServiceTest` verifies service rules, repository interaction, search, sorting, pricing, typed statistics aggregates, and dirty-checking expectations.
 - `GlobalExceptionHandlerTest` directly invokes each of the 14 exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
+- `UserService` currently has no corresponding automated test class; academic combinations, duplicate checks, and password hashing remain unverified by tests.
 
 ### Unit-test performance
 
@@ -484,6 +502,10 @@ These are isolated unit tests. Controller routing and serialization, repository 
 
 ## Upcoming Improvements
 
+- Add `UserServiceTest` and controller/integration coverage for the user domain.
+- Add a user controller and document the user API after its service contract is stable.
+- Implement the loan domain, including active-loan constraints and overdue/history queries.
+- Decide on and implement an authentication model before replacing the development `permitAll()` security configuration.
 - Add controller-level integration tests alongside the existing unit tests.
 - Expand search capabilities with more flexible filtering and sorting combinations.
 - Add authentication and authorization if the API is exposed beyond local development.

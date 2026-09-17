@@ -53,29 +53,37 @@ public class UserService {
             throw new IllegalArgumentException("User request cannot be null");
         }
 
-
+        // normalize / validate university id
         String universityId = normalizeAndValidateUniversityId(request.getUniversityId());
 
+        // normalize / valid email
         String email = normalizeAndValidateEmail(request.getEmail());
+
+        // normalize / validate required values
         validateRequiredValue(request.getPassword(), "Password");
 
+        // check if university id is already used within the system
         if (userRepository.existsByUniversityId(universityId)) {
             throw new IllegalArgumentException("University ID is already registered");
         }
 
+        // check if email is already used within the system
         if (userRepository.existsByEmailIgnoreCase(email)) {
             throw new IllegalArgumentException("Email is already registered");
         }
 
+        // enforces the relationship between role, course, and IT major
         validateAcademicRules(request);
 
+        // encodes password using bcrypt
         String encodedPasswordHash = passwordEncoder.encode(request.getPassword());
         User user = userMapper.toEntity(request, encodedPasswordHash);
 
-        // Persist the normalized values, not the original client input.
+        // persist the normalized values, not the original client input.
         user.setUniversityId(universityId);
         user.setEmail(email);
 
+        // save user
         User savedUser = userRepository.save(user);
         return userMapper.toResponseDTO(savedUser);
     }

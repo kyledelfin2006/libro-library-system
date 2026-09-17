@@ -4,7 +4,7 @@
 |---|---|
 | Scope | Repository-level code and architecture assessment |
 | Status | Active; gaps are grouped by architectural layer |
-| Last updated | September 17, 2026 |
+| Last updated | September 18, 2026 |
 | Register policy | Detailed sections contain active gaps only; resolved IDs move to the resolution register and are never reused |
 | Counting basis | Severity totals include active gaps only; resolved gaps remain traceable in the portfolio summary |
 
@@ -61,7 +61,6 @@
 
 | # | Gap | Location | Impact | Why it matters |
 |---|-----|----------|--------|-----------------|
-| 5.1 | **Missing semicolon on V1 migration** | `../src/main/resources/db/migration/V1__create_books_table.sql` (line 14) | `CREATE INDEX idx_created_at ON books(created_at)` lacks a trailing semicolon | PostgreSQL's `psql` / Flyway may handle this, but it's a syntax inconsistency. Other SQL dialects or import tools might fail. |
 | 5.2 | **No `CHECK (price > 0)` constraint** | V1 migration (line 6: `price DECIMAL(10,2) NOT NULL`) | The database accepts zero or negative prices if data is inserted directly | AGENTS.md explicitly documents this: "The database enforces `NOT NULL` for price but not a positive-value check; application validation is the current positive-price guard." If the application is bypassed (direct DB access, migration, bulk import), invalid prices enter the system. |
 | 5.4 | **No connection pool configuration** | `application.properties` — no HikariCP settings | Uses Spring Boot defaults (max 10 connections, no custom pool name) | Adequate for development, but no visibility into pool saturation in production. No metrics exposure for pool utilization. |
 
@@ -95,7 +94,6 @@
 | 8.1 | **Genre aggregation still uses a raw `Object[]` projection** | `BookRepository.getGenres()` returns `List<Object[]>` (line 100) | The service must cast indexes manually (`row[0]`, `row[1]`) with no type safety | The count-and-total-value statistics query now uses the typed `LibraryAggregate` projection, but genre distribution still exposes an unstructured tuple. A typed projection would eliminate the remaining `ClassCastException` risk in aggregate mapping. |
 | 8.2 | **No `@Slf4j` on controller layer** | `BookAPI` — no logging annotation | Controller-level events (request received, response returned, errors) are only logged at the service layer | The service logs `"Processing request to add book: {}"` but the controller has no logging. For debugging, knowing the HTTP method and path from the controller would complement the service-level business log. |
 | 8.3 | **`ApiResponse.data` is mutable** | `ApiResponse` (line 6: `private T data;`) | Although `success`, `message`, and `timestamp` are final, `data` has a setter-less mutable declaration that could confuse (it's actually never mutated) | The class has no explicit setters, so `data` is effectively immutable, but the inconsistent mutability declaration (`final` on most fields, not on `data`) makes the class's immutability contract unclear. |
-| 8.4 | **Empty V2 migration** | `../src/main/resources/db/migration/V2__create_users_table.sql` — 0 bytes | Flyway records `V2` as applied, but it does nothing | Documented in AGENTS.md: "V2 is currently empty and may already be recorded in persistent databases." This is harmless unless a real users table needs to be added later — at that point, V2 cannot be edited to add the table; a new V3+ migration is required. |
 | 8.5 | **Hardcoded allowlist for sort fields** | `BookService.getBooksSortedBy` (line 305: `Set.of("title", "author", "id", "price", "genre")`) | Adding a new sortable field requires editing the service, not just the entity | This is actually correct (security: sort fields should be allowlisted), but it's not documented that adding a sortable entity field requires updating this set. A comment or constant would make the dependency clear. |
 
 ---
@@ -131,12 +129,12 @@
 | Security | 4 | 0 | 4 | 0 | 1 | 2 | 1 |
 | API Design & Consistency | 8 | 0 | 8 | 0 | 2 | 4 | 2 |
 | Testing & Coverage | 5 | 0 | 5 | 0 | 1 | 3 | 1 |
-| Database & Migrations | 3 | 2 | 5 | 0 | 1 | 1 | 1 |
+| Database & Migrations | 2 | 2 | 4 | 0 | 1 | 1 | 0 |
 | Infrastructure & Deployment | 4 | 1 | 5 | 0 | 1 | 1 | 2 |
 | Observability & Monitoring | 3 | 0 | 3 | 0 | 1 | 2 | 0 |
-| Code Quality & Maintainability | 5 | 1 | 6 | 0 | 0 | 3 | 2 |
+| Code Quality & Maintainability | 4 | 1 | 5 | 0 | 0 | 3 | 1 |
 | Concurrency & Data Integrity | 2 | 0 | 2 | 0 | 0 | 1 | 1 |
-| **Total** | **36** | **7** | **43** | **0** | **7** | **18** | **11** |
+| **Total** | **34** | **7** | **41** | **0** | **7** | **18** | **9** |
 
 Severity columns count active gaps only.
 

@@ -4,7 +4,7 @@
 
 This file is the working guide for AI coding agents and human contributors to the Libro: Library API System. Read it before changing the project. It documents the repository as it exists, the intended architecture, the contracts between layers, and the checks expected before a contribution is considered complete.
 
-The application is a single-module Spring Boot REST API for managing a library's book collection. It exposes CRUD, search, pagination, sorting, price filtering, aggregation, and health endpoints backed by PostgreSQL.
+The application is a single-module Spring Boot REST API for managing a library's book collection. It exposes the book CRUD, search, pagination, sorting, price filtering, aggregation, and health endpoints backed by PostgreSQL. A user-domain foundation also exists, but user and loan controllers are not yet implemented.
 
 ## Project Snapshot
 
@@ -58,6 +58,19 @@ library-api-system/
     |   |   |   |   |-- BookRepository.java
     |   |   |   |   `-- projection/LibraryAggregate.java
     |   |   |   `-- service/BookService.java
+    |   |   |-- user/
+    |   |   |   |-- beans/PasswordConfig.java
+    |   |   |   |-- dto/
+    |   |   |   |   |-- UserCreateRequestDTO.java
+    |   |   |   |   `-- UserResponseDTO.java
+    |   |   |   |-- entity/User.java
+    |   |   |   |-- entity/enums/
+    |   |   |   |   |-- UserCourse.java
+    |   |   |   |   |-- UserITMajor.java
+    |   |   |   |   `-- UserRole.java
+    |   |   |   |-- mapper/UserMapper.java
+    |   |   |   |-- repository/UserRepository.java
+    |   |   |   `-- service/UserService.java
     |   |   `-- global/
     |   |       |-- exceptions/GlobalExceptionHandler.java
     |   |       `-- responses/
@@ -165,6 +178,12 @@ Read methods handle pagination, field-restricted sorting, searches, price ranges
 `deleteBookById` uses `@Modifying(clearAutomatically = true)` because bulk JPQL bypasses normal entity lifecycle synchronization. If more bulk updates are introduced, account for stale persistence-context state in the same way.
 
 The count-and-total-value aggregate uses the typed `LibraryAggregate` constructor projection under `app.book.repository.projection`; the service maps that internal projection into the public `LibraryStatisticsDTO`. Genre distribution still returns a low-level `List<Object[]>` and remains a candidate for a focused typed-projection change. Prefer typed projections for future complex aggregations if they improve safety without adding unnecessary abstraction.
+
+### User-domain status
+
+The user feature currently contains the entity, enums, create/response DTOs, mapper, repository, BCrypt `PasswordEncoder` bean, and `UserService`. `UserService` normalizes university IDs and email addresses, rejects duplicates, hashes the four-digit password before persistence, and enforces the role/course/major rules. The enum and V2 database checks define the allowed academic values; the service enforces their cross-field relationships.
+
+There is no `UserController`, `UserUpdateRequestDTO`, `UserDetailsService`, loan feature, or user-domain test class yet. DTO annotations exist, but there is no HTTP `@Valid` boundary or service-level Jakarta `Validator` equivalent to the book write path, so user validation still requires controller and test coverage before the feature is considered complete.
 
 ### Entity and database model
 
@@ -318,7 +337,7 @@ Important persistence settings:
 
 ## Database Migration Rules
 
-`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` currently has no SQL content. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
+`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` creates `users` with identity, role, course, major, uniqueness, format, and cross-field constraints. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
 
 For every schema change:
 
@@ -498,7 +517,9 @@ When a breaking change is intended, document migration guidance and update all e
 - CSRF is disabled.
 - H2 is declared but has no dedicated application profile or integration-test setup.
 - The Docker image requires a prebuilt JAR and does not build source itself.
-- V2 is currently empty and may already be recorded in persistent databases.
+- V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
+- User and loan HTTP APIs are incomplete: there is no `UserController`, no loan feature, and no authentication flow.
+- User-domain validation and password behavior lack automated tests.
 - Test coverage is predominantly unit-level; HTTP, JPA, migration, security, and container paths lack automated integration coverage.
 - Success response shapes are inconsistent across endpoints.
 - `timestamp` fields are epoch milliseconds rather than ISO-8601 values.
