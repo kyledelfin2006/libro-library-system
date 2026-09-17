@@ -1,4 +1,4 @@
-# Libro  - Library Management System
+<h1 align="center">Libro - Library Management System</h1>
 
 <p align="center">
   <img src="assets/LIBRO_LOGO.png" alt="Libro system logo" width="180">
@@ -26,7 +26,7 @@ The API also exposes generated OpenAPI documentation through Springdoc: Swagger 
 | Code Generation | Lombok 1.18.46 |
 | Testing | JUnit 5, Mockito, JaCoCo |
 | Serialization | Jackson (JSON) |
-| Validation | Jakarta Validation (JSR-380) |
+| Validation | Jakarta Bean Validation |
 | Logging | SLF4J via Lombok `@Slf4j` |
 
 ## Table of Contents
@@ -499,7 +499,7 @@ These are isolated unit tests. Controller routing and serialization, repository 
 ## Problems I Solved
 
 - **Docker API 500 / restart loop**: The database used PostgreSQL `SERIAL` (`INTEGER`) for `books.id`, while the entity uses Java `Long` and Hibernate 7 expects `BIGINT`. In addition, direct `flyway-core` usage did not activate Flyway auto-configuration under Spring Boot 4, and PostgreSQL's init script competed with Flyway. Because the application is still pre-release and contains no data, the fix corrects V1 to `BIGSERIAL`, installs `spring-boot-starter-flyway`, makes Flyway the only schema authority, and waits for PostgreSQL health before starting the app. See the [incident runbook](docs/docker-flyway-500-fix.md).
-- **Slow Unit-Test Feedback Loop**: The test suite uses shared fixtures where safe, concurrent test classes, a shared Jakarta Validator factory, real Spring exception objects where practical, and disabled test-only log noise. The current 69-test suite completed a verified `mvn clean verify` run in 12.637 seconds on the development machine on September 18, 2026. This is an environment-specific reference measurement; dependency downloads, Mockito/Byte Buddy agent startup, and machine resources can change the total. Mockito's inline mock maker currently emits a dynamic Byte Buddy agent warning during test startup; this is test infrastructure overhead rather than application execution time.
+- **Slow Unit-Test Feedback Loop**: The test suite uses shared fixtures where safe, concurrent test classes, a shared Jakarta Validator factory, real Spring exception objects where practical, and disabled test-only log noise. Use `mvn test` for fast feedback and `mvn clean verify` for the full verification lifecycle. Build times are environment-dependent, and Mockito's inline mock maker may emit a dynamic Byte Buddy agent warning during test startup; this is test infrastructure overhead rather than application execution time.
 - **Unsafe Statistics Aggregate Contract**: `BookRepository.getCountAndTotalValue()` previously returned an `Object[]`, forcing the service to depend on positional indexes and runtime casts. The query now returns the named immutable `LibraryAggregate` projection, and the service maps that projection into `LibraryStatisticsDTO` without array indexing.
 - **Unsafe Genre Aggregate Contract**: `BookRepository.getGenres()` previously returned `List<Object[]>`, forcing positional indexes and runtime casts in the service. The query now returns the named immutable `GenreCount` projection, while `GET /app/books/genre` preserves its existing `Map<String, Long>` response.
 - **Tight Coupling**: Solved by using constructor-based dependency injection, interface-driven design (`BookService`, `BookRepository`), and the `BookMapper` component. The controller depends on abstractions rather than concrete implementations, making the codebase testable and easy to extend.

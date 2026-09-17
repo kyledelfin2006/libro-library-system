@@ -438,7 +438,7 @@ The suite contains 69 tests. Its execution setup is deliberately small and optim
 - `GlobalExceptionHandlerTest` shares its stateless handler and constructs real Spring exceptions where practical, avoiding extra mock creation.
 - `src/test/resources/logback-test.xml` disables logs only in tests. Expected exception-handler tests must not flood test output with stack traces.
 
-These choices fixed a slow feedback loop without deleting, merging, or weakening tests. A Java 25 development-machine `mvn clean verify` run completed in 12.637 seconds on September 18, 2026. Treat this as evidence from one environment, not a cross-machine performance requirement. First-time Maven dependency downloads, Mockito/Byte Buddy agent startup, and machine resources may change the total.
+These choices keep the feedback loop small without deleting, merging, or weakening tests. Build times are environment-dependent; first-time Maven dependency downloads, Mockito/Byte Buddy agent startup, and machine resources may change the total.
 
 The exception-handler tests verify direct Java method behavior without loading Spring MVC. The tests do not currently prove controller routing, JSON serialization, security behavior, JPA query correctness, Flyway migration success, PostgreSQL compatibility, or transaction/dirty-checking behavior in a real persistence context. Mockito tests that verify no `save` call document intent but do not substitute for a JPA integration test.
 
