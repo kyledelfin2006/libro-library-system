@@ -7,6 +7,8 @@
 
 Libro is a Spring Boot REST API for managing books with CRUD operations, search, pagination, sorting, range filtering, genre analytics, and statistics. It uses DTO-driven validation, centralized exception handling, and a Docker-first workflow backed by PostgreSQL 18 with Flyway database migrations.
 
+The API also exposes generated OpenAPI documentation through Springdoc: Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running.
+
 ## Tech Stack
 
 | Layer | Technology / Framework |
@@ -107,6 +109,8 @@ src/main/java/app/
       BookService.java
     repository/
       BookRepository.java
+      projection/
+        LibraryAggregate.java
     entity/
       Book.java
     dto/
@@ -150,6 +154,7 @@ src/test/resources/
 - **Transactional service methods** rely on Hibernate dirty checking, so updates are flushed automatically when the managed entity changes.
 - **Centralized exception handling** ensures consistent JSON failures across validation, not-found, database, and parsing errors.
 - **Repository abstraction** through Spring Data JPA keeps persistence code small and expressive.
+- **Typed repository projections** give aggregate queries named fields instead of positional `Object[]` values.
 - **Mapper pattern** centralizes entity-DTO conversion to avoid duplication across controllers and services.
 - **Flyway migrations** version the database schema alongside application code.
 
@@ -202,6 +207,7 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 - Budget filtering through `GET /app/books/budget`.
 - Statistics endpoints for total books, total library value, average price, and the most expensive book.
 - Genre distribution endpoint.
+- OpenAPI 3 documentation through Springdoc Swagger UI and `/v3/api-docs`.
 - Validation with `@Valid` on create and replace requests.
 - Global handling for `BookNotFoundException`, validation errors, malformed JSON, number format errors, database issues, and unsupported methods.
 - Open security configuration for local development and testing.
@@ -308,14 +314,18 @@ public ResponseEntity<ErrorResponse> handleBookNotFound(BookNotFoundException ex
 
 ```java
 public LibraryStatisticsDTO getLibraryStatistics() {
-    Object[] stats = repository.getCountAndTotalValue();
-    Long totalBooks = (Long) stats[0];
-    BigDecimal totalValue = (BigDecimal) stats[1];
+    LibraryAggregate aggregate = repository.getCountAndTotalValue();
     Book mostExpensive = repository.findTopByOrderByPriceDesc();
     BookResponseDTO mostExpensiveDTO = (mostExpensive != null) ? mapper.toResponseDTO(mostExpensive) : null;
-    return new LibraryStatisticsDTO(totalBooks, totalValue, mostExpensiveDTO);
+    return new LibraryStatisticsDTO(
+            aggregate.totalBooks(),
+            aggregate.totalValue(),
+            mostExpensiveDTO
+    );
 }
 ```
+
+`LibraryAggregate` is an internal immutable repository projection. It keeps the database aggregate query type-safe while `LibraryStatisticsDTO` remains the public API response model.
 
 ## API Endpoints
 
@@ -421,12 +431,12 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 65 unit tests cover entity and DTO validation, service-layer validation enforcement, mapper behavior, service-layer behavior, and global REST exception translation without starting Spring, Hibernate, PostgreSQL, or Docker.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 67 unit tests cover entity and DTO validation, service-layer validation enforcement, mapper behavior, service-layer behavior, typed statistics projections, and global REST exception translation without starting Spring, Hibernate, PostgreSQL, or Docker.
 
 - `BookTest` verifies book construction and request DTO constraints.
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.
-- `BookServiceTest` verifies service rules, repository interaction, search, sorting, pricing, aggregates, and dirty-checking expectations.
-- `GlobalExceptionHandlerTest` directly invokes each of the 12 exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
+- `BookServiceTest` verifies service rules, repository interaction, search, sorting, pricing, typed statistics aggregates, and dirty-checking expectations.
+- `GlobalExceptionHandlerTest` directly invokes each of the 14 exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
 
 ### Unit-test performance
 
@@ -438,7 +448,7 @@ The suite is configured for fast, deterministic feedback:
 - `GlobalExceptionHandlerTest` uses one stateless handler and real Spring exception objects instead of unnecessary mocks.
 - `logback-test.xml` disables application logs during tests so expected exception scenarios do not spend time printing stack traces.
 
-The optimization retained all 61 tests and their assertions. On the Java 25 development machine used for verification on September 1, 2026, a warm `mvn test` completed in **5.098 seconds**, `mvn clean test` completed in **10.579 seconds**, and `mvn clean verify` completed in **12.596 seconds**. These measurements are reference results rather than performance guarantees; first-time dependency downloads and machine resources can change the total.
+The suite currently contains 67 tests. On the Java 25 development machine used for verification on September 17, 2026, a warm `mvn test` completed in **9.061 seconds**, `mvn clean test` completed in **17.243 seconds**, `mvn clean package` completed in **18.178 seconds**, and `mvn clean verify` completed in **16.536 seconds**. These measurements are reference results rather than performance guarantees; first-time dependency downloads, Mockito/Byte Buddy agent startup, and machine resources can change the total. Clean builds also spend approximately **1.878 seconds** deleting the target directory; normal development can use `mvn test` to preserve incremental compilation.
 
 Run all unit tests:
 
@@ -463,7 +473,8 @@ These are isolated unit tests. Controller routing and serialization, repository 
 ## Problems I Solved
 
 - **Docker API 500 / restart loop**: The database used PostgreSQL `SERIAL` (`INTEGER`) for `books.id`, while the entity uses Java `Long` and Hibernate 7 expects `BIGINT`. In addition, direct `flyway-core` usage did not activate Flyway auto-configuration under Spring Boot 4, and PostgreSQL's init script competed with Flyway. Because the application is still pre-release and contains no data, the fix corrects V1 to `BIGSERIAL`, installs `spring-boot-starter-flyway`, makes Flyway the only schema authority, and waits for PostgreSQL health before starting the app. See the [incident runbook](docs/docker-flyway-500-fix.md).
-- **Slow Unit-Test Feedback Loop**: The 61-test suite had been observed taking approximately 54 seconds on its first run and 24 seconds on a subsequent run. I kept the same 61 tests and behavioral assertions while removing repeated fixture initialization, reusing and resetting the service-layer mock safely, sharing and closing the Jakarta Validator factory, replacing unnecessary exception mocks with real objects, suppressing test-only log noise, and running independent test classes concurrently. The optimized suite completed a verified warm Maven run in 5.098 seconds on the development machine.
+- **Slow Unit-Test Feedback Loop**: The test suite uses shared fixtures where safe, concurrent test classes, a shared Jakarta Validator factory, real Spring exception objects where practical, and disabled test-only log noise. The current 67-test suite completed a verified warm `mvn test` run in 9.061 seconds on the development machine. Mockito's inline mock maker currently emits a dynamic Byte Buddy agent warning during test startup; this is test infrastructure overhead rather than application execution time.
+- **Unsafe Statistics Aggregate Contract**: `BookRepository.getCountAndTotalValue()` previously returned an `Object[]`, forcing the service to depend on positional indexes and runtime casts. The query now returns the named immutable `LibraryAggregate` projection, and the service maps that projection into `LibraryStatisticsDTO` without array indexing.
 - **Tight Coupling**: Solved by using constructor-based dependency injection, interface-driven design (`BookService`, `BookRepository`), and the `BookMapper` component. The controller depends on abstractions rather than concrete implementations, making the codebase testable and easy to extend.
 - **Memory Leaking**: Solved by using `@Modifying(clearAutomatically = true)` on the delete query to flush and clear the persistence context, preventing stale entity accumulation. Pagination on `/app/books/all` also prevents loading the entire table into memory.
 - **Read And Write Concurrency Error**: Solved by isolating write operations inside `@Transactional` boundaries. Dirty checking and automatic flushing ensure that concurrent reads do not interfere with in-progress writes, and transactions are rolled back on failure to preserve data integrity.

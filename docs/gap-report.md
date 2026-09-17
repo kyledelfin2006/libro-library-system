@@ -4,7 +4,7 @@
 |---|---|
 | Scope | Repository-level code and architecture assessment |
 | Status | Active; gaps are grouped by architectural layer |
-| Last updated | September 9, 2026 |
+| Last updated | September 17, 2026 |
 | Register policy | Detailed sections contain active gaps only; resolved IDs move to the resolution register and are never reused |
 | Counting basis | Severity totals include active gaps only; resolved gaps remain traceable in the portfolio summary |
 
@@ -92,7 +92,7 @@
 
 | # | Gap | Location | Impact | Why it matters |
 |---|-----|----------|--------|-----------------|
-| 8.1 | **Repository query methods use raw `Object[]` projections** | `BookRepository.getGenres()` returns `List<Object[]>` (line 100), `getCountAndTotalValue()` returns `Object[]` (line 116) | The service must cast indexes manually (`row[0]`, `row[1]`) with no type safety | AGENTS.md notes: "Aggregate repository methods currently return low-level shapes (`Object[]` and `List<Object[]>`)." A `Class`-based or Spring Data projection would provide compile-time safety and eliminate `ClassCastException` risk. |
+| 8.1 | **Genre aggregation still uses a raw `Object[]` projection** | `BookRepository.getGenres()` returns `List<Object[]>` (line 100) | The service must cast indexes manually (`row[0]`, `row[1]`) with no type safety | The count-and-total-value statistics query now uses the typed `LibraryAggregate` projection, but genre distribution still exposes an unstructured tuple. A typed projection would eliminate the remaining `ClassCastException` risk in aggregate mapping. |
 | 8.2 | **No `@Slf4j` on controller layer** | `BookAPI` — no logging annotation | Controller-level events (request received, response returned, errors) are only logged at the service layer | The service logs `"Processing request to add book: {}"` but the controller has no logging. For debugging, knowing the HTTP method and path from the controller would complement the service-level business log. |
 | 8.3 | **`ApiResponse.data` is mutable** | `ApiResponse` (line 6: `private T data;`) | Although `success`, `message`, and `timestamp` are final, `data` has a setter-less mutable declaration that could confuse (it's actually never mutated) | The class has no explicit setters, so `data` is effectively immutable, but the inconsistent mutability declaration (`final` on most fields, not on `data`) makes the class's immutability contract unclear. |
 | 8.4 | **Empty V2 migration** | `../src/main/resources/db/migration/V2__create_users_table.sql` — 0 bytes | Flyway records `V2` as applied, but it does nothing | Documented in AGENTS.md: "V2 is currently empty and may already be recorded in persistent databases." This is harmless unless a real users table needs to be added later — at that point, V2 cannot be edited to add the table; a new V3+ migration is required. |

@@ -23,6 +23,7 @@ The application is a single-module Spring Boot REST API for managing a library's
 | Testing | JUnit 5, Mockito, Jakarta Validator                                     |
 | Coverage | JaCoCo report during Maven `verify`                                     |
 | Containers | Dockerfile plus Docker Compose                                          |
+| API documentation | Springdoc OpenAPI 3; Swagger UI and `/v3/api-docs`                   |
 
 The Maven coordinates are `kyle.com:library-api-system:1.0-SNAPSHOT`. There is no Maven Wrapper in the repository, so local commands require a compatible `mvn` installation unless Maven is added or supplied by the development environment.
 
@@ -53,7 +54,9 @@ library-api-system/
     |   |   |   |   |-- BookNotFoundException.java
     |   |   |   |   `-- BookValidationException.java
     |   |   |   |-- mapper/BookMapper.java
-    |   |   |   |-- repository/BookRepository.java
+    |   |   |   |-- repository/
+    |   |   |   |   |-- BookRepository.java
+    |   |   |   |   `-- projection/LibraryAggregate.java
     |   |   |   `-- service/BookService.java
     |   |   `-- global/
     |   |       |-- exceptions/GlobalExceptionHandler.java
@@ -161,7 +164,7 @@ Read methods handle pagination, field-restricted sorting, searches, price ranges
 
 `deleteBookById` uses `@Modifying(clearAutomatically = true)` because bulk JPQL bypasses normal entity lifecycle synchronization. If more bulk updates are introduced, account for stale persistence-context state in the same way.
 
-Aggregate repository methods currently return low-level shapes (`Object[]` and `List<Object[]>`). The service is responsible for type conversion and API-friendly DTO construction. Prefer typed projections for future complex aggregations if they improve safety without adding unnecessary abstraction.
+The count-and-total-value aggregate uses the typed `LibraryAggregate` constructor projection under `app.book.repository.projection`; the service maps that internal projection into the public `LibraryStatisticsDTO`. Genre distribution still returns a low-level `List<Object[]>` and remains a candidate for a focused typed-projection change. Prefer typed projections for future complex aggregations if they improve safety without adding unnecessary abstraction.
 
 ### Entity and database model
 
@@ -400,12 +403,12 @@ Central advice maps Java/application exceptions to stable HTTP errors, keeping e
 
 Current coverage consists of:
 
-- `BookServiceTest`: 42 Mockito-based service unit tests for CRUD rules, entity-validation enforcement, dirty-checking expectations, search, sorting, pricing, and aggregates.
+- `BookServiceTest`: 44 Mockito-based service unit tests for CRUD rules, entity-validation enforcement, dirty-checking expectations, search, sorting, pricing, typed statistics aggregates, and other aggregate behavior.
 - `BookTest`: five entity-construction, lifecycle, and direct Jakarta Validator tests for request DTO and entity constraints.
 - `BookMapperTest`: four focused tests for entity-to-DTO mapping, null inputs, and list mapping.
 - `GlobalExceptionHandlerTest`: 14 direct unit tests for every exception handler, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
 
-The suite contains 65 tests. Its execution setup is deliberately small and optimized:
+The suite contains 67 tests. Its execution setup is deliberately small and optimized:
 
 - `src/test/resources/junit-platform.properties` enables concurrent execution between test classes but keeps methods within each class on the same thread.
 - `BookServiceTest` uses `@TestInstance(PER_CLASS)` so its repository mock and `BookService` are constructed once. `@BeforeEach` resets the repository mock and rebuilds mutable book fixtures, preserving test isolation. The stateless `BookMapper` is real rather than mocked.
@@ -413,7 +416,7 @@ The suite contains 65 tests. Its execution setup is deliberately small and optim
 - `GlobalExceptionHandlerTest` shares its stateless handler and constructs real Spring exceptions where practical, avoiding extra mock creation.
 - `src/test/resources/logback-test.xml` disables logs only in tests. Expected exception-handler tests must not flood test output with stack traces.
 
-These choices fixed a slow feedback loop without deleting, merging, or weakening tests. Reference measurements from the Java 25 development machine on September 1, 2026 were 5.098 seconds for a warm `mvn test`, 10.579 seconds for `mvn clean test`, and 12.596 seconds for `mvn clean verify`. Treat those figures as evidence from one environment, not a cross-machine performance requirement. First-time Maven dependency downloads may still dominate an initial run.
+These choices fixed a slow feedback loop without deleting, merging, or weakening tests. Reference measurements from the Java 25 development machine on September 17, 2026 were 9.061 seconds for a warm `mvn test`, 17.243 seconds for `mvn clean test`, 18.178 seconds for `mvn clean package`, and 16.536 seconds for `mvn clean verify`. A standalone `mvn clean` took 1.878 seconds. Treat those figures as evidence from one environment, not a cross-machine performance requirement. First-time Maven dependency downloads, Mockito/Byte Buddy agent startup, and machine resources may change the total.
 
 The exception-handler tests verify direct Java method behavior without loading Spring MVC. The tests do not currently prove controller routing, JSON serialization, security behavior, JPA query correctness, Flyway migration success, PostgreSQL compatibility, or transaction/dirty-checking behavior in a real persistence context. Mockito tests that verify no `save` call document intent but do not substitute for a JPA integration test.
 
