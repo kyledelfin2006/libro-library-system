@@ -8,6 +8,7 @@ import app.book.entity.Book;
 import app.book.dto.BookRequestDTO;
 import app.book.mapper.BookMapper;
 import app.book.repository.BookRepository;
+import app.book.repository.projection.LibraryAggregate;
 import jakarta.transaction.Transactional;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -352,23 +353,17 @@ public class BookService {
      * @return a fully populated {@link LibraryStatisticsDTO}
      */
     public LibraryStatisticsDTO getLibraryStatistics() {
-        // 1. Get array of references from repository
-        Object[] stats = repository.getCountAndTotalValue();
+        LibraryAggregate aggregate = repository.getCountAndTotalValue();
 
-        // 2. Set total books from array
-        Long totalBooks = (Long) stats[0];
-
-        // 3. Set total value books from array
-        BigDecimal totalValue = (BigDecimal) stats[1];
-
-        // 4. Get most expensive book from repository
         Book mostExpensive = repository.findTopByOrderByPriceDesc();
 
-        // 5. Convert the most expensive Book entity to a BookResponseDTO (or null if none)
         BookResponseDTO mostExpensiveDTO = (mostExpensive != null) ? mapper.toResponseDTO(mostExpensive) : null;
 
-        // 6. Return DTO with DTO from step 5.
-        return new LibraryStatisticsDTO(totalBooks, totalValue, mostExpensiveDTO);
+        return new LibraryStatisticsDTO(
+                aggregate.totalBooks(),
+                aggregate.totalValue(),
+                mostExpensiveDTO
+        );
     }
 
     /**

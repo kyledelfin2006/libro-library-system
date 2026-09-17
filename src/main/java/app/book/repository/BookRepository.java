@@ -1,6 +1,7 @@
 package app.book.repository;
 
 import app.book.entity.Book;
+import app.book.repository.projection.LibraryAggregate;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -103,17 +104,19 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     /**
      * Retrieves the total number of books and the total monetary value of all books.
      *
-     * <p>The query returns a single {@code Object[]} with two elements:
-     * <ol>
-     *   <li>Total book count (as {@code Long})</li>
-     *   <li>Sum of all prices (as {@code BigDecimal}), or 0 if no books exist</li>
-     * </ol>
-     * </p>
+     * <p>The aggregate row is mapped to a named projection so callers do not depend on
+     * positional {@code Object[]} elements or runtime casts.</p>
      *
-     * @return an array with two elements: [count, totalValue]
+     * @return a typed aggregate containing the count and total value
      */
-    @Query("SELECT COUNT(b), COALESCE(SUM(b.price), 0) FROM Book b")
-    Object[] getCountAndTotalValue(); // Used in Library Statistics
+    @Query("""
+            SELECT new app.book.repository.projection.LibraryAggregate(
+                COUNT(b),
+                COALESCE(SUM(b.price), 0)
+            )
+            FROM Book b
+            """)
+    LibraryAggregate getCountAndTotalValue(); // Used in Library Statistics
 
     /**
      * Deletes a book by its ID using a custom JPQL query.

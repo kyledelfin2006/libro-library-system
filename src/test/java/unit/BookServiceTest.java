@@ -7,6 +7,7 @@ import app.book.service.BookService;
 import app.book.entity.Book;
 import app.book.dto.BookRequestDTO;
 import app.book.repository.BookRepository;
+import app.book.repository.projection.LibraryAggregate;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validation;
@@ -524,6 +525,37 @@ class BookServiceTest {
 
         assertEquals(0, BigDecimal.ZERO.compareTo(total));
         verify(repository, times(1)).sumTotalOfPrice();
+    }
+
+    // ---------- getLibraryStatistics ----------
+    /** Verifies that the typed aggregate is mapped into the public statistics DTO. */
+    @Test
+    void getLibraryStatistics_whenBooksExist_shouldReturnTypedAggregateAndMostExpensiveBook() {
+        LibraryAggregate aggregate = new LibraryAggregate(1L, new BigDecimal("45.00"));
+        when(repository.getCountAndTotalValue()).thenReturn(aggregate);
+        when(repository.findTopByOrderByPriceDesc()).thenReturn(sampleBook);
+
+        var result = bookService.getLibraryStatistics();
+
+        assertEquals(1L, result.totalBooks());
+        assertEquals(0, new BigDecimal("45.00").compareTo(result.totalValue()));
+        assertNotNull(result.mostExpensiveBook());
+        assertEquals(TITLE, result.mostExpensiveBook().getTitle());
+        verify(repository).getCountAndTotalValue();
+        verify(repository).findTopByOrderByPriceDesc();
+    }
+
+    /** Verifies that an empty collection preserves zero totals and no most-expensive book. */
+    @Test
+    void getLibraryStatistics_whenNoBooks_shouldReturnZeroAndNullMostExpensiveBook() {
+        when(repository.getCountAndTotalValue()).thenReturn(new LibraryAggregate(0L, BigDecimal.ZERO));
+        when(repository.findTopByOrderByPriceDesc()).thenReturn(null);
+
+        var result = bookService.getLibraryStatistics();
+
+        assertEquals(0L, result.totalBooks());
+        assertEquals(BigDecimal.ZERO, result.totalValue());
+        assertNull(result.mostExpensiveBook());
     }
 
     // ---------- findMostExpensiveBook ----------
