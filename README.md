@@ -1,5 +1,9 @@
 # Libro  - Library Management System
 
+<p align="center">
+  <img src="assets/LIBRO_LOGO.png" alt="Libro system logo" width="180">
+</p>
+
 ![Java](https://img.shields.io/badge/Java-25-orange?logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-6DB33F?logo=springboot&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
@@ -49,6 +53,7 @@ The API also exposes generated OpenAPI documentation through Springdoc: Swagger 
 The README is the central entry point for project documentation. Supporting reports belong in `docs/`, while files that rely on repository-root discovery remain at the root.
 
 - [Gap Report](docs/gap-report.md) tracks active architectural and implementation gaps, their impact, priorities, and resolved items.
+- [Docker/Flyway 500-error runbook](docs/docker-flyway-500-fix.md) documents the pre-release database repair and verification workflow.
 - [Agent and Contributor Guide](AGENTS.md) documents the repository architecture, layer contracts, coding rules, testing expectations, and definition of done. It remains at the repository root so coding agents can discover it automatically.
 
 ## Architecture Overview
@@ -97,6 +102,7 @@ AGENTS.md
 README.md
 docs/
   gap-report.md
+  docker-flyway-500-fix.md
 
 src/main/java/app/
   LibraryApplication.java
@@ -110,6 +116,7 @@ src/main/java/app/
     repository/
       BookRepository.java
       projection/
+        GenreCount.java
         LibraryAggregate.java
     entity/
       Book.java
@@ -140,6 +147,7 @@ src/main/java/app/
         UserRole.java
     mapper/UserMapper.java
     repository/UserRepository.java
+    exception/UserNotFoundException.java
     service/UserService.java
 
 src/main/resources/
@@ -168,7 +176,7 @@ src/test/resources/
 - **Transactional service methods** rely on Hibernate dirty checking, so updates are flushed automatically when the managed entity changes.
 - **Centralized exception handling** ensures consistent JSON failures across validation, not-found, database, and parsing errors.
 - **Repository abstraction** through Spring Data JPA keeps persistence code small and expressive.
-- **Typed repository projections** give aggregate queries named fields instead of positional `Object[]` values.
+- **Typed repository projections** give aggregate queries named fields instead of positional `Object[]` values. `LibraryAggregate` and `GenreCount` are internal immutable projections; public endpoints retain their existing DTO/map response shapes.
 - **Mapper pattern** centralizes entity-DTO conversion to avoid duplication across controllers and services.
 - **Flyway migrations** version the database schema alongside application code.
 
@@ -296,7 +304,7 @@ The API deliberately distinguishes **full replacement (PUT)** from **partial upd
 
 #### Dirty-Checking Optimization
 
-Neither `patchBook` nor `replaceBook` calls `repository.save()` on the fetched entity. Both are `@Transactional`, so the persistence context keeps the entity managed, and Hibernate's dirty checker automatically detects field changes and flushes them at commit. This avoids an unnecessary `UPDATE` round-trip and prevents accidental overwrites of the `createdAt` timestamp.
+Neither `patchBook` nor `replaceBook` calls `repository.save()` on the fetched entity. Both are `@Transactional`, so the persistence context keeps the entity managed, and Hibernate's dirty checker automatically detects field changes and flushes the required SQL `UPDATE` at commit. This avoids an unnecessary explicit save call and prevents accidental overwrites of the `createdAt` timestamp.
 
 ```java
 @Transactional
@@ -307,7 +315,7 @@ public Book patchBook(Long id, BookRequestDTO updates) {
     }
     if (updates.getPrice() != null) {
         if (updates.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Price must be greater than 0");
+            throw new BookValidationException("Price must be greater than 0");
         }
         existingBook.setPrice(updates.getPrice());
     }
@@ -340,7 +348,7 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 }
 ```
 
-`LibraryAggregate` is an internal immutable repository projection. It keeps the database aggregate query type-safe while `LibraryStatisticsDTO` remains the public API response model.
+`LibraryAggregate` and `GenreCount` are internal immutable repository projections. They keep count, total-value, and genre-distribution queries type-safe while `LibraryStatisticsDTO` and the genre endpoint's `Map<String, Long>` remain the public API response models.
 
 ## API Endpoints
 
@@ -448,11 +456,11 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 67 unit tests cover the book entity and DTO, book service behavior, typed statistics projections, mapper behavior, and global REST exception translation. The current suite has no user-domain, controller, JPA, Flyway, or PostgreSQL integration tests.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 69 unit tests cover the book entity and DTO, book service behavior, typed statistics and genre-distribution projections, mapper behavior, and global REST exception translation. The current suite has no user-domain, controller, JPA, Flyway, or PostgreSQL integration tests.
 
 - `BookTest` verifies book construction and request DTO constraints.
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.
-- `BookServiceTest` verifies service rules, repository interaction, search, sorting, pricing, typed statistics aggregates, and dirty-checking expectations.
+- `BookServiceTest` verifies service rules, repository interaction, search, sorting, pricing, typed statistics projections, genre-distribution mapping, and dirty-checking expectations.
 - `GlobalExceptionHandlerTest` directly invokes each of the 14 exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
 - `UserService` currently has no corresponding automated test class; academic combinations, duplicate checks, and password hashing remain unverified by tests.
 
@@ -466,7 +474,7 @@ The suite is configured for fast, deterministic feedback:
 - `GlobalExceptionHandlerTest` uses one stateless handler and real Spring exception objects instead of unnecessary mocks.
 - `logback-test.xml` disables application logs during tests so expected exception scenarios do not spend time printing stack traces.
 
-The suite currently contains 67 tests. On the Java 25 development machine used for verification on September 17, 2026, a warm `mvn test` completed in **9.061 seconds**, `mvn clean test` completed in **17.243 seconds**, `mvn clean package` completed in **18.178 seconds**, and `mvn clean verify` completed in **16.536 seconds**. These measurements are reference results rather than performance guarantees; first-time dependency downloads, Mockito/Byte Buddy agent startup, and machine resources can change the total. Clean builds also spend approximately **1.878 seconds** deleting the target directory; normal development can use `mvn test` to preserve incremental compilation.
+The suite currently contains 69 tests. Build timings are environment-dependent; first-time dependency downloads, Mockito/Byte Buddy agent startup, and machine resources can change the total. Use `mvn test` for incremental feedback and `mvn clean verify` for the full verification lifecycle.
 
 Run all unit tests:
 
@@ -491,8 +499,9 @@ These are isolated unit tests. Controller routing and serialization, repository 
 ## Problems I Solved
 
 - **Docker API 500 / restart loop**: The database used PostgreSQL `SERIAL` (`INTEGER`) for `books.id`, while the entity uses Java `Long` and Hibernate 7 expects `BIGINT`. In addition, direct `flyway-core` usage did not activate Flyway auto-configuration under Spring Boot 4, and PostgreSQL's init script competed with Flyway. Because the application is still pre-release and contains no data, the fix corrects V1 to `BIGSERIAL`, installs `spring-boot-starter-flyway`, makes Flyway the only schema authority, and waits for PostgreSQL health before starting the app. See the [incident runbook](docs/docker-flyway-500-fix.md).
-- **Slow Unit-Test Feedback Loop**: The test suite uses shared fixtures where safe, concurrent test classes, a shared Jakarta Validator factory, real Spring exception objects where practical, and disabled test-only log noise. The current 67-test suite completed a verified warm `mvn test` run in 9.061 seconds on the development machine. Mockito's inline mock maker currently emits a dynamic Byte Buddy agent warning during test startup; this is test infrastructure overhead rather than application execution time.
+- **Slow Unit-Test Feedback Loop**: The test suite uses shared fixtures where safe, concurrent test classes, a shared Jakarta Validator factory, real Spring exception objects where practical, and disabled test-only log noise. The current 69-test suite completed a verified `mvn clean verify` run in 12.637 seconds on the development machine on September 18, 2026. This is an environment-specific reference measurement; dependency downloads, Mockito/Byte Buddy agent startup, and machine resources can change the total. Mockito's inline mock maker currently emits a dynamic Byte Buddy agent warning during test startup; this is test infrastructure overhead rather than application execution time.
 - **Unsafe Statistics Aggregate Contract**: `BookRepository.getCountAndTotalValue()` previously returned an `Object[]`, forcing the service to depend on positional indexes and runtime casts. The query now returns the named immutable `LibraryAggregate` projection, and the service maps that projection into `LibraryStatisticsDTO` without array indexing.
+- **Unsafe Genre Aggregate Contract**: `BookRepository.getGenres()` previously returned `List<Object[]>`, forcing positional indexes and runtime casts in the service. The query now returns the named immutable `GenreCount` projection, while `GET /app/books/genre` preserves its existing `Map<String, Long>` response.
 - **Tight Coupling**: Solved by using constructor-based dependency injection, interface-driven design (`BookService`, `BookRepository`), and the `BookMapper` component. The controller depends on abstractions rather than concrete implementations, making the codebase testable and easy to extend.
 - **Memory Leaking**: Solved by using `@Modifying(clearAutomatically = true)` on the delete query to flush and clear the persistence context, preventing stale entity accumulation. Pagination on `/app/books/all` also prevents loading the entire table into memory.
 - **Read And Write Concurrency Error**: Solved by isolating write operations inside `@Transactional` boundaries. Dirty checking and automatic flushing ensure that concurrent reads do not interfere with in-progress writes, and transactions are rolled back on failure to preserve data integrity.

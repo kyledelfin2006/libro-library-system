@@ -56,7 +56,9 @@ library-api-system/
     |   |   |   |-- mapper/BookMapper.java
     |   |   |   |-- repository/
     |   |   |   |   |-- BookRepository.java
-    |   |   |   |   `-- projection/LibraryAggregate.java
+    |   |   |   |   `-- projection/
+    |   |   |   |       |-- GenreCount.java
+    |   |   |   |       `-- LibraryAggregate.java
     |   |   |   `-- service/BookService.java
     |   |   |-- user/
     |   |   |   |-- beans/PasswordConfig.java
@@ -70,6 +72,7 @@ library-api-system/
     |   |   |   |   `-- UserRole.java
     |   |   |   |-- mapper/UserMapper.java
     |   |   |   |-- repository/UserRepository.java
+    |   |   |   |-- exception/UserNotFoundException.java
     |   |   |   `-- service/UserService.java
     |   |   `-- global/
     |   |       |-- exceptions/GlobalExceptionHandler.java
@@ -177,7 +180,7 @@ Read methods handle pagination, field-restricted sorting, searches, price ranges
 
 `deleteBookById` uses `@Modifying(clearAutomatically = true)` because bulk JPQL bypasses normal entity lifecycle synchronization. If more bulk updates are introduced, account for stale persistence-context state in the same way.
 
-The count-and-total-value aggregate uses the typed `LibraryAggregate` constructor projection under `app.book.repository.projection`; the service maps that internal projection into the public `LibraryStatisticsDTO`. Genre distribution still returns a low-level `List<Object[]>` and remains a candidate for a focused typed-projection change. Prefer typed projections for future complex aggregations if they improve safety without adding unnecessary abstraction.
+The count-and-total-value aggregate uses the typed `LibraryAggregate` constructor projection under `app.book.repository.projection`; the service maps that internal projection into the public `LibraryStatisticsDTO`. Genre distribution follows the same pattern through the typed `GenreCount` constructor projection, which the service maps into the existing `Map<String, Long>` response. These records are internal persistence projections, not public DTOs. Prefer typed projections for future complex aggregations when they improve safety without adding unnecessary abstraction.
 
 ### User-domain status
 
@@ -422,12 +425,12 @@ Central advice maps Java/application exceptions to stable HTTP errors, keeping e
 
 Current coverage consists of:
 
-- `BookServiceTest`: 44 Mockito-based service unit tests for CRUD rules, entity-validation enforcement, dirty-checking expectations, search, sorting, pricing, typed statistics aggregates, and other aggregate behavior.
+- `BookServiceTest`: 46 Mockito-based service unit tests for CRUD rules, entity-validation enforcement, dirty-checking expectations, search, sorting, pricing, typed statistics projections, genre distribution, and other aggregate behavior.
 - `BookTest`: five entity-construction, lifecycle, and direct Jakarta Validator tests for request DTO and entity constraints.
 - `BookMapperTest`: four focused tests for entity-to-DTO mapping, null inputs, and list mapping.
 - `GlobalExceptionHandlerTest`: 14 direct unit tests for every exception handler, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
 
-The suite contains 67 tests. Its execution setup is deliberately small and optimized:
+The suite contains 69 tests. Its execution setup is deliberately small and optimized:
 
 - `src/test/resources/junit-platform.properties` enables concurrent execution between test classes but keeps methods within each class on the same thread.
 - `BookServiceTest` uses `@TestInstance(PER_CLASS)` so its repository mock and `BookService` are constructed once. `@BeforeEach` resets the repository mock and rebuilds mutable book fixtures, preserving test isolation. The stateless `BookMapper` is real rather than mocked.
@@ -435,7 +438,7 @@ The suite contains 67 tests. Its execution setup is deliberately small and optim
 - `GlobalExceptionHandlerTest` shares its stateless handler and constructs real Spring exceptions where practical, avoiding extra mock creation.
 - `src/test/resources/logback-test.xml` disables logs only in tests. Expected exception-handler tests must not flood test output with stack traces.
 
-These choices fixed a slow feedback loop without deleting, merging, or weakening tests. Reference measurements from the Java 25 development machine on September 17, 2026 were 9.061 seconds for a warm `mvn test`, 17.243 seconds for `mvn clean test`, 18.178 seconds for `mvn clean package`, and 16.536 seconds for `mvn clean verify`. A standalone `mvn clean` took 1.878 seconds. Treat those figures as evidence from one environment, not a cross-machine performance requirement. First-time Maven dependency downloads, Mockito/Byte Buddy agent startup, and machine resources may change the total.
+These choices fixed a slow feedback loop without deleting, merging, or weakening tests. A Java 25 development-machine `mvn clean verify` run completed in 12.637 seconds on September 18, 2026. Treat this as evidence from one environment, not a cross-machine performance requirement. First-time Maven dependency downloads, Mockito/Byte Buddy agent startup, and machine resources may change the total.
 
 The exception-handler tests verify direct Java method behavior without loading Spring MVC. The tests do not currently prove controller routing, JSON serialization, security behavior, JPA query correctness, Flyway migration success, PostgreSQL compatibility, or transaction/dirty-checking behavior in a real persistence context. Mockito tests that verify no `save` call document intent but do not substitute for a JPA integration test.
 
@@ -523,7 +526,6 @@ When a breaking change is intended, document migration guidance and update all e
 - Test coverage is predominantly unit-level; HTTP, JPA, migration, security, and container paths lack automated integration coverage.
 - Success response shapes are inconsistent across endpoints.
 - `timestamp` fields are epoch milliseconds rather than ISO-8601 values.
-- Genre aggregation uses raw `Object[]` projections.
 - Health checks prove a database count query can run but are not integrated with Spring Boot Actuator or container health checks.
 - Ordinary indexes may not accelerate case-insensitive substring searches as expected.
 - The database enforces `NOT NULL` for price but not a positive-value check; application validation is the current positive-price guard.

@@ -7,6 +7,7 @@ import app.book.service.BookService;
 import app.book.entity.Book;
 import app.book.dto.BookRequestDTO;
 import app.book.repository.BookRepository;
+import app.book.repository.projection.GenreCount;
 import app.book.repository.projection.LibraryAggregate;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.ConstraintViolationException;
@@ -21,6 +22,7 @@ import org.springframework.data.domain.Sort;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -417,6 +419,29 @@ class BookServiceTest {
 
         assertEquals(expected, result);
         verify(repository, times(1)).findByGenreContainingIgnoreCase("Program");
+    }
+
+    // ---------- getGenreDistribution ----------
+    /** Verifies typed genre projections are converted into the public count map. */
+    @Test
+    void getGenreDistribution_whenGenresExist_shouldMapGenreNamesToCounts() {
+        when(repository.getGenres()).thenReturn(List.of(
+                new GenreCount("Fiction", 3),
+                new GenreCount("Fantasy", 2),
+                new GenreCount("Dystopian", 1)));
+
+        assertEquals(Map.of("Fiction", 3L, "Fantasy", 2L, "Dystopian", 1L),
+                bookService.getGenreDistribution());
+        verify(repository).getGenres();
+    }
+
+    /** Verifies an empty repository result produces an empty public distribution map. */
+    @Test
+    void getGenreDistribution_whenNoGenresExist_shouldReturnEmptyMap() {
+        when(repository.getGenres()).thenReturn(List.of());
+
+        assertTrue(bookService.getGenreDistribution().isEmpty());
+        verify(repository).getGenres();
     }
 
     /** Verifies price text is converted to {@link BigDecimal} and matched exactly. */

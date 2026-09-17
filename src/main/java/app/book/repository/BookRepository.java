@@ -1,6 +1,7 @@
 package app.book.repository;
 
 import app.book.entity.Book;
+import app.book.repository.projection.GenreCount;
 import app.book.repository.projection.LibraryAggregate;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -88,17 +89,22 @@ public interface BookRepository extends JpaRepository<Book, Long> {
    Optional<BigDecimal> sumTotalOfPrice();
 
     /**
-     * Retrieves genre distribution counts.
+     * Retrieves genre distribution counts as a typed constructor projection.
      *
-     * <p>The query returns a list of {@code Object[]} where each element contains
-     * the genre (as a {@code String}) and the count of books in that genre
-     * (as a {@code Long}).</p>
+     * <p>The grouped query returns one immutable {@link GenreCount} for each genre,
+     * keeping callers independent of positional array elements and runtime casts.</p>
      *
-     * @return a list of {@code Object[]} arrays, each with two elements:
-     *         [genre, count]
+     * @return a list of typed genre/count projections
      */
-   @Query("SELECT b.genre, COUNT(b) FROM Book b GROUP BY b.genre")
-   List<Object[]> getGenres(); // Used in Genre Distribution
+   @Query("""
+           SELECT new app.book.repository.projection.GenreCount(
+               b.genre,
+               COUNT(b)
+           )
+           FROM Book b
+           GROUP BY b.genre
+           """)
+   List<GenreCount> getGenres(); // Used in Genre Distribution
 
 
     /**
