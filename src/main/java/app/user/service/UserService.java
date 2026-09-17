@@ -53,7 +53,9 @@ public class UserService {
             throw new IllegalArgumentException("User request cannot be null");
         }
 
+
         String universityId = normalizeAndValidateUniversityId(request.getUniversityId());
+
         String email = normalizeAndValidateEmail(request.getEmail());
         validateRequiredValue(request.getPassword(), "Password");
 
