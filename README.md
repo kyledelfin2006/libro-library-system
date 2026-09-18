@@ -137,7 +137,9 @@ src/main/java/app/
   user/
     beans/PasswordConfig.java
     dto/
+      ChangePasswordDTO.java
       UserCreateRequestDTO.java
+      UserCreateUpdateDTO.java
       UserResponseDTO.java
     entity/
       User.java
@@ -451,8 +453,9 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 - Updates rely on Hibernate dirty checking inside transactional service methods.
 - `BookRequestDTO` is used for request validation, while `BookResponseDTO` and `LibraryStatisticsDTO` are used for response shaping.
 - `BookMapper` centralizes conversion between entities and DTOs.
-- `UserService` normalizes university IDs and email addresses, checks duplicate identity values, enforces academic rules, and persists only BCrypt-hashed passwords.
-- User DTO annotations exist, but there is no `UserController` yet; HTTP-boundary validation and user API serialization still need integration coverage.
+- `UserService` normalizes university IDs and email addresses, checks duplicate identity values, enforces academic rules, validates create requests with Jakarta Validator, and persists only BCrypt-hashed passwords.
+- `UserMapper` keeps password fields out of `UserResponseDTO`.
+- User DTO annotations exist, but there is no `UserController` yet; the update method remains incomplete and user API serialization still needs integration coverage.
 
 ## Testing
 
@@ -462,7 +465,7 @@ The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 6
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.
 - `BookServiceTest` verifies service rules, repository interaction, search, sorting, pricing, typed statistics projections, genre-distribution mapping, and dirty-checking expectations.
 - `GlobalExceptionHandlerTest` directly invokes each of the 14 exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
-- `UserService` currently has no corresponding automated test class; academic combinations, duplicate checks, and password hashing remain unverified by tests.
+- `UserService` currently has no corresponding automated test class; academic combinations, duplicate checks, password hashing, and update behavior remain unverified by tests.
 
 ### Unit-test performance
 
