@@ -1,6 +1,7 @@
 package app.user.service;
 
 import app.user.dto.UserCreateRequestDTO;
+import app.user.dto.UserCreateUpdateDTO;
 import app.user.dto.UserResponseDTO;
 import app.user.entity.User;
 import app.user.entity.enums.UserCourse;
@@ -88,6 +89,48 @@ public class UserService {
         return userMapper.toResponseDTO(savedUser);
     }
 
+    private UserResponseDTO updateUser(
+            String universityId,
+            UserCreateUpdateDTO request
+    ){
+
+        // Find user
+        User user = userRepository.findByUniversityId(universityId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        // if non-null value, normalize and set
+        if (request.getFirstName() != null){
+            user.setFirstName(request.getFirstName().trim());
+        }
+
+
+        // if non-null value, normalize and set
+        if (request.getMiddleInitial() != null){
+            user.setMiddleInitial(request.getMiddleInitial().trim());
+        }
+
+        // if non-null value, normalize and set
+        if (request.getLastName() != null){
+            validateRequiredValue(request.getLastName(), "Last Name");
+            user.setLastName(request.getLastName().trim());
+        }
+
+        // normalize and validate email
+        if (request.getEmail() != null){
+           String email = normalizeAndValidateEmail(request.getEmail());
+
+           if (email.equals(user.getEmail())
+                   && userRepository.existsByEmailIgnoreCase(email)
+           ){
+                throw new IllegalArgumentException("Email already registered");
+           }
+            user.setEmail(email);
+        }
+
+        // return response dto
+        return  userMapper.toResponseDTO(user);
+    }
+
     /**
      * Returns a page of users converted to safe response DTOs.
      *
@@ -162,31 +205,7 @@ public class UserService {
         return normalizedUniversityId;
     }
 
-    /**
-     * Trims, lowercases, and validates an email using a locale-independent
-     * normalization rule.
-     */
-    private String normalizeAndValidateEmail(String email) {
-       // could either be normalized email or null
-        String normalizedEmail = email == null
-                ? null
-                : email.trim().toLowerCase(Locale.ROOT);
 
-        // validates if null or blank
-        validateRequiredValue(normalizedEmail, "Email");
-
-        return normalizedEmail;
-    }
-
-    /**
-     * Ensures values required by the persistence model are not blank when the
-     * service is called directly without controller validation.
-     */
-    private void validateRequiredValue(String value, String fieldName) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " cannot be null or blank");
-        }
-    }
 
     /**
      * Enforces the relationship between role, course, and IT major.
@@ -219,6 +238,33 @@ public class UserService {
 
         if (course == UserCourse.IT && request.getMajor() == null) {
             throw new IllegalArgumentException("IT students must have a major");
+        }
+    }
+
+
+    /**
+     * Trims, lowercases, and validates an email using a locale-independent
+     * normalization rule.
+     */
+    private String normalizeAndValidateEmail(String email) {
+        // could either be normalized email or null
+        String normalizedEmail = email == null
+                ? null
+                : email.trim().toLowerCase(Locale.ROOT);
+
+        // validates if null or blank
+        validateRequiredValue(normalizedEmail, "Email");
+
+        return normalizedEmail;
+    }
+
+    /**
+     * Ensures values required by the persistence model are not blank when the
+     * service is called directly without controller validation.
+     */
+    private void validateRequiredValue(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " cannot be null or blank");
         }
     }
 }
