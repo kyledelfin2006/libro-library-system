@@ -10,6 +10,9 @@ import app.user.exception.UserNotFoundException;
 import app.user.mapper.UserMapper;
 import app.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validator;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -18,6 +21,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Coordinates user business rules, persistence, password hashing, and DTO
@@ -35,6 +39,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserMapper userMapper;
+    private final Validator validator;
 
     /**
      * Validates and persists a new user.
@@ -53,6 +58,9 @@ public class UserService {
         if (request == null) {
             throw new IllegalArgumentException("User request cannot be null");
         }
+
+        // validate request
+        validateRequest(request);
 
         // normalize / validate university id
         String universityId = normalizeAndValidateUniversityId(request.getUniversityId());
@@ -129,6 +137,15 @@ public class UserService {
 
         // return response dto
         return  userMapper.toResponseDTO(user);
+    }
+
+    private void validateRequest(UserCreateRequestDTO request) {
+        Set<ConstraintViolation<UserCreateRequestDTO>> violations =
+                validator.validate(request);
+
+        if (!violations.isEmpty()) {
+            throw new ConstraintViolationException(violations);
+        }
     }
 
     /**
