@@ -45,8 +45,10 @@ credentials, or real user data.
 - [ ] Add repository, validation, and controller tests.
 - [x] Add focused service tests for partial updates, normalization, validation,
   unchanged emails, and duplicate-email rejection.
-- [ ] Add getters/setters or a record implementation to `ChangePasswordDTO`
-  before using it in a controller or service.
+- [x] Add getters/setters and a no-argument constructor to `ChangePasswordDTO`
+  for validation and future controller binding.
+- [x] Add a transactional `UserService.updatePassword` operation that validates
+  the DTO, verifies the current password, and stores only the encoded hash.
 
 ## Loan domain
 
@@ -92,6 +94,6 @@ credentials, or real user data.
 
 ## Recommended next slice
 
-Complete and test the password-change contract, then add the `UserController`.
-After the user API is stable, implement the loan entity and service. Controllers
-should translate HTTP requests and responses, not contain business logic.
+Add the `UserController` for the completed user service contracts. After the
+user API is stable, implement the loan entity and service. Controllers should
+translate HTTP requests and responses, not contain business logic.

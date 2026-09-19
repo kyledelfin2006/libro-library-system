@@ -3,6 +3,7 @@ package app.user.service;
 import app.user.dto.UserCreateRequestDTO;
 import app.user.dto.UserCreateUpdateDTO;
 import app.user.dto.UserResponseDTO;
+import app.user.dto.ChangePasswordDTO;
 import app.user.entity.User;
 import app.user.entity.enums.UserCourse;
 import app.user.entity.enums.UserRole;
@@ -179,6 +180,54 @@ public class UserService {
 
         // Return a response DTO; dirty checking persists the managed entity.
         return userMapper.toResponseDTO(user);
+    }
+
+    /**
+     * Changes a user's password after validating the request and verifying the
+     * current password against the stored BCrypt hash.
+     *
+     * <p>The supplied passwords are never logged, returned, or stored directly.
+     * The new password replaces the existing hash on the managed entity, and
+     * Hibernate dirty checking persists the change when the transaction commits.</p>
+     *
+     * @param universityId the university ID of the user changing the password
+     * @param request the current and new password request
+     * @throws IllegalArgumentException if the request is null or the current password is incorrect
+     * @throws UserNotFoundException if no user matches the university ID
+     * @throws ConstraintViolationException if the password format is invalid
+     */
+    @Transactional
+    public void updatePassword(String universityId, ChangePasswordDTO request) {
+        // Reject a missing request before reading password fields.
+        if (request == null) {
+            throw new IllegalArgumentException("Password update request cannot be null");
+        }
+
+        // Validate the four-digit password constraints before accessing persistence.
+        validateRequest(request);
+
+        // Normalize and validate the lookup ID before querying the repository.
+        String normalizedUniversityId =
+                normalizeAndValidateUniversityId(universityId);
+
+        // Load the managed entity whose password hash will be replaced.
+        User user = userRepository.findByUniversityId(normalizedUniversityId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        // Compare the raw current password with the stored encoded hash.
+        if (!passwordEncoder.matches(
+                request.getCurrentPassword(),
+                user.getPasswordHash()
+        )) {
+            throw new IllegalArgumentException("Current password is incorrect");
+        }
+
+        // Encode the new password before assigning it to the entity.
+        String encodedPasswordHash =
+                passwordEncoder.encode(request.getNewPassword());
+
+        // Replace only the stored hash; raw password values never reach the entity.
+        user.setPasswordHash(encodedPasswordHash);
     }
 
     /**

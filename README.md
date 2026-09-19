@@ -456,9 +456,10 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 - `BookMapper` centralizes conversion between entities and DTOs.
 - `UserService` normalizes identity values, checks duplicates, enforces academic rules, validates create requests with Jakarta Validator, and persists only BCrypt-hashed passwords.
 - `UserMapper` keeps password fields out of `UserResponseDTO`.
-- User DTO annotations and the transactional partial-update service contract are
-  implemented, but there is no `UserController` yet and user API serialization
-  still needs integration coverage.
+- User DTO annotations, the transactional partial-update service contract, and
+  the transactional password-change service contract are implemented, but there
+  is no `UserController` yet and user API serialization still needs integration
+  coverage.
 
 ## Testing
 
@@ -468,7 +469,7 @@ The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 7
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.
 - `BookServiceTest` verifies service rules, repository interaction, search, sorting, pricing, typed statistics projections, genre-distribution mapping, and dirty-checking expectations.
 - `GlobalExceptionHandlerTest` directly invokes each of the 14 exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
-- `UserServiceTest` verifies partial-update normalization, DTO and business validation, unchanged-email handling, duplicate-email rejection, and dirty-checking expectations. Academic combinations, duplicate checks during creation, password hashing, and controller behavior still need coverage.
+- `UserServiceTest` verifies partial-update normalization, DTO and business validation, password verification and encoding, unchanged-email handling, duplicate-email rejection, and dirty-checking expectations. Academic combinations, duplicate checks during creation, and controller behavior still need coverage.
 
 ### Unit-test performance
 
@@ -508,7 +509,7 @@ The detailed, interview-ready account of the development problems I identified a
 
 ## Upcoming Improvements
 
-- `UserServiceTest` now covers the user update service; expand repository and controller/integration coverage for the user domain.
+- `UserServiceTest` now covers user update and password-change services; expand repository and controller/integration coverage for the user domain.
 - Add a user controller and document the user API after its service contract is stable.
 - Implement the loan domain, including active-loan constraints and overdue/history queries.
 - Decide on and implement an authentication model before replacing the development `permitAll()` security configuration.

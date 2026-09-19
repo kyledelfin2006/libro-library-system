@@ -2,6 +2,7 @@ package unit;
 
 import app.user.dto.UserCreateUpdateDTO;
 import app.user.dto.UserResponseDTO;
+import app.user.dto.ChangePasswordDTO;
 import app.user.entity.User;
 import app.user.mapper.UserMapper;
 import app.user.repository.UserRepository;
@@ -177,5 +178,66 @@ class UserServiceTest {
         );
 
         assertEquals("old@example.com", existingUser.getEmail());
+    }
+
+    /** Verifies a valid current password produces and stores a new encoded hash. */
+    @Test
+    void updatePassword_shouldVerifyAndEncodeNewPassword() {
+        existingUser.setPasswordHash("old-hash");
+        when(passwordEncoder.matches("1234", "old-hash")).thenReturn(true);
+        when(passwordEncoder.encode("5678")).thenReturn("new-hash");
+
+        userService.updatePassword(
+                "2025-4321",
+                new ChangePasswordDTO("1234", "5678")
+        );
+
+        assertEquals("new-hash", existingUser.getPasswordHash());
+        verify(passwordEncoder).matches("1234", "old-hash");
+        verify(passwordEncoder).encode("5678");
+        verify(repository, never()).save(any(User.class));
+    }
+
+    /** Verifies an incorrect current password prevents the hash from changing. */
+    @Test
+    void updatePassword_whenCurrentPasswordIsIncorrect_shouldReject() {
+        existingUser.setPasswordHash("old-hash");
+        when(passwordEncoder.matches("0000", "old-hash")).thenReturn(false);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> userService.updatePassword(
+                        "2025-4321",
+                        new ChangePasswordDTO("0000", "5678")
+                )
+        );
+
+        assertEquals("old-hash", existingUser.getPasswordHash());
+        verify(passwordEncoder, never()).encode(anyString());
+    }
+
+    /** Verifies invalid password input is rejected before user lookup. */
+    @Test
+    void updatePassword_whenPasswordFormatIsInvalid_shouldReject() {
+        assertThrows(
+                ConstraintViolationException.class,
+                () -> userService.updatePassword(
+                        "2025-4321",
+                        new ChangePasswordDTO("123", "5678")
+                )
+        );
+
+        verify(repository, never()).findByUniversityId(anyString());
+    }
+
+    /** Verifies a null password request is rejected before repository access. */
+    @Test
+    void updatePassword_whenRequestIsNull_shouldReject() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> userService.updatePassword("2025-4321", null)
+        );
+
+        verifyNoInteractions(repository);
     }
 }
