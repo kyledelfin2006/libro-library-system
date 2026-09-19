@@ -31,9 +31,8 @@ credentials, or real user data.
 - [x] Add `UserResponseDTO`; never include the raw password or `passwordHash`.
 - [x] Add the initial update DTO (`UserCreateUpdateDTO`).
 - [x] Add the `UserService` foundation for create, read, and delete operations.
-- [ ] Complete the update operation: make the intended public service contract
-  explicit, add `@Transactional`, validate the update DTO, and fix duplicate
-  email handling.
+- [x] Complete the update operation: expose a transactional service contract,
+  validate and normalize partial updates, and fix duplicate email handling.
 - [x] Validate university ID format and normalize input deliberately.
 - [x] Validate duplicate university IDs and emails in the service.
 - [x] Enforce academic rules in the service:
@@ -43,7 +42,9 @@ credentials, or real user data.
 - [x] Add a `PasswordEncoder` bean.
 - [x] Hash the supplied four-digit prototype PIN before persistence; never store it directly.
 - [ ] Add `UserController` after the service contract is stable.
-- [ ] Add repository, service, validation, and controller tests.
+- [ ] Add repository, validation, and controller tests.
+- [x] Add focused service tests for partial updates, normalization, validation,
+  unchanged emails, and duplicate-email rejection.
 - [ ] Add getters/setters or a record implementation to `ChangePasswordDTO`
   before using it in a controller or service.
 
@@ -91,7 +92,6 @@ credentials, or real user data.
 
 ## Recommended next slice
 
-Complete and test the user update/password-change contracts, then add the
-`UserController`. After the user API is stable, implement the loan entity and
-service. Controllers should translate HTTP requests and responses, not contain
-business logic.
+Complete and test the password-change contract, then add the `UserController`.
+After the user API is stable, implement the loan entity and service. Controllers
+should translate HTTP requests and responses, not contain business logic.

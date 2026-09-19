@@ -97,54 +97,157 @@ public class UserService {
         return userMapper.toResponseDTO(savedUser);
     }
 
-    private UserResponseDTO updateUser(
+    /**
+     * Applies a validated partial update to an existing user.
+     *
+     * <p>{@code null} fields mean that the caller omitted the field and the
+     * current entity value is preserved. Supplied values are trimmed,
+     * normalized, validated, and applied to the managed entity. Hibernate
+     * dirty checking persists the changes when the transaction commits.</p>
+     *
+     * @param universityId the university ID of the user being updated
+     * @param request the partial update request
+     * @return the updated user without password data
+     * @throws IllegalArgumentException if the request or a supplied value is invalid
+     * @throws UserNotFoundException if no user matches the university ID
+     */
+    @Transactional
+    public UserResponseDTO updateUser(
             String universityId,
             UserCreateUpdateDTO request
-    ){
+    ) {
+        // Reject null input before reading request fields.
+        if (request == null) {
+            throw new IllegalArgumentException("User update request cannot be null");
+        }
 
-        // Find user
-        User user = userRepository.findByUniversityId(universityId)
+        // Normalize and validate the lookup ID before querying the repository.
+        String normalizedUniversityId =
+                normalizeAndValidateUniversityId(universityId);
+
+        // Load the managed entity so Hibernate can track field changes.
+        User user = userRepository.findByUniversityId(normalizedUniversityId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        // if non-null value, normalize and set
-        if (request.getFirstName() != null){
-            user.setFirstName(request.getFirstName().trim());
+        // Normalize supplied values without mutating the input DTO.
+        UserCreateUpdateDTO normalizedRequest = new UserCreateUpdateDTO(
+                trimNullable(request.getFirstName()),
+                trimNullable(request.getLastName()),
+                normalizeMiddleInitial(request.getMiddleInitial()),
+                normalizeNullableEmail(request.getEmail())
+        );
+
+        // Apply DTO constraints for size, email format, and middle-initial format.
+        validateRequest(normalizedRequest);
+
+        // Reject blank names because @Size alone permits blank strings.
+        validateIfPresent(normalizedRequest.getFirstName(), "First name");
+        validateIfPresent(normalizedRequest.getLastName(), "Last name");
+
+        // Reject blank email input because @Email permits an empty value.
+        validateIfPresent(normalizedRequest.getEmail(), "Email");
+
+        // Reuse the normalized email for conflict checking and assignment.
+        String newEmail = normalizedRequest.getEmail();
+
+        // Check uniqueness only when the email is actually changing.
+        if (newEmail != null
+                && !newEmail.equals(user.getEmail())
+                && userRepository.existsByEmailIgnoreCase(newEmail)) {
+            throw new IllegalArgumentException("Email is already registered");
         }
 
-
-        // if non-null value, normalize and set
-        if (request.getMiddleInitial() != null){
-            user.setMiddleInitial(request.getMiddleInitial().trim());
+        // Apply only supplied fields.
+        if (normalizedRequest.getFirstName() != null) {
+            user.setFirstName(normalizedRequest.getFirstName());
         }
 
-        // if non-null value, normalize and set
-        if (request.getLastName() != null){
-            validateRequiredValue(request.getLastName(), "Last Name");
-            user.setLastName(request.getLastName().trim());
+        // Preserve the current last name when it was omitted.
+        if (normalizedRequest.getLastName() != null) {
+            user.setLastName(normalizedRequest.getLastName());
         }
 
-        // normalize and validate email
-        if (request.getEmail() != null){
-           String email = normalizeAndValidateEmail(request.getEmail());
-
-           if (email.equals(user.getEmail())
-                   && userRepository.existsByEmailIgnoreCase(email)
-           ){
-                throw new IllegalArgumentException("Email already registered");
-           }
-            user.setEmail(email);
+        // Preserve the current middle initial when it was omitted or blank.
+        if (normalizedRequest.getMiddleInitial() != null) {
+            user.setMiddleInitial(normalizedRequest.getMiddleInitial());
         }
 
-        // return response dto
-        return  userMapper.toResponseDTO(user);
+        // Preserve the current email when it was omitted.
+        if (newEmail != null) {
+            user.setEmail(newEmail);
+        }
+
+        // Return a response DTO; dirty checking persists the managed entity.
+        return userMapper.toResponseDTO(user);
     }
 
-    private void validateRequest(UserCreateRequestDTO request) {
-        Set<ConstraintViolation<UserCreateRequestDTO>> violations =
-                validator.validate(request);
+    /**
+     * Validates any request DTO with Jakarta Bean Validation.
+     *
+     * @param request the DTO to validate
+     * @param <T> the DTO type
+     * @throws ConstraintViolationException when one or more constraints fail
+     */
+    private <T> void validateRequest(T request) {
+        // Collect every violation so callers receive the complete result.
+        Set<ConstraintViolation<T>> violations = validator.validate(request);
 
         if (!violations.isEmpty()) {
             throw new ConstraintViolationException(violations);
+        }
+    }
+
+    /**
+     * Trims an optional update value while preserving {@code null} as omission.
+     *
+     * @param value the optional value
+     * @return the trimmed value, or {@code null}
+     */
+    private String trimNullable(String value) {
+        // Preserve null as omission instead of converting it to an empty string.
+        return value == null ? null : value.trim();
+    }
+
+    /**
+     * Normalizes an optional email using the same lowercase rule as creation.
+     *
+     * @param email the optional email
+     * @return the normalized email, or {@code null}
+     */
+    private String normalizeNullableEmail(String email) {
+        // Preserve null so an omitted email does not overwrite the current value.
+        return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Trims an optional middle initial and treats blank input as omitted.
+     *
+     * @param middleInitial the optional middle initial
+     * @return the trimmed middle initial, or {@code null}
+     */
+    private String normalizeMiddleInitial(String middleInitial) {
+        // Preserve null as omission.
+        if (middleInitial == null) {
+            return null;
+        }
+
+        // Trim whitespace before applying the one-letter constraint.
+        String normalized = middleInitial.trim();
+
+        // Treat empty or whitespace-only input as omitted.
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    /**
+     * Rejects blank values when a partial-update field was explicitly supplied.
+     *
+     * @param value the optional field value
+     * @param fieldName the human-readable field name
+     */
+    private void validateIfPresent(String value, String fieldName) {
+        // Treat null as omission; reject only supplied blank values.
+        if (value != null && value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " cannot be blank");
         }
     }
 

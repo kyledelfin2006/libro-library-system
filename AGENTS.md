@@ -188,7 +188,7 @@ The count-and-total-value aggregate uses the typed `LibraryAggregate` constructo
 
 The user feature currently contains the entity, enums, create/response DTOs, mapper, repository, BCrypt `PasswordEncoder` bean, and `UserService`. `UserService` normalizes university IDs and email addresses, rejects duplicates, hashes the four-digit password before persistence, and enforces the role/course/major rules. The enum and V2 database checks define the allowed academic values; the service enforces their cross-field relationships.
 
-There is no `UserController`, `UserDetailsService`, loan feature, or user-domain test class yet. `UserService` now injects Jakarta `Validator` and validates create requests before normalization, duplicate checks, hashing, and persistence. `UserCreateUpdateDTO` and `ChangePasswordDTO` exist, but the update path is still incomplete: it is private and non-transactional, does not validate the update DTO, and its duplicate-email condition requires correction before exposure through an API.
+There is no `UserController`, `UserDetailsService`, loan feature, or user-domain integration test class yet. `UserService` injects Jakarta `Validator`, validates create requests, and now exposes a transactional partial-update operation that normalizes supplied fields, validates them, and protects email uniqueness. `ChangePasswordDTO` exists, but the password-change contract is not implemented.
 
 ### Entity and database model
 
@@ -427,12 +427,14 @@ Central advice maps Java/application exceptions to stable HTTP errors, keeping e
 
 Current coverage consists of:
 
+- `UserServiceTest`: seven Mockito-based service unit tests for partial-update normalization, validation, unchanged-email handling, duplicate-email rejection, and dirty-checking expectations.
+
 - `BookServiceTest`: 46 Mockito-based service unit tests for CRUD rules, entity-validation enforcement, dirty-checking expectations, search, sorting, pricing, typed statistics projections, genre distribution, and other aggregate behavior.
 - `BookTest`: five entity-construction, lifecycle, and direct Jakarta Validator tests for request DTO and entity constraints.
 - `BookMapperTest`: four focused tests for entity-to-DTO mapping, null inputs, and list mapping.
 - `GlobalExceptionHandlerTest`: 14 direct unit tests for every exception handler, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
 
-The suite contains 69 tests. Its execution setup is deliberately small and optimized:
+The suite contains 76 tests. Its execution setup is deliberately small and optimized:
 
 - `src/test/resources/junit-platform.properties` enables concurrent execution between test classes but keeps methods within each class on the same thread.
 - `BookServiceTest` uses `@TestInstance(PER_CLASS)` so its repository mock and `BookService` are constructed once. `@BeforeEach` resets the repository mock and rebuilds mutable book fixtures, preserving test isolation. The stateless `BookMapper` is real rather than mocked.
@@ -525,7 +527,7 @@ When a breaking change is intended, document migration guidance and update all e
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
 - User and loan HTTP APIs are incomplete: there is no `UserController`, no loan feature, and no authentication flow.
 - User-domain validation and password behavior lack automated tests.
-- The user update method is not yet an exposed, validated, transactional service contract; its duplicate-email condition must be corrected before use.
+- The password-change service contract and user HTTP API are not implemented.
 - Test coverage is predominantly unit-level; HTTP, JPA, migration, security, and container paths lack automated integration coverage.
 - Success response shapes are inconsistent across endpoints.
 - `timestamp` fields are epoch milliseconds rather than ISO-8601 values.
