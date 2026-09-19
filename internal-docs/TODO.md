@@ -42,13 +42,15 @@ credentials, or real user data.
 - [x] Add a `PasswordEncoder` bean.
 - [x] Hash the supplied four-digit prototype PIN before persistence; never store it directly.
 - [ ] Add `UserController` after the service contract is stable.
-- [ ] Add repository, validation, and controller tests.
+- [ ] Add repository and controller tests.
 - [x] Add focused service tests for partial updates, normalization, validation,
   unchanged emails, and duplicate-email rejection.
 - [x] Add getters/setters and a no-argument constructor to `ChangePasswordDTO`
   for validation and future controller binding.
 - [x] Add a transactional `UserService.updatePassword` operation that validates
   the DTO, verifies the current password, and stores only the encoded hash.
+- [x] Add password-change tests for valid changes, incorrect current passwords,
+  invalid formats, missing users, and encoded-password storage.
 
 ## Loan domain
 
@@ -83,7 +85,7 @@ credentials, or real user data.
 
 ## Verification and documentation
 
-- [ ] Run `mvn test` after user-domain tests are added.
+- [x] Run `mvn test` after user-domain tests are added.
 - [ ] Add integration coverage for Flyway, JPA mappings, and PostgreSQL checks.
 - [ ] Verify that V2 has not already been applied to a persistent database; if
   it has, create a forward-only V3 migration instead of editing V2.
@@ -94,6 +96,7 @@ credentials, or real user data.
 
 ## Recommended next slice
 
-Add the `UserController` for the completed user service contracts. After the
-user API is stable, implement the loan entity and service. Controllers should
-translate HTTP requests and responses, not contain business logic.
+Add the `UserController` for the completed user service contracts, then add
+controller tests. After the user API is stable, implement the loan entity and
+service. Controllers should translate HTTP requests and responses, not contain
+business logic.

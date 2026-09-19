@@ -509,7 +509,7 @@ The detailed, interview-ready account of the development problems I identified a
 
 ## Upcoming Improvements
 
-- `UserServiceTest` now covers user update and password-change services; expand repository and controller/integration coverage for the user domain.
+- `UserServiceTest` covers user update and password-change services, including missing-user handling; repository and controller/integration coverage remain.
 - Add a user controller and document the user API after its service contract is stable.
 - Implement the loan domain, including active-loan constraints and overdue/history queries.
 - Decide on and implement an authentication model before replacing the development `permitAll()` security configuration.

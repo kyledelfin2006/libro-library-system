@@ -4,6 +4,7 @@ import app.user.dto.UserCreateUpdateDTO;
 import app.user.dto.UserResponseDTO;
 import app.user.dto.ChangePasswordDTO;
 import app.user.entity.User;
+import app.user.exception.UserNotFoundException;
 import app.user.mapper.UserMapper;
 import app.user.repository.UserRepository;
 import app.user.service.UserService;
@@ -63,6 +64,7 @@ class UserServiceTest {
     @BeforeEach
     void setUp() {
         reset(repository);
+        reset(passwordEncoder);
 
         existingUser = new User();
         existingUser.setId(1L);
@@ -228,6 +230,25 @@ class UserServiceTest {
         );
 
         verify(repository, never()).findByUniversityId(anyString());
+    }
+
+    /** Verifies a missing user prevents password verification and encoding. */
+    @Test
+    void updatePassword_whenUserDoesNotExist_shouldReject() {
+        reset(repository);
+        when(repository.findByUniversityId("2025-9999"))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                UserNotFoundException.class,
+                () -> userService.updatePassword(
+                        "2025-9999",
+                        new ChangePasswordDTO("1234", "5678")
+                )
+        );
+
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
+        verify(passwordEncoder, never()).encode(anyString());
     }
 
     /** Verifies a null password request is rejected before repository access. */
