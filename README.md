@@ -9,7 +9,9 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
 
-Libro is a Spring Boot REST API for managing books with CRUD operations, search, pagination, sorting, range filtering, genre analytics, and statistics. It also contains the foundation of a user domain with academic-role rules and password hashing, although user and loan HTTP APIs are not yet exposed. It uses DTO-driven validation, centralized exception handling, and a Docker-first workflow backed by PostgreSQL 18 with Flyway database migrations.
+Libro is a Spring Boot REST API and Library Management System. It manages books with CRUD operations, search, pagination, sorting, range filtering, genre analytics, and statistics. It also contains a user-domain foundation, while user and loan HTTP APIs are not yet exposed. The prototype uses DTO-driven validation, centralized exception handling, and a Docker-first workflow backed by PostgreSQL 18 with Flyway database migrations.
+
+The institutional context behind the user domain is documented in [Institutional Context](docs/institutional-context.md), including its ASU-CCS setting and alignment with existing MIS identity conventions.
 
 The API also exposes generated OpenAPI documentation through Springdoc: Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running.
 
@@ -44,7 +46,7 @@ The API also exposes generated OpenAPI documentation through Springdoc: Swagger 
 * [Data Management](https://github.com/kyledelfin2006/library-api-system#data-management)
 * [Testing](https://github.com/kyledelfin2006/library-api-system#testing)
 * [Documentation](#documentation)
-* [Problems I Solved](https://github.com/kyledelfin2006/library-api-system#problems-i-solved)
+* [Development Problems Solved](#development-problems-solved)
 * [Upcoming Improvements](https://github.com/kyledelfin2006/library-api-system#upcoming-improvements)
 * [License](https://github.com/kyledelfin2006/library-api-system#license)
 
@@ -52,8 +54,8 @@ The API also exposes generated OpenAPI documentation through Springdoc: Swagger 
 
 The README is the central entry point for project documentation. Supporting reports belong in `docs/`, while files that rely on repository-root discovery remain at the root.
 
-- [Gap Report](docs/gap-report.md) tracks active architectural and implementation gaps, their impact, priorities, and resolved items.
-- [Docker/Flyway 500-error runbook](docs/docker-flyway-500-fix.md) documents the pre-release database repair and verification workflow.
+- [Development Problems Solved](docs/development-problems-solved.md) is a first-person development reflection covering the major bugs, effects, fixes, and verification decisions made while building the prototype.
+- [Institutional Context](docs/institutional-context.md) records the ASU-CCS academic model and the existing MIS assumptions that shaped the user domain.
 - [Agent and Contributor Guide](AGENTS.md) documents the repository architecture, layer contracts, coding rules, testing expectations, and definition of done. It remains at the repository root so coding agents can discover it automatically.
 
 ## Architecture Overview
@@ -101,8 +103,7 @@ flowchart TD
 AGENTS.md
 README.md
 docs/
-  gap-report.md
-  docker-flyway-500-fix.md
+  development-problems-solved.md
 
 src/main/java/app/
   LibraryApplication.java
@@ -431,7 +432,7 @@ If you prefer to run the application directly on the host machine, start only Po
 | Swagger UI loads but API calls fail, or `library-app` keeps restarting | Inspect `docker compose logs app`; the old empty development volume may have `books.id` as `INTEGER` while Hibernate expects `BIGINT` | Rebuild the jar, remove the disposable pre-release volume with `docker compose down -v`, then run `docker compose up -d --build` |
 | No Flyway messages or `flyway_schema_history` table | The Boot 4 Flyway starter is absent, or the container contains an old jar | Keep `spring-boot-starter-flyway`, rebuild the jar, and rebuild the image |
 
-The complete diagnosis, pre-release reset procedure, clean-install behavior, and production-data warning are in [Docker/Flyway 500-error runbook](docs/docker-flyway-500-fix.md).
+The complete diagnosis, pre-release reset procedure, clean-install behavior, and production-data warning are in [Development Problems Solved](docs/development-problems-solved.md).
 
 ## Quick Start
 
@@ -453,7 +454,7 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 - Updates rely on Hibernate dirty checking inside transactional service methods.
 - `BookRequestDTO` is used for request validation, while `BookResponseDTO` and `LibraryStatisticsDTO` are used for response shaping.
 - `BookMapper` centralizes conversion between entities and DTOs.
-- `UserService` normalizes university IDs and email addresses, checks duplicate identity values, enforces academic rules, validates create requests with Jakarta Validator, and persists only BCrypt-hashed passwords.
+- `UserService` normalizes identity values, checks duplicates, enforces academic rules, validates create requests with Jakarta Validator, and persists only BCrypt-hashed passwords.
 - `UserMapper` keeps password fields out of `UserResponseDTO`.
 - User DTO annotations and the transactional partial-update service contract are
   implemented, but there is no `UserController` yet and user API serialization
@@ -501,18 +502,9 @@ mvn clean verify
 
 These are isolated unit tests. Controller routing and serialization, repository queries, Flyway migrations, PostgreSQL behavior, security rules, and real JPA transaction behavior still require integration-test coverage.
 
-## Problems I Solved
+## Development Problems Solved
 
-- **Docker API 500 / restart loop**: The database used PostgreSQL `SERIAL` (`INTEGER`) for `books.id`, while the entity uses Java `Long` and Hibernate 7 expects `BIGINT`. In addition, direct `flyway-core` usage did not activate Flyway auto-configuration under Spring Boot 4, and PostgreSQL's init script competed with Flyway. Because the application is still pre-release and contains no data, the fix corrects V1 to `BIGSERIAL`, installs `spring-boot-starter-flyway`, makes Flyway the only schema authority, and waits for PostgreSQL health before starting the app. See the [incident runbook](docs/docker-flyway-500-fix.md).
-- **Slow Unit-Test Feedback Loop**: The test suite uses shared fixtures where safe, concurrent test classes, a shared Jakarta Validator factory, real Spring exception objects where practical, and disabled test-only log noise. Use `mvn test` for fast feedback and `mvn clean verify` for the full verification lifecycle. Build times are environment-dependent, and Mockito's inline mock maker may emit a dynamic Byte Buddy agent warning during test startup; this is test infrastructure overhead rather than application execution time.
-- **Unsafe Statistics Aggregate Contract**: `BookRepository.getCountAndTotalValue()` previously returned an `Object[]`, forcing the service to depend on positional indexes and runtime casts. The query now returns the named immutable `LibraryAggregate` projection, and the service maps that projection into `LibraryStatisticsDTO` without array indexing.
-- **Unsafe Genre Aggregate Contract**: `BookRepository.getGenres()` previously returned `List<Object[]>`, forcing positional indexes and runtime casts in the service. The query now returns the named immutable `GenreCount` projection, while `GET /app/books/genre` preserves its existing `Map<String, Long>` response.
-- **Tight Coupling**: Solved by using constructor-based dependency injection, interface-driven design (`BookService`, `BookRepository`), and the `BookMapper` component. The controller depends on abstractions rather than concrete implementations, making the codebase testable and easy to extend.
-- **Memory Leaking**: Solved by using `@Modifying(clearAutomatically = true)` on the delete query to flush and clear the persistence context, preventing stale entity accumulation. Pagination on `/app/books/all` also prevents loading the entire table into memory.
-- **Read And Write Concurrency Error**: Solved by isolating write operations inside `@Transactional` boundaries. Dirty checking and automatic flushing ensure that concurrent reads do not interfere with in-progress writes, and transactions are rolled back on failure to preserve data integrity.
-- **Using `@Transactional`**: All mutation endpoints (`addBook`, `patchBook`, `replaceBook`, `deleteBookById`) are wrapped in `@Transactional` to guarantee atomicity, enable Hibernate dirty checking for automatic updates, and provide consistent exception handling across the service layer.
-- **PUT vs PATCH Validation Strategy**: Solved the classic REST conflict where applying `@Valid` to PATCH rejects legitimate partial updates (omitted fields arrive as `null` and violate `@NotBlank`), while omitting it from PUT allows silent data corruption (null fields are skipped instead of replaced). The solution uses `@Valid` on PUT for full-replacement enforcement, omits `@Valid` on PATCH with field-level conditional `hasText()` guards in the service, and treats both `null` and empty/blank strings as "no update" during partial updates to prevent data corruption.
-- **Divergent Validation Error Response Shape**: POST/PUT price validation was handled by `handleValidationFailures` (triggered by `@Valid`) and PATCH price validation by `handleIllegalArgument` (triggered by a manual service-layer check). Both happened to produce the same `error`/`details` JSON by convention, but through completely independent code paths — a single message change in one handler would silently break parity for API clients. The fix introduces a private `buildValidationErrorResponse(String message)` helper in `GlobalExceptionHandler` that both handlers delegate to, enforcing a single source of truth for the validation error contract.
+The detailed, interview-ready account of the development problems I identified and solved is in [Development Problems Solved](docs/development-problems-solved.md). It consolidates the former gap and Docker/Flyway problem documents into one reflective reference.
 
 ## Upcoming Improvements
 
