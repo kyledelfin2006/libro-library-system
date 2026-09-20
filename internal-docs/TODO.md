@@ -40,7 +40,7 @@ credentials, or real user data.
   - [x] EMC and IS students must have `major = null`.
   - [x] IT students must have an approved major.
 - [x] Add a `PasswordEncoder` bean.
-- [x] Hash the supplied four-digit prototype PIN before persistence; never store it directly.
+- [x] Enforce passwords of at least 8 characters with uppercase and lowercase letters, a number, and a symbol; hash them before persistence and never store them directly.
 - [ ] Add `UserController` after the service contract is stable.
 - [ ] Add repository and controller tests.
 - [x] Add focused service tests for partial updates, normalization, validation,
@@ -71,8 +71,8 @@ credentials, or real user data.
 
 ## Spring Security and authentication
 
-- [ ] Replace the prototype four-digit PIN approach with the institution's
-  approved authentication or SSO solution before production use.
+- [ ] Integrate the password policy with the institution's approved authentication
+  or SSO solution before production use.
 - [ ] Learn `UserDetailsService`, `PasswordEncoder`, authentication, and
   authorization fundamentals.
 - [ ] Implement `UserDetailsService` using `universityId` as the username.

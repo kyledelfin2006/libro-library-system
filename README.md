@@ -232,7 +232,7 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 - Budget filtering through `GET /app/books/budget`.
 - Statistics endpoints for total books, total library value, average price, and the most expensive book.
 - Genre distribution endpoint.
-- User-domain foundation with role/course/major enums, duplicate checks, academic business rules, and BCrypt password hashing; no user controller exists yet.
+- User-domain foundation with role/course/major enums, duplicate checks, academic business rules, and BCrypt password hashing; passwords require at least 8 characters with uppercase and lowercase letters, a number, and a symbol. No user controller exists yet.
 - OpenAPI 3 documentation through Springdoc Swagger UI and `/v3/api-docs`.
 - Validation with `@Valid` on create and replace requests.
 - Global handling for `BookNotFoundException`, validation errors, malformed JSON, number format errors, database issues, and unsupported methods.
@@ -454,7 +454,7 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 - Updates rely on Hibernate dirty checking inside transactional service methods.
 - `BookRequestDTO` is used for request validation, while `BookResponseDTO` and `LibraryStatisticsDTO` are used for response shaping.
 - `BookMapper` centralizes conversion between entities and DTOs.
-- `UserService` normalizes identity values, checks duplicates, enforces academic rules, validates create requests with Jakarta Validator, and persists only BCrypt-hashed passwords.
+- `UserService` normalizes identity values, checks duplicates, enforces academic rules, validates create requests with Jakarta Validator, and persists only BCrypt-hashed passwords. Passwords must be at least 8 characters and contain uppercase and lowercase letters, a number, and a symbol.
 - `UserMapper` keeps password fields out of `UserResponseDTO`.
 - User DTO annotations, the transactional partial-update service contract, and
   the transactional password-change service contract are implemented, but there

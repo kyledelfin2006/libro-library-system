@@ -6,14 +6,14 @@ Libro is a library management system prototype for Aklan State University – Co
 
 ## Alignment with the existing MIS
 
-The existing university management information system uses the university ID as the username and a four-digit password convention. Libro was designed with that infrastructure in mind:
+The existing university management information system uses the university ID as the username. Libro keeps that identifier while using its own password policy:
 
 - University IDs use the `####-####` format.
-- User creation accepts a four-digit password.
+- User creation and password changes require at least 8 characters, including uppercase and lowercase letters, a number, and a symbol.
 - Passwords are encoded with BCrypt before persistence and are never returned in response DTOs.
 - University IDs and email addresses are normalized before duplicate checks and storage.
 
-This is alignment with the existing identity conventions, not a claim that Libro currently authenticates against or synchronizes with the MIS. Libro does not yet have a user controller or completed authentication integration.
+This is alignment with the existing identity convention, not a claim that Libro currently authenticates against or synchronizes with the MIS. Libro does not yet have a user controller or completed authentication integration.
 
 ## CCS academic structure
 

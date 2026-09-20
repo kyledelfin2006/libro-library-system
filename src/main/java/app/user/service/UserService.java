@@ -45,7 +45,7 @@ public class UserService {
     /**
      * Validates and persists a new user.
      *
-     * <p>The supplied four-digit password is encoded before persistence. The
+     * <p>The supplied password is encoded before persistence. The
      * raw password is never assigned to the entity or returned to the caller.
      * University IDs and email addresses are trimmed before duplicate checks
      * and storage.</p>
@@ -203,7 +203,7 @@ public class UserService {
             throw new IllegalArgumentException("Password update request cannot be null");
         }
 
-        // Validate the four-digit password constraints before accessing persistence.
+        // Validate password complexity constraints before accessing persistence.
         validateRequest(request);
 
         // Normalize and validate the lookup ID before querying the repository.

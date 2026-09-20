@@ -186,7 +186,7 @@ The count-and-total-value aggregate uses the typed `LibraryAggregate` constructo
 
 ### User-domain status
 
-The user feature currently contains the entity, enums, create/response DTOs, mapper, repository, BCrypt `PasswordEncoder` bean, and `UserService`. `UserService` normalizes university IDs and email addresses, rejects duplicates, hashes the four-digit password before persistence, and enforces the role/course/major rules. The enum and V2 database checks define the allowed academic values; the service enforces their cross-field relationships.
+The user feature currently contains the entity, enums, create/response DTOs, mapper, repository, BCrypt `PasswordEncoder` bean, and `UserService`. `UserService` normalizes university IDs and email addresses, rejects duplicates, validates password complexity, hashes passwords before persistence, and enforces the role/course/major rules. Passwords must be at least eight characters and include uppercase and lowercase letters, a number, and a symbol. The enum and V2 database checks define the allowed academic values; the service enforces their cross-field relationships.
 
 There is no `UserController`, `UserDetailsService`, loan feature, or user-domain integration test class yet. `UserService` injects Jakarta `Validator`, validates create and password-change requests, and exposes transactional update operations that normalize supplied fields, protect email uniqueness, verify current passwords, and store only encoded password hashes.
 

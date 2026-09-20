@@ -3,7 +3,11 @@ package unit;
 import app.user.dto.UserCreateUpdateDTO;
 import app.user.dto.UserResponseDTO;
 import app.user.dto.ChangePasswordDTO;
+import app.user.dto.UserCreateRequestDTO;
 import app.user.entity.User;
+import app.user.entity.enums.UserCourse;
+import app.user.entity.enums.UserITMajor;
+import app.user.entity.enums.UserRole;
 import app.user.exception.UserNotFoundException;
 import app.user.mapper.UserMapper;
 import app.user.repository.UserRepository;
@@ -186,17 +190,17 @@ class UserServiceTest {
     @Test
     void updatePassword_shouldVerifyAndEncodeNewPassword() {
         existingUser.setPasswordHash("old-hash");
-        when(passwordEncoder.matches("1234", "old-hash")).thenReturn(true);
-        when(passwordEncoder.encode("5678")).thenReturn("new-hash");
+        when(passwordEncoder.matches("Current1!", "old-hash")).thenReturn(true);
+        when(passwordEncoder.encode("NewPassword2@")).thenReturn("new-hash");
 
         userService.updatePassword(
                 "2025-4321",
-                new ChangePasswordDTO("1234", "5678")
+                new ChangePasswordDTO("Current1!", "NewPassword2@")
         );
 
         assertEquals("new-hash", existingUser.getPasswordHash());
-        verify(passwordEncoder).matches("1234", "old-hash");
-        verify(passwordEncoder).encode("5678");
+        verify(passwordEncoder).matches("Current1!", "old-hash");
+        verify(passwordEncoder).encode("NewPassword2@");
         verify(repository, never()).save(any(User.class));
     }
 
@@ -204,13 +208,13 @@ class UserServiceTest {
     @Test
     void updatePassword_whenCurrentPasswordIsIncorrect_shouldReject() {
         existingUser.setPasswordHash("old-hash");
-        when(passwordEncoder.matches("0000", "old-hash")).thenReturn(false);
+        when(passwordEncoder.matches("Current1!", "old-hash")).thenReturn(false);
 
         assertThrows(
                 IllegalArgumentException.class,
                 () -> userService.updatePassword(
                         "2025-4321",
-                        new ChangePasswordDTO("0000", "5678")
+                        new ChangePasswordDTO("Current1!", "NewPassword2@")
                 )
         );
 
@@ -218,16 +222,27 @@ class UserServiceTest {
         verify(passwordEncoder, never()).encode(anyString());
     }
 
-    /** Verifies invalid password input is rejected before user lookup. */
+    /** Verifies every password-complexity requirement is enforced before user lookup. */
     @Test
-    void updatePassword_whenPasswordFormatIsInvalid_shouldReject() {
-        assertThrows(
-                ConstraintViolationException.class,
-                () -> userService.updatePassword(
-                        "2025-4321",
-                        new ChangePasswordDTO("123", "5678")
-                )
-        );
+    void updatePassword_whenPasswordMissesComplexityRequirement_shouldReject() {
+        String[] invalidPasswords = {
+                "Short1!",
+                "lowercase1!",
+                "UPPERCASE1!",
+                "NoNumber!",
+                "NoSymbol1"
+        };
+
+        for (String invalidPassword : invalidPasswords) {
+            assertThrows(
+                    ConstraintViolationException.class,
+                    () -> userService.updatePassword(
+                            "2025-4321",
+                            new ChangePasswordDTO("Current1!", invalidPassword)
+                    ),
+                    () -> "Expected password to be invalid: " + invalidPassword
+            );
+        }
 
         verify(repository, never()).findByUniversityId(anyString());
     }
@@ -243,7 +258,7 @@ class UserServiceTest {
                 UserNotFoundException.class,
                 () -> userService.updatePassword(
                         "2025-9999",
-                        new ChangePasswordDTO("1234", "5678")
+                        new ChangePasswordDTO("Current1!", "NewPassword2@")
                 )
         );
 
@@ -260,5 +275,29 @@ class UserServiceTest {
         );
 
         verifyNoInteractions(repository);
+    }
+
+    /** Verifies account creation rejects passwords that miss a complexity requirement. */
+    @Test
+    void createUser_whenPasswordMissesSymbol_shouldRejectBeforeRepositoryAccess() {
+        UserCreateRequestDTO request = new UserCreateRequestDTO(
+                "2025-1234",
+                "NoSymbol1",
+                "Jane",
+                "Doe",
+                null,
+                "jane@example.com",
+                UserRole.STUDENT,
+                UserCourse.IT,
+                UserITMajor.SE
+        );
+
+        assertThrows(
+                ConstraintViolationException.class,
+                () -> userService.createUser(request)
+        );
+
+        verifyNoInteractions(repository);
+        verifyNoInteractions(passwordEncoder);
     }
 }

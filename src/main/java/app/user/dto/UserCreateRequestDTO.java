@@ -25,8 +25,8 @@ public class UserCreateRequestDTO {
 
     @NotBlank(message = "Password cannot be null")
     @Pattern(
-            regexp = "\\d{4}",
-            message = "Password can only be four digits"
+            regexp = "^(?=.*[A-Z])(?=.*[a-z])(?=.*\\d)(?=.*[^A-Za-z0-9\\s]).{8,}$",
+            message = "Password must be at least 8 characters and include uppercase and lowercase letters, a number, and a symbol"
     )
     private String password;
 
