@@ -3,6 +3,7 @@ package app.user.dto;
 import app.user.entity.enums.UserCourse;
 import app.user.entity.enums.UserITMajor;
 import app.user.entity.enums.UserRole;
+import app.user.validation.PasswordPolicy;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
@@ -25,8 +26,8 @@ public class UserCreateRequestDTO {
 
     @NotBlank(message = "Password cannot be null")
     @Pattern(
-            regexp = "^(?=.*[A-Z])(?=.*[a-z])(?=.*\\d)(?=.*[^A-Za-z0-9\\s]).{8,}$",
-            message = "Password must be at least 8 characters and include uppercase and lowercase letters, a number, and a symbol"
+            regexp = PasswordPolicy.PASSWORD_REGEX,
+            message = PasswordPolicy.PASSWORD_REQUIREMENTS_MESSAGE
     )
     private String password;
 
