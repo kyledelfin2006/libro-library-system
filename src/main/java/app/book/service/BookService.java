@@ -65,6 +65,9 @@ public class BookService {
 
     /**
      * Creates a new book from the provided DTO and saves it to the database.
+     * Duplicate title/author pairs are intentionally allowed because the model
+     * does not yet carry an ISBN or edition identifier; generated book IDs
+     * distinguish separate copies or editions.
      *
      * @param input the request DTO containing book data (must be valid)
      * @return the persisted {@link Book} entity (with generated ID)
@@ -73,6 +76,9 @@ public class BookService {
      */
     @Transactional
     public Book addBook(BookRequestDTO input) {
+        if (input == null) {
+            throw new BookValidationException("Book data must not be null");
+        }
         log.debug("Processing request to add book: {}", input.getTitle());
 
         // Use the mapper to convert DTO → Entity (keeps construction centralized)
@@ -135,6 +141,10 @@ public class BookService {
     // Partial updates
     @Transactional
     public Book patchBook(Long id, BookRequestDTO updates) {
+
+        if (updates == null) {
+            throw new BookValidationException("Book update data must not be null");
+        }
 
         // 1. Find Book ID
         Book existingBook = findBookById(id);
@@ -244,6 +254,9 @@ public class BookService {
      * @throws IllegalArgumentException if min > max
      */
     public List<Book> getBooksInPriceRange(BigDecimal min, BigDecimal max) {
+        if (min == null || max == null) {
+            throw new IllegalArgumentException("minPrice and maxPrice are required");
+        }
         if (min.compareTo(max) > 0) {
             throw new IllegalArgumentException("minPrice must be less than or equal to maxPrice");
         }

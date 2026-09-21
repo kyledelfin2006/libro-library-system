@@ -427,14 +427,14 @@ Central advice maps Java/application exceptions to stable HTTP errors, keeping e
 
 Current coverage consists of:
 
-- `UserServiceTest`: 12 Mockito-based service unit tests for partial-update normalization, validation, password verification and encoding, unchanged-email handling, duplicate-email rejection, missing-user handling, and dirty-checking expectations.
+- `UserServiceTest`: 14 Mockito-based service unit tests for partial-update normalization, validation, password verification and encoding, password-length bounds, unchanged-email handling, duplicate-email rejection, missing-user handling, and dirty-checking expectations.
 
-- `BookServiceTest`: 46 Mockito-based service unit tests for CRUD rules, entity-validation enforcement, dirty-checking expectations, search, sorting, pricing, typed statistics projections, genre distribution, and other aggregate behavior.
+- `BookServiceTest`: 50 Mockito-based service unit tests for CRUD rules, text normalization, entity-validation enforcement, price-range validation, dirty-checking expectations, search, sorting, pricing, typed statistics projections, genre distribution, and other aggregate behavior.
 - `BookTest`: five entity-construction, lifecycle, and direct Jakarta Validator tests for request DTO and entity constraints.
 - `BookMapperTest`: four focused tests for entity-to-DTO mapping, null inputs, and list mapping.
 - `GlobalExceptionHandlerTest`: 14 direct unit tests for every exception handler, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
 
-The suite contains 81 tests. Its execution setup is deliberately small and optimized:
+The suite contains 87 tests. Its execution setup is deliberately small and optimized:
 
 - `src/test/resources/junit-platform.properties` enables concurrent execution between test classes but keeps methods within each class on the same thread.
 - `BookServiceTest` uses `@TestInstance(PER_CLASS)` so its repository mock and `BookService` are constructed once. `@BeforeEach` resets the repository mock and rebuilds mutable book fixtures, preserving test isolation. The stateless `BookMapper` is real rather than mocked.

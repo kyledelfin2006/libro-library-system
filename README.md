@@ -226,13 +226,14 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 ## Key Features
 
 - CRUD operations for books.
+- Duplicate titles and authors are allowed because books are identified by generated IDs; the model does not yet include an ISBN or edition key.
 - Pagination and sorting through `GET /app/books/all` and `GET /app/books/sorted`.
 - Advanced search by title, author, genre, or price.
 - Price range filtering through `GET /app/books/price`.
 - Budget filtering through `GET /app/books/budget`.
 - Statistics endpoints for total books, total library value, average price, and the most expensive book.
 - Genre distribution endpoint.
-- User-domain foundation with role/course/major enums, duplicate checks, academic business rules, and BCrypt password hashing; passwords require at least 8 characters with uppercase and lowercase letters, a number, and a symbol. No user controller exists yet.
+- User-domain foundation with role/course/major enums, duplicate checks, academic business rules, and BCrypt password hashing; passwords require 8–72 characters with uppercase and lowercase letters, a number, and a symbol. No user controller exists yet.
 - OpenAPI 3 documentation through Springdoc Swagger UI and `/v3/api-docs`.
 - Validation with `@Valid` on create and replace requests.
 - Global handling for `BookNotFoundException`, validation errors, malformed JSON, number format errors, database issues, and unsupported methods.
@@ -454,7 +455,7 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 - Updates rely on Hibernate dirty checking inside transactional service methods.
 - `BookRequestDTO` is used for request validation, while `BookResponseDTO` and `LibraryStatisticsDTO` are used for response shaping.
 - `BookMapper` centralizes conversion between entities and DTOs.
-- `UserService` normalizes identity values, checks duplicates, enforces academic rules, validates create requests with Jakarta Validator, and persists only BCrypt-hashed passwords. Passwords must be at least 8 characters and contain uppercase and lowercase letters, a number, and a symbol.
+- `UserService` normalizes identity values, checks duplicates, enforces academic rules, validates create requests with Jakarta Validator, bounds passwords to 8–72 characters before BCrypt processing, and persists only BCrypt-hashed passwords.
 - `UserMapper` keeps password fields out of `UserResponseDTO`.
 - User DTO annotations, the transactional partial-update service contract, and
   the transactional password-change service contract are implemented, but there
@@ -463,7 +464,7 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 76 unit tests cover the book and user service behavior, book entity and DTO, typed statistics and genre-distribution projections, mapper behavior, and global REST exception translation. The current suite has no user controller, JPA, Flyway, or PostgreSQL integration tests.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 87 unit tests cover the book and user service behavior, book entity and DTO, typed statistics and genre-distribution projections, mapper behavior, and global REST exception translation. The current suite has no user controller, JPA, Flyway, or PostgreSQL integration tests.
 
 - `BookTest` verifies book construction and request DTO constraints.
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.

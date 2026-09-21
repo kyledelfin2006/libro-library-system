@@ -145,7 +145,7 @@ Without explicit rules, the prototype could accept invalid identity values, stor
 
 ### How I solved it
 
-I modeled the institutional identity value as the unique public lookup value and applied the documented format rules. Creation normalizes identity values before duplicate checks and storage. The service rejects duplicate identity values, validates role/course/major relationships, encodes passwords with BCrypt, and never maps password data into `UserResponseDTO`.
+I modeled the institutional identity value as the unique public lookup value and applied the documented format rules. Creation normalizes identity values before duplicate checks and storage. The service rejects duplicate identity values, validates role/course/major relationships, bounds password input before BCrypt processing, encodes passwords, and never maps password data into `UserResponseDTO`.
 
 I then added a transactional partial-update path for user profile fields. It preserves omitted values, trims supplied values, normalizes email case, validates blank and malformed input, and checks email uniqueness only when the email changes. It uses a managed entity so dirty checking persists the update consistently with the book feature.
 
@@ -169,7 +169,7 @@ I kept the suite focused and explicit: shared the stateless Jakarta Validator wh
 
 ### Verification
 
-The current unit suite contains 76 passing tests: 46 for books, 7 for users, 5 for the book entity, 4 for mapping, and 14 for global exception handling. `mvn test` is the normal fast check; `mvn clean verify` additionally produces the JaCoCo report. Controller, JPA, Flyway, PostgreSQL, security, and container behavior remain candidates for integration testing.
+The current unit suite contains 87 passing tests: 50 for books, 14 for users, 5 for the book entity, 4 for mapping, and 14 for global exception handling. `mvn test` is the normal fast check; `mvn clean verify` additionally produces the JaCoCo report. Controller, JPA, Flyway, PostgreSQL, security, and container behavior remain candidates for integration testing.
 
 ## What these problems taught me
 

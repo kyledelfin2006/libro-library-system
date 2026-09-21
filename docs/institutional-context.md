@@ -6,10 +6,10 @@ Libro is a library management system prototype for Aklan State University – Co
 
 ## Alignment with the existing MIS
 
-The existing university management information system uses the university ID as the username. Libro keeps that identifier while using its own password policy:
+The existing university management information system uses the university ID as the username. Libro keeps that identifier while using its own bounded password policy:
 
 - University IDs use the `####-####` format.
-- User creation and password changes require at least 8 characters, including uppercase and lowercase letters, a number, and a symbol.
+- User creation and password changes require 8–72 characters, including uppercase and lowercase letters, a number, and a symbol.
 - Passwords are encoded with BCrypt before persistence and are never returned in response DTOs.
 - University IDs and email addresses are normalized before duplicate checks and storage.
 

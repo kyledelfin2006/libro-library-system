@@ -102,6 +102,23 @@ class BookServiceTest {
         verify(repository, times(1)).save(any(Book.class));
     }
 
+    /** Verifies create requests are normalized before the entity reaches persistence. */
+    @Test
+    void addBook_shouldTrimTextFieldsBeforeSaving() {
+        when(repository.save(any(Book.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Book result = bookService.addBook(new BookRequestDTO(
+                "  Effective Java  ",
+                " Joshua Bloch ",
+                " Programming ",
+                PRICE
+        ));
+
+        assertEquals(TITLE, result.getTitle());
+        assertEquals(AUTHOR, result.getAuthor());
+        assertEquals(GENRE, result.getGenre());
+    }
+
     /** Verifies service callers cannot bypass entity constraints by skipping controller validation. */
     @Test
     void addBook_whenEntityConstraintsFail_shouldRejectBeforeSave() {
@@ -270,6 +287,22 @@ class BookServiceTest {
         assertEquals("New Genre", result.getGenre());
         assertEquals(0, new BigDecimal("99.99").compareTo(result.getPrice()));}
 
+    /** Verifies PUT normalization is consistent with POST and PATCH. */
+    @Test
+    void replaceBook_shouldTrimTextFieldsBeforeDirtyChecking() {
+        when(repository.findById(BOOK_ID)).thenReturn(Optional.of(sampleBook));
+
+        Book result = bookService.replaceBook(
+                BOOK_ID,
+                new BookRequestDTO(" New Title ", " New Author ", " New Genre ", PRICE)
+        );
+
+        assertEquals("New Title", result.getTitle());
+        assertEquals("New Author", result.getAuthor());
+        assertEquals("New Genre", result.getGenre());
+        verify(repository, never()).save(any());
+    }
+
     /** Verifies that a null replacement payload is rejected before repository interaction. */
     @Test
     void replaceBook_whenDtoIsNull_shouldThrowBookValidationException() {
@@ -370,6 +403,28 @@ class BookServiceTest {
 
         assertEquals(2, result.size());
         verify(repository, times(1)).findByPriceLessThanEqual(new BigDecimal("30.0"));
+    }
+
+    /** Verifies reversed price ranges are rejected before query execution. */
+    @Test
+    void getBooksInPriceRange_whenMinimumExceedsMaximum_shouldReject() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> bookService.getBooksInPriceRange(new BigDecimal("30.0"), new BigDecimal("10.0"))
+        );
+
+        verify(repository, never()).findBooksByPriceBetween(any(), any());
+    }
+
+    /** Verifies incomplete price ranges fail with a client-facing validation error. */
+    @Test
+    void getBooksInPriceRange_whenBoundaryIsMissing_shouldReject() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> bookService.getBooksInPriceRange(null, BigDecimal.TEN)
+        );
+
+        verify(repository, never()).findBooksByPriceBetween(any(), any());
     }
 
     // ---------- searchBooks ----------

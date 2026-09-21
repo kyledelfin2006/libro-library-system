@@ -300,4 +300,25 @@ class UserServiceTest {
         verifyNoInteractions(repository);
         verifyNoInteractions(passwordEncoder);
     }
+
+    /** Verifies overly long passwords are rejected before BCrypt processing. */
+    @Test
+    void createUser_whenPasswordExceedsMaximumLength_shouldRejectBeforeHashing() {
+        String overlyLongPassword = "A" + "a".repeat(70) + "1!";
+        UserCreateRequestDTO request = new UserCreateRequestDTO(
+                "2025-1234",
+                overlyLongPassword,
+                "Jane",
+                "Doe",
+                null,
+                "jane@example.com",
+                UserRole.STUDENT,
+                UserCourse.IT,
+                UserITMajor.SE
+        );
+
+        assertThrows(ConstraintViolationException.class, () -> userService.createUser(request));
+        verifyNoInteractions(repository);
+        verifyNoInteractions(passwordEncoder);
+    }
 }

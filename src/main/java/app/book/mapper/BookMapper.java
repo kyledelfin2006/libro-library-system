@@ -57,9 +57,9 @@ public class BookMapper {
             return null;
         }
         return new Book(
-                dto.getTitle(),
-                dto.getAuthor(),
-                dto.getGenre(),
+                trim(dto.getTitle()),
+                trim(dto.getAuthor()),
+                trim(dto.getGenre()),
                 dto.getPrice()
         );
     }
@@ -71,10 +71,14 @@ public class BookMapper {
     public void updateBookFromDto(BookRequestDTO dto, Book existingBook) {
         if (dto == null) return;
 
-        existingBook.setTitle(dto.getTitle());
-        existingBook.setAuthor(dto.getAuthor());
-        existingBook.setGenre(dto.getGenre());
+        existingBook.setTitle(trim(dto.getTitle()));
+        existingBook.setAuthor(trim(dto.getAuthor()));
+        existingBook.setGenre(trim(dto.getGenre()));
         existingBook.setPrice(dto.getPrice());
+    }
+
+    private String trim(String value) {
+        return value == null ? null : value.trim();
     }
 
 
