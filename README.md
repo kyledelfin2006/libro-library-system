@@ -13,7 +13,7 @@ Libro is a Spring Boot REST API and Library Management System. It manages books 
 
 The institutional context behind the user domain is documented in [Institutional Context](docs/institutional-context.md), including its ASU-CCS setting and alignment with existing MIS identity conventions.
 
-The API also exposes generated OpenAPI documentation through Springdoc: Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running.
+The API exposes generated OpenAPI documentation through Springdoc. Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running. The live specification includes request validation rules, filter and sorting constraints, pagination behavior, and representative request/response examples for the book API.
 
 ## Tech Stack
 
@@ -373,6 +373,10 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 | `GET` | `/app/books/stats` | Returns total books, total value, and the most expensive book | `GET /app/books/stats` | `{"totalBooks":6,"totalValue":123.45,"mostExpensiveBook":{"id":4,"title":"...","author":"...","genre":"...","price":49.99}}` |
 | `GET` | `/app/books/stats/average-price` | Returns the average price of all books | `GET /app/books/stats/average-price` | `{"success":true,"message":"Average Price of Collection: ","data":20.50,"timestamp":172...}` |
 | `GET` | `/app/books/stats/count` | Returns the total number of books | `GET /app/books/stats/count` | `{"success":true,"message":"Book Collection Count","data":6,"timestamp":172...}` |
+
+### Planned user and loan APIs
+
+User and loan controllers are not implemented yet, so they intentionally do not appear as live OpenAPI operations. The user-domain services currently provide the foundation for identity, profile updates, and password changes; a future `UserController` should document those contracts only after its routes, authorization rules, and response shapes are stable. The future loan API should document active-loan constraints, overdue behavior, and loan-history queries in the same way rather than presenting planned routes as callable endpoints.
 
 ## Setup & Installation
 
