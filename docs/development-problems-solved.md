@@ -169,7 +169,7 @@ I kept the suite focused and explicit: shared the stateless Jakarta Validator wh
 
 ### Verification
 
-The current unit suite contains 87 passing tests: 50 for books, 14 for users, 5 for the book entity, 4 for mapping, and 14 for global exception handling. `mvn test` is the normal fast check; `mvn clean verify` additionally produces the JaCoCo report. Controller, JPA, Flyway, PostgreSQL, security, and container behavior remain candidates for integration testing.
+The current suite contains 99 passing tests, including 12 MVC-slice tests: 50 book-service tests, 14 user-service tests, 5 book-entity tests, 4 mapper tests, 14 global-exception-handler tests, and 12 `BookApiMvcTest` contract tests. `mvn test` is the normal fast check; `mvn clean verify` additionally produces the JaCoCo report. User-controller, JPA, Flyway, PostgreSQL, security, and container behavior remain candidates for further integration testing.
 
 ## What these problems taught me
 

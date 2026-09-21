@@ -88,6 +88,7 @@ library-api-system/
     |           `-- V2__create_users_table.sql
     `-- test/
         |-- java/unit/
+        |   |-- BookApiMvcTest.java
         |   |-- BookMapperTest.java
         |   |-- BookServiceTest.java
         |   |-- BookTest.java
@@ -427,6 +428,8 @@ Central advice maps Java/application exceptions to stable HTTP errors, keeping e
 
 Current coverage consists of:
 
+- `BookApiMvcTest`: 12 Spring Boot 4 MVC-slice tests for route/status contracts, JSON shapes, invalid request bodies, pagination and query binding, and global exception responses. It uses mocked service/mapper beans and does not start JPA, Flyway, or PostgreSQL.
+
 - `UserServiceTest`: 14 Mockito-based service unit tests for partial-update normalization, validation, password verification and encoding, password-length bounds, unchanged-email handling, duplicate-email rejection, missing-user handling, and dirty-checking expectations.
 
 - `BookServiceTest`: 50 Mockito-based service unit tests for CRUD rules, text normalization, entity-validation enforcement, price-range validation, dirty-checking expectations, search, sorting, pricing, typed statistics projections, genre distribution, and other aggregate behavior.
@@ -434,7 +437,7 @@ Current coverage consists of:
 - `BookMapperTest`: four focused tests for entity-to-DTO mapping, null inputs, and list mapping.
 - `GlobalExceptionHandlerTest`: 14 direct unit tests for every exception handler, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
 
-The suite contains 87 tests. Its execution setup is deliberately small and optimized:
+The suite contains 99 tests. Its execution setup is deliberately small and optimized:
 
 - `src/test/resources/junit-platform.properties` enables concurrent execution between test classes but keeps methods within each class on the same thread.
 - `BookServiceTest` uses `@TestInstance(PER_CLASS)` so its repository mock and `BookService` are constructed once. `@BeforeEach` resets the repository mock and rebuilds mutable book fixtures, preserving test isolation. The stateless `BookMapper` is real rather than mocked.

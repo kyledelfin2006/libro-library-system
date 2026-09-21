@@ -162,6 +162,7 @@ src/main/resources/
 
 src/test/java/
   unit/
+    BookApiMvcTest.java
     BookMapperTest.java
     BookTest.java
     BookServiceTest.java
@@ -468,9 +469,10 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 87 unit tests cover the book and user service behavior, book entity and DTO, typed statistics and genre-distribution projections, mapper behavior, and global REST exception translation. The current suite has no user controller, JPA, Flyway, or PostgreSQL integration tests.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 99 tests include fast MVC-slice coverage for the book HTTP contract plus unit coverage for the book and user service behavior, book entity and DTO, typed statistics and genre-distribution projections, mapper behavior, and global REST exception translation. The current suite has no user controller, JPA, Flyway, or PostgreSQL integration tests.
 
 - `BookTest` verifies book construction and request DTO constraints.
+- `BookApiMvcTest` verifies routes, status codes, JSON response shapes, invalid request payloads, pagination/query binding, and global exception responses without starting JPA or PostgreSQL.
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.
 - `BookServiceTest` verifies service rules, repository interaction, search, sorting, pricing, typed statistics projections, genre-distribution mapping, and dirty-checking expectations.
 - `GlobalExceptionHandlerTest` directly invokes each of the 14 exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.

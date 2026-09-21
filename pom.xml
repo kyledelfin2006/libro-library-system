@@ -76,6 +76,13 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Spring Boot 4 MVC slice-test support. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Lombok: for boilerplate reduction via annotations -->
         <dependency>
             <groupId>org.projectlombok</groupId>
