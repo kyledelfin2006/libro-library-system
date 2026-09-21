@@ -13,6 +13,8 @@ Libro is a Spring Boot REST API and Library Management System. It manages books 
 
 The institutional context behind the user domain is documented in [Institutional Context](docs/institutional-context.md), including its ASU-CCS setting and alignment with existing MIS identity conventions.
 
+The current domain decision is documented in [Domain Decisions](docs/domain-decisions.md): each `Book` represents one physical borrowable copy, so one copy can be assigned to only one active borrower at a time. Separate copies of the same title are separate records.
+
 The API exposes generated OpenAPI documentation through Springdoc. Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running. The live specification includes request validation rules, filter and sorting constraints, pagination behavior, and representative request/response examples for the book API.
 
 ## Tech Stack
@@ -56,6 +58,7 @@ The README is the central entry point for project documentation. Supporting repo
 
 - [Development Problems Solved](docs/development-problems-solved.md) is a first-person development reflection covering the major bugs, effects, fixes, and verification decisions made while building the prototype.
 - [Institutional Context](docs/institutional-context.md) records the ASU-CCS academic model and the existing MIS assumptions that shaped the user domain.
+- [Domain Decisions](docs/domain-decisions.md) records the physical-copy interpretation of `Book` and its implications for future loans.
 - [Agent and Contributor Guide](AGENTS.md) documents the repository architecture, layer contracts, coding rules, testing expectations, and definition of done. It remains at the repository root so coding agents can discover it automatically.
 
 ## Architecture Overview
@@ -104,6 +107,8 @@ AGENTS.md
 README.md
 docs/
   development-problems-solved.md
+  domain-decisions.md
+  institutional-context.md
 
 src/main/java/app/
   LibraryApplication.java
@@ -227,7 +232,7 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 ## Key Features
 
 - CRUD operations for books.
-- Duplicate titles and authors are allowed because books are identified by generated IDs; the model does not yet include an ISBN or edition key.
+- Each `Book` represents one physical borrowable copy. Duplicate titles and authors are allowed because separate copies have separate generated IDs; the model does not yet include an ISBN or edition key.
 - Pagination and sorting through `GET /app/books/all` and `GET /app/books/sorted`.
 - Advanced search by title, author, genre, or price.
 - Price range filtering through `GET /app/books/price`.

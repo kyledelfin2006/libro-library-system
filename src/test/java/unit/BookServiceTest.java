@@ -150,6 +150,27 @@ class BookServiceTest {
         verify(repository, times(1)).findById(BOOK_ID);
     }
 
+    // ---------- deleteBookById ----------
+    /** Verifies that a matching repository delete is treated as a successful deletion. */
+    @Test
+    void deleteBookById_whenBookExists_shouldDeleteBook() {
+        when(repository.deleteBookById(BOOK_ID)).thenReturn(1);
+
+        assertDoesNotThrow(() -> bookService.deleteBookById(BOOK_ID));
+
+        verify(repository, times(1)).deleteBookById(BOOK_ID);
+    }
+
+    /** Verifies that deleting a missing book is translated to {@link BookNotFoundException}. */
+    @Test
+    void deleteBookById_whenBookNotFound_shouldThrowBookNotFoundException() {
+        when(repository.deleteBookById(BOOK_ID)).thenReturn(0);
+
+        assertThrows(BookNotFoundException.class, () -> bookService.deleteBookById(BOOK_ID));
+
+        verify(repository, times(1)).deleteBookById(BOOK_ID);
+    }
+
     // ---------- patchBook ----------
     /** Verifies partial replacement of title and price while omitted fields remain unchanged. */
     @Test

@@ -193,6 +193,8 @@ There is no `UserController`, `UserDetailsService`, loan feature, or user-domain
 
 ### Entity and database model
 
+The current domain decision is that one `Book` entity represents one physical borrowable copy, not a title-level inventory record. Separate physical copies of the same title are separate rows with different generated IDs. A future loan feature must allow at most one active borrower per `Book` row; do not add `availableCopies` or `totalCopies` to `Book` without revisiting this decision.
+
 `Book` maps to `books`:
 
 | Java field | Java type | Database definition | Constraints |
