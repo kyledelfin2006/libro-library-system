@@ -134,14 +134,17 @@ src/main/java/app/
       BookMapper.java
     exceptions/
       BookNotFoundException.java
-    global/
-      exceptions/
-        GlobalExceptionHandler.java
-      responses/
-        ApiResponse.java
-        ErrorResponse.java
+      BookValidationException.java
+  global/
+    config/
+      OpenApiConfig.java
+    exceptions/
+      GlobalExceptionHandler.java
+    responses/
+      ApiResponse.java
+      ErrorResponse.java
   user/
-    beans/PasswordConfig.java
+    config/PasswordConfig.java
     dto/
       ChangePasswordDTO.java
       UserCreateRequestDTO.java
@@ -157,6 +160,7 @@ src/main/java/app/
     repository/UserRepository.java
     exception/UserNotFoundException.java
     service/UserService.java
+    validation/PasswordPolicy.java
 
 src/main/resources/
   application.properties
@@ -172,6 +176,7 @@ src/test/java/
     BookTest.java
     BookServiceTest.java
     GlobalExceptionHandlerTest.java
+    UserServiceTest.java
 
 src/test/resources/
   junit-platform.properties
@@ -474,7 +479,7 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 99 tests include fast MVC-slice coverage for the book HTTP contract plus unit coverage for the book and user service behavior, book entity and DTO, typed statistics and genre-distribution projections, mapper behavior, and global REST exception translation. The current suite has no user controller, JPA, Flyway, or PostgreSQL integration tests.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 101 tests include fast MVC-slice coverage for the book HTTP contract plus unit coverage for the book and user service behavior, book entity and DTO, typed statistics and genre-distribution projections, mapper behavior, and global REST exception translation. The current suite has no user controller, JPA, Flyway, or PostgreSQL integration tests.
 
 - `BookTest` verifies book construction and request DTO constraints.
 - `BookApiMvcTest` verifies routes, status codes, JSON response shapes, invalid request payloads, pagination/query binding, and global exception responses without starting JPA or PostgreSQL.
@@ -493,7 +498,7 @@ The suite is configured for fast, deterministic feedback:
 - `GlobalExceptionHandlerTest` uses one stateless handler and real Spring exception objects instead of unnecessary mocks.
 - `logback-test.xml` disables application logs during tests so expected exception scenarios do not spend time printing stack traces.
 
-The suite currently contains 69 tests. Build timings are environment-dependent; first-time dependency downloads, Mockito/Byte Buddy agent startup, and machine resources can change the total. Use `mvn test` for incremental feedback and `mvn clean verify` for the full verification lifecycle.
+The suite currently contains 101 tests. Build timings are environment-dependent; first-time dependency downloads, Mockito/Byte Buddy agent startup, and machine resources can change the total. Use `mvn test` for incremental feedback and `mvn clean verify` for the full verification lifecycle.
 
 Run all unit tests:
 

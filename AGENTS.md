@@ -61,7 +61,7 @@ library-api-system/
     |   |   |   |       `-- LibraryAggregate.java
     |   |   |   `-- service/BookService.java
     |   |   |-- user/
-    |   |   |   |-- beans/PasswordConfig.java
+    |   |   |   |-- config/PasswordConfig.java
     |   |   |   |-- dto/
     |   |   |   |   |-- ChangePasswordDTO.java
     |   |   |   |   |-- UserCreateRequestDTO.java
@@ -75,8 +75,10 @@ library-api-system/
     |   |   |   |-- mapper/UserMapper.java
     |   |   |   |-- repository/UserRepository.java
     |   |   |   |-- exception/UserNotFoundException.java
-    |   |   |   `-- service/UserService.java
+    |   |   |   |-- service/UserService.java
+    |   |   |-- validation/PasswordPolicy.java
     |   |   `-- global/
+    |   |       |-- config/OpenApiConfig.java
     |   |       |-- exceptions/GlobalExceptionHandler.java
     |   |       `-- responses/
     |   |           |-- ApiResponse.java
@@ -92,7 +94,8 @@ library-api-system/
         |   |-- BookMapperTest.java
         |   |-- BookServiceTest.java
         |   |-- BookTest.java
-        |   `-- GlobalExceptionHandlerTest.java
+        |   |-- GlobalExceptionHandlerTest.java
+        |   `-- UserServiceTest.java
         `-- resources/
             |-- junit-platform.properties
             `-- logback-test.xml
@@ -439,7 +442,7 @@ Current coverage consists of:
 - `BookMapperTest`: four focused tests for entity-to-DTO mapping, null inputs, and list mapping.
 - `GlobalExceptionHandlerTest`: 14 direct unit tests for every exception handler, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
 
-The suite contains 99 tests. Its execution setup is deliberately small and optimized:
+The suite contains 101 tests. Its execution setup is deliberately small and optimized:
 
 - `src/test/resources/junit-platform.properties` enables concurrent execution between test classes but keeps methods within each class on the same thread.
 - `BookServiceTest` uses `@TestInstance(PER_CLASS)` so its repository mock and `BookService` are constructed once. `@BeforeEach` resets the repository mock and rebuilds mutable book fixtures, preserving test isolation. The stateless `BookMapper` is real rather than mocked.
