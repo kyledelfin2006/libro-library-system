@@ -248,6 +248,7 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 - OpenAPI 3 documentation through Springdoc Swagger UI and `/v3/api-docs`.
 - Validation with `@Valid` on create and replace requests.
 - Global handling for `BookNotFoundException`, validation errors, malformed JSON, number format errors, database issues, and unsupported methods.
+- Validation errors also include a `fieldErrors` map keyed by request field (or `_global` when no field is available), so clients can render precise messages without parsing the combined `details` string.
 - Open security configuration for local development and testing.
 - Versioned database schema via Flyway.
 
@@ -519,6 +520,21 @@ mvn clean verify
 ```
 
 These are isolated unit tests. Controller routing and serialization, repository queries, Flyway migrations, PostgreSQL behavior, security rules, and real JPA transaction behavior still require integration-test coverage.
+
+Validation failures retain the `error`, `details`, `timestamp`, and `statusCode` fields and additionally return a structured map:
+
+```json
+{
+  "error": "Validation failed",
+  "details": "Title cannot be empty, Price must be greater than 0",
+  "timestamp": 1720000000000,
+  "statusCode": 400,
+  "fieldErrors": {
+    "title": "Title cannot be empty",
+    "price": "Price must be greater than 0"
+  }
+}
+```
 
 ## Development Problems Solved
 

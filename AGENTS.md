@@ -239,9 +239,17 @@ Do not expose `Book` directly from new endpoints. Entity exposure couples client
   "error": "Validation failed",
   "details": "Price must be greater than 0",
   "timestamp": 0,
-  "statusCode": 400
+  "statusCode": 400,
+  "fieldErrors": {
+    "price": "Price must be greater than 0"
+  }
 }
 ```
+
+Validation responses include `fieldErrors`, a map from DTO/entity field names to messages.
+Clients should use this map for field-level rendering instead of parsing the combined
+`details` string. Constraint violations without a property path use `_global`. Other
+error responses return an empty `fieldErrors` map for a consistent JSON shape.
 
 Successful mutation and selected statistic endpoints use generic `ApiResponse<T>` with `success`, `message`, `data`, and `timestamp`. Some read endpoints return DTOs, lists, maps, or Spring `Page` directly. This mixed contract is current behavior; do not silently normalize it in an unrelated change because that would break API clients.
 

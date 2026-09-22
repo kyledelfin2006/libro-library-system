@@ -5,7 +5,6 @@ import app.book.exceptions.BookValidationException;
 import app.global.responses.ErrorResponse;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.core.PropertyReferenceException;
@@ -18,6 +17,11 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.validation.BindingResult;
+import org.springframework.validation.FieldError;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Global exception handler for REST controllers.
@@ -26,18 +30,88 @@ import org.springframework.web.servlet.NoHandlerFoundException;
  * standardized {@link ErrorResponse} JSON objects with appropriate HTTP status codes.
  * </p>
  * <p>
- * Slfj used class-wide to implement Slfj logging automatically without object declaration via Lombok Annotation
+ * Lombok's {@code @Slf4j} supplies the class-wide logger used for internal diagnostics.
  * </p>
  */
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
 
-    // Helper: centralizes construction of validation error responses so every validation
-    // handler — whether triggered by @Valid (MethodArgumentNotValidException) or by manual
-    // service-layer checks (IllegalArgumentException) — shares a single, tested code path.
+    /**
+     * Builds the backwards-compatible validation response used when no field map is available.
+     *
+     * @param message the client-safe validation summary
+     * @return a validation error response with an empty {@code fieldErrors} map
+     */
     private ErrorResponse buildValidationErrorResponse(String message) {
         return new ErrorResponse("Validation failed", message, 400);
+    }
+
+    /**
+     * Builds a validation response containing both the legacy summary and structured field errors.
+     *
+     * @param message the combined client-safe validation summary
+     * @param fieldErrors field or property-path names mapped to their messages
+     * @return a structured HTTP 400 validation payload
+     */
+    private ErrorResponse buildValidationErrorResponse(String message, Map<String, String> fieldErrors) {
+        return new ErrorResponse("Validation failed", message, 400, fieldErrors);
+    }
+
+    /**
+     * Converts Spring MVC binding errors into a deterministic field-to-message map.
+     *
+     * Field errors use their request field name. Object-level errors use {@code _global}.
+     * When multiple constraints target one field, their messages are joined rather than lost.
+     * A {@link LinkedHashMap} preserves binding order in the generated response.
+     *
+     * @param bindingResult Spring's validation result for a request body
+     * @return ordered field names mapped to client-safe validation messages
+     */
+    private Map<String, String> toFieldErrors(BindingResult bindingResult) {
+        // Convert each Spring error to a public field key and message, merging duplicate keys.
+        return bindingResult.getAllErrors().stream()
+                .collect(Collectors.toMap(
+                        error -> error instanceof FieldError fieldError ? fieldError.getField() : "_global",
+                        error -> error.getDefaultMessage() == null ? "Validation failed" : error.getDefaultMessage(),
+                        (first, next) -> first + "; " + next,
+                        LinkedHashMap::new
+                ));
+    }
+
+    /**
+     * Converts Jakarta constraint violations into a deterministic field-to-message map.
+     *
+     * Property paths are sorted before collection so responses are stable across runs.
+     * Violations without a property path are represented by {@code _global}; multiple
+     * violations for one path are combined into one readable value.
+     *
+     * @param exception the service-layer constraint violation exception
+     * @return ordered property paths mapped to client-safe validation messages
+     */
+    private Map<String, String> toFieldErrors(ConstraintViolationException exception) {
+        // Sort property paths first so the fieldErrors JSON has predictable ordering.
+        return exception.getConstraintViolations().stream()
+                .sorted((first, second) -> String.valueOf(first.getPropertyPath())
+                        .compareTo(String.valueOf(second.getPropertyPath())))
+                .collect(Collectors.toMap(
+                        violation -> {
+                            // A missing path is a global error rather than a field error.
+                            String propertyPath = violation.getPropertyPath() == null
+                                    ? ""
+                                    : violation.getPropertyPath().toString();
+                            return propertyPath.isBlank()
+                                    ? "_global"
+                                    : propertyPath;
+                        },
+                        // Keep a safe fallback when a provider supplies no message.
+                        violation -> violation.getMessage() == null
+                                ? "Validation failed"
+                                : violation.getMessage(),
+                        // Preserve every message when several constraints share one field.
+                        (first, next) -> first + "; " + next,
+                        LinkedHashMap::new
+                ));
     }
 
     /**
@@ -62,30 +136,30 @@ public class GlobalExceptionHandler {
     /**
      * Handles validation failures for {@code @Valid} annotated request bodies.
      * <p>
-     * Aggregates all constraint violation messages into a single comma-separated string.
+     * Aggregates validation messages while also preserving a field-to-message map.
      * </p>
      *
      * @param ex the exception containing the binding results
-     * @return HTTP 400 Bad Request with the aggregated validation errors
+     * @return HTTP 400 Bad Request with structured validation errors
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationFailures(MethodArgumentNotValidException ex) {
-        String allErrors = ex.getBindingResult().getAllErrors().stream()
-                .map(DefaultMessageSourceResolvable::getDefaultMessage)
-                .reduce((msg1, msg2) -> msg1 + ", " + msg2)
-                .orElse("Validation failed");
-        return ResponseEntity.badRequest().body(buildValidationErrorResponse(allErrors));
+        Map<String, String> fieldErrors = toFieldErrors(ex.getBindingResult());
+        String allErrors = String.join(", ", fieldErrors.values());
+        return ResponseEntity.badRequest().body(buildValidationErrorResponse(allErrors, fieldErrors));
     }
 
-    /** Handles validation failures raised while enforcing entity constraints in the service. */
+    /**
+     * Handles entity or service-layer constraint violations.
+     *
+     * @param ex the exception containing Jakarta constraint violations
+     * @return HTTP 400 with both summary and structured field-level errors
+     */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex) {
-        String allErrors = ex.getConstraintViolations().stream()
-                .map(violation -> violation.getMessage())
-                .sorted()
-                .reduce((message1, message2) -> message1 + ", " + message2)
-                .orElse("Validation failed");
-        return ResponseEntity.badRequest().body(buildValidationErrorResponse(allErrors));
+        Map<String, String> fieldErrors = toFieldErrors(ex);
+        String allErrors = String.join(", ", fieldErrors.values());
+        return ResponseEntity.badRequest().body(buildValidationErrorResponse(allErrors, fieldErrors));
     }
 
 

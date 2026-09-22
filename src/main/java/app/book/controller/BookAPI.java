@@ -110,7 +110,7 @@ public class BookAPI {
             {"success":true,"message":"Book Added Successfully","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99},"timestamp":1720000000000}
             """)))
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(mediaType = "application/json", examples = @ExampleObject(value = """
-            {"error":"Validation failed","details":"Price must be greater than 0","timestamp":1720000000000,"statusCode":400}
+            {"error":"Validation failed","details":"Price must be greater than 0","timestamp":1720000000000,"statusCode":400,"fieldErrors":{"price":"Price must be greater than 0"}}
             """)))
     public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Book to create.", required = true, content = @Content(mediaType = "application/json", schema = @Schema(implementation = BookRequestDTO.class), examples = @ExampleObject(value = """

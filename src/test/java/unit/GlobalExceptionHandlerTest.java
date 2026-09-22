@@ -100,6 +100,10 @@ class GlobalExceptionHandlerTest {
 
         assertError(response, HttpStatus.BAD_REQUEST, "Validation failed",
                 "Title cannot be empty, Price must be greater than 0");
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getFieldErrors())
+                .containsEntry("title", "Title cannot be empty")
+                .containsEntry("price", "Price must be greater than 0");
     }
 
     /** Verifies book business validation has its own HTTP 400 handler. */
@@ -123,6 +127,9 @@ class GlobalExceptionHandlerTest {
         ResponseEntity<ErrorResponse> response = handler.handleConstraintViolation(exception);
 
         assertError(response, HttpStatus.BAD_REQUEST, "Validation failed", "Title cannot be blank");
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getFieldErrors())
+                .containsEntry("_global", "Title cannot be blank");
     }
 
     /**
