@@ -261,6 +261,8 @@ Handler order matters conceptually. `DataIntegrityViolationException` is a subty
 
 If authentication is introduced, treat it as an API contract and architecture change. Add endpoint authorization rules, an authentication mechanism, tests for allowed and denied requests, credential/secret handling, and updated documentation together. Reconsider CSRF based on whether credentials are cookie-based or token-based.
 
+Before exposing user routes, select the authentication model and apply its endpoint authorization rules. Do not assume `UserDetailsService` is appropriate if the institution's SSO is the chosen identity provider. Loan operations must identify the borrower from the authenticated principal rather than a client-supplied user ID.
+
 ## Endpoint Inventory
 
 All routes use `/app/books` as their base.
@@ -542,8 +544,7 @@ When a breaking change is intended, document migration guidance and update all e
 - The Docker image requires a prebuilt JAR and does not build source itself.
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
 - User and loan HTTP APIs are incomplete: there is no `UserController`, no loan feature, and no authentication flow.
-- User-domain validation and password behavior lack automated tests.
-- The user HTTP API and authentication flow are not implemented.
+- User service behavior has unit coverage, but repository and user-controller behavior do not yet have dedicated tests.
 - Test coverage is predominantly unit-level; HTTP, JPA, migration, security, and container paths lack automated integration coverage.
 - Success response shapes are inconsistent across endpoints.
 - `timestamp` fields are epoch milliseconds rather than ISO-8601 values.

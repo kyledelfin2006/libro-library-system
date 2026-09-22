@@ -542,13 +542,12 @@ The detailed, interview-ready account of the development problems I identified a
 
 ## Upcoming Improvements
 
-- `UserServiceTest` covers user update and password-change services, including missing-user handling; repository and controller/integration coverage remain.
-- Add a user controller and document the user API after its service contract is stable.
-- Implement the loan domain, including active-loan constraints and overdue/history queries.
-- Decide on and implement an authentication model before replacing the development `permitAll()` security configuration.
-- Add controller-level integration tests alongside the existing unit tests.
+- Learn Spring Security's filter chain, authentication, `UserDetailsService`, and `SecurityContext`, then choose an institutional SSO, session, or token-based authentication model.
+- Implement and test endpoint-specific authorization before exposing user endpoints; the current `permitAll()` configuration leaves every route public.
+- Add repository and controller coverage for the user domain, then implement and document `UserController` under the selected security model.
+- Implement the loan domain with active-loan constraints and overdue/history queries, using the authenticated identity for borrower operations.
+- Add JPA, Flyway, and PostgreSQL integration tests alongside the existing unit and MVC-slice tests.
 - Expand search capabilities with more flexible filtering and sorting combinations.
-- Add authentication and authorization if the API is exposed beyond local development.
 
 ## License
 

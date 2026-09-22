@@ -41,7 +41,8 @@ credentials, or real user data.
   - [x] IT students must have an approved major.
 - [x] Add a `PasswordEncoder` bean.
 - [x] Enforce passwords of at least 8 characters with uppercase and lowercase letters, a number, and a symbol; hash them before persistence and never store them directly.
-- [ ] Add `UserController` after the service contract is stable.
+- [ ] Add `UserController` after the authentication model and endpoint access
+  rules are understood and selected.
 - [ ] Add repository and controller tests.
 - [x] Add focused service tests for partial updates, normalization, validation,
   unchanged emails, and duplicate-email rejection.
@@ -73,10 +74,13 @@ credentials, or real user data.
 
 - [ ] Integrate the password policy with the institution's approved authentication
   or SSO solution before production use.
-- [ ] Learn `UserDetailsService`, `PasswordEncoder`, authentication, and
-  authorization fundamentals.
+- [ ] Learn the existing `SecurityFilterChain` and the roles of
+  `UserDetailsService`, `PasswordEncoder`, `Authentication`, and
+  `SecurityContext` before building user endpoints.
 - [ ] Implement `UserDetailsService` using `universityId` as the username.
-- [ ] Decide between school SSO, sessions, or token-based authentication.
+- [ ] Choose an authentication model: institutional SSO, sessions, or
+  token-based authentication. Confirm whether local password authentication
+  and `UserDetailsService` are part of that model.
 - [ ] Add login and authentication tests.
 - [ ] Replace any temporary client-supplied `userId` in loan requests with the
   authenticated user from the security context.
@@ -96,7 +100,8 @@ credentials, or real user data.
 
 ## Recommended next slice
 
-Add the `UserController` for the completed user service contracts, then add
-controller tests. After the user API is stable, implement the loan entity and
-service. Controllers should translate HTTP requests and responses, not contain
-business logic.
+Learn and decide the authentication model first, then implement and test
+endpoint-specific security. Build `UserController` with those access rules and
+add controller tests. After the user API is stable, implement the loan entity
+and service so loan operations can use the authenticated identity. Controllers
+should translate HTTP requests and responses, not contain business logic.
