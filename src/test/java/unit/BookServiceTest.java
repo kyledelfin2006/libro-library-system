@@ -547,6 +547,14 @@ class BookServiceTest {
         verify(repository, never()).findByAuthorContainingIgnoreCase(anyString());
     }
 
+    @Test
+    void searchBooks_withMissingTypeOrValue_shouldThrowIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks(null, "value"));
+        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks("   ", "value"));
+        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks("author", null));
+        verifyNoInteractions(repository);
+    }
+
     // ---------- getBooksSortedBy ----------
     /** Verifies an allowed field creates an ascending Spring Data {@link Sort}. */
     @Test

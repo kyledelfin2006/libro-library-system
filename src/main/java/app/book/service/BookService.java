@@ -21,6 +21,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
+import java.util.Locale;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -277,7 +278,14 @@ public class BookService {
      *                                  the price value is not a valid number
      */
     public List<Book> searchBooks(String type, String value) {
-        String formattedType = type.trim().toLowerCase();
+        if (type == null || type.isBlank()) {
+            throw new IllegalArgumentException("Search type is required");
+        }
+        if (value == null) {
+            throw new IllegalArgumentException("Search value is required");
+        }
+
+        String formattedType = type.trim().toLowerCase(Locale.ROOT);
 
         switch (formattedType) {
             case "author":
