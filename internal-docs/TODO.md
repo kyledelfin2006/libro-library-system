@@ -24,23 +24,22 @@ credentials, or real user data.
 - [x] Added `UserService` create, paginated-read, lookup, and delete operations.
 - [x] Added Jakarta `Validator` request validation to user creation.
 - [x] Added the initial `UserCreateUpdateDTO` and `ChangePasswordDTO` types.
-
-## User domain
-
 - [x] Add `UserCreateRequestDTO`.
 - [x] Add `UserResponseDTO`; never include the raw password or `passwordHash`.
 - [x] Add the initial update DTO (`UserCreateUpdateDTO`).
 - [x] Add the `UserService` foundation for create, read, and delete operations.
-- [x] Complete the update operation: expose a transactional service contract,
-  validate and normalize partial updates, and fix duplicate email handling.
+- [x] Complete the update operation: expose a transactional service contract, validate and normalize partial updates, and fix duplicate email handling.
 - [x] Validate university ID format and normalize input deliberately.
 - [x] Validate duplicate university IDs and emails in the service.
 - [x] Enforce academic rules in the service:
-  - [x] Faculty must have `course = null` and `major = null`.
-  - [x] EMC and IS students must have `major = null`.
-  - [x] IT students must have an approved major.
+- [x] Faculty must have `course = null` and `major = null`.
+- [x] EMC and IS students must have `major = null`.
+- [x] IT students must have an approved major.
 - [x] Add a `PasswordEncoder` bean.
-- [x] Enforce passwords of at least 8 characters with uppercase and lowercase letters, a number, and a symbol; hash them before persistence and never store them directly.
+- [x] Enforce passwords of at least 8 characters with uppercase and lowercase letters, a number, and a symbol;
+
+## User domain
+
 - [ ] Add `UserController` after the authentication model and endpoint access
   rules are understood and selected.
 - [ ] Add repository and controller tests.
