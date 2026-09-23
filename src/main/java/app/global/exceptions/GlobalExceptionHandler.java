@@ -172,7 +172,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NumberFormatException.class)
     public ResponseEntity<ErrorResponse> handleNumberFormat(NumberFormatException ex) {
         log.warn("Number format error: {}", ex.getMessage());
-        ErrorResponse error = new ErrorResponse("Invalid Number Format", ex.getMessage(), 400);
+        ErrorResponse error = new ErrorResponse(
+                "Invalid Number Format",
+                "A numeric value has an invalid format",
+                400
+        );
         return ResponseEntity.badRequest().body(error);
     }
 

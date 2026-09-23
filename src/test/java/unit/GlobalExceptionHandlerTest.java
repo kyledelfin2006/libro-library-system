@@ -56,14 +56,15 @@ class GlobalExceptionHandlerTest {
         assertError(response, HttpStatus.BAD_REQUEST, "Validation failed", "Price must be greater than 0");
     }
 
-    /** Verifies that numeric parsing failures retain their message under the number-format title. */
+    /** Verifies numeric parsing failures return a safe message without echoing parser input. */
     @Test
     void shouldReturnBadRequestWhenNumberFormatExceptionThrown() {
-        NumberFormatException exception = new NumberFormatException("For input string: invalid");
+        NumberFormatException exception = new NumberFormatException("For input string: private-input");
 
         ResponseEntity<ErrorResponse> response = handler.handleNumberFormat(exception);
 
-        assertError(response, HttpStatus.BAD_REQUEST, "Invalid Number Format", "For input string: invalid");
+        assertError(response, HttpStatus.BAD_REQUEST, "Invalid Number Format", "A numeric value has an invalid format");
+        assertThat(response.getBody().getDetails()).doesNotContain("private-input");
     }
 
     /**
