@@ -414,7 +414,7 @@ Docker is the preferred way to run the project because it brings up both Postgre
     ```bash
     docker compose up --build
     ```
-4. Open the API at `http://localhost:8080`.
+4. Open the [OpenAPI documentation (Swagger UI)](http://localhost:8080/swagger-ui.html) to explore and try the API endpoints. The raw OpenAPI specification is available at [`http://localhost:8080/v3/api-docs`](http://localhost:8080/v3/api-docs).
 
 ### Local development
 
