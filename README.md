@@ -17,6 +17,8 @@ The current domain decision is documented in [Domain Decisions](docs/domain-deci
 
 The API exposes generated OpenAPI documentation through Springdoc. Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running. The live specification includes request validation rules, filter and sorting constraints, pagination behavior, and representative request/response examples for the book API.
 
+Main Developer: **Aldrin Kyle Delfin**
+
 ## Tech Stack
 
 | Layer | Technology / Framework |
