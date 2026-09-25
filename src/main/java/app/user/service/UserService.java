@@ -265,6 +265,16 @@ public class UserService {
      */
     private String normalizeNullableEmail(String email) {
         // Preserve null so an omitted email does not overwrite the current value.
+        return normalizeEmail(email);
+    }
+
+    /**
+     * Trims and lowercases an email using a locale-independent rule.
+     *
+     * @param email the email value, or {@code null}
+     * @return the normalized email, or {@code null}
+     */
+    private String normalizeEmail(String email) {
         return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
     }
 
@@ -416,10 +426,7 @@ public class UserService {
      * normalization rule.
      */
     private String normalizeAndValidateEmail(String email) {
-        // could either be normalized email or null
-        String normalizedEmail = email == null
-                ? null
-                : email.trim().toLowerCase(Locale.ROOT);
+        String normalizedEmail = normalizeEmail(email);
 
         // validates if null or blank
         validateRequiredValue(normalizedEmail, "Email");
