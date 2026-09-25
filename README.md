@@ -65,23 +65,31 @@ The README is the central entry point for project documentation. Supporting repo
 
 ## Architecture Overview
 
-The application follows a strict **layered architecture** where each layer has a single responsibility and communicates only with adjacent layers.
+The system runs as a Spring Boot API alongside PostgreSQL. Book requests pass through the HTTP, business, and persistence layers; Flyway prepares the schema at startup. Shared validation, mapping, security configuration, and error handling support the API. The user service is implemented as a domain foundation, but has no controller or public routes yet.
 
 ```mermaid
-flowchart TD
-    C["Client"] --> A["BookAPI<br/>Controller"]
-    A --> S["BookService<br/>Business Logic<br/>@Transactional"]
-    S --> R["BookRepository<br/>JpaRepository"]
-    R --> D[("PostgreSQL 18<br/>books table")]
-    A -. validation / errors .-> E["GlobalExceptionHandler<br/>@RestControllerAdvice"]
-    S -. validation / errors .-> E
-    E --> F["ApiResponse / ErrorResponse"]
+flowchart LR
+    Client["API Client"] -->|HTTP / JSON| Security["Spring Security<br/>permitAll; CSRF disabled"]
+    subgraph App["Docker Compose: Spring Boot application"]
+        API["BookAPI<br/>Spring MVC"] --> Service["BookService<br/>business rules · transactions"]
+        Service --> Repo["BookRepository<br/>Spring Data JPA"]
+        Repo --> ORM["Hibernate / JPA"]
+        User["UserService<br/>profile and password rules"]
+        User -. "not exposed by a controller" .-> UserRepo["UserRepository"]
+        Shared["Shared concerns<br/>DTOs · mappers · Jakarta validation<br/>GlobalExceptionHandler · OpenAPI"]
+        Security --> API
+        API -.-> Shared
+        Service -.-> Shared
+    end
+    ORM -->|JDBC| DB[("PostgreSQL 18")]
+    Flyway["Flyway migrations<br/>V1 books · V2 users"] -->|startup schema changes| DB
+    Compose["Docker Compose<br/>starts app after database is healthy"] -.-> App
+    Compose -.-> DB
 
-    classDef default fill:#1e293b,stroke:#0f172a,color:#ffffff
-    classDef db fill:#1e3a8a,stroke:#0f172a,color:#ffffff
-
-    class C,A,S,R,E,F default
-    class D db
+    classDef service fill:#e8f1fb,stroke:#5078a0,color:#172b3d
+    classDef data fill:#edf5ed,stroke:#62836a,color:#203528
+    class API,Service,Repo,ORM,User,UserRepo,Shared,Security service
+    class DB,Flyway data
 ```
 
 ### Layered Design
