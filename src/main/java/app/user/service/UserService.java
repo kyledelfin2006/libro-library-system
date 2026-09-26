@@ -2,6 +2,7 @@ package app.user.service;
 
 import app.user.dto.UserCreateRequestDTO;
 import app.user.dto.UserCreateUpdateDTO;
+import app.user.dto.UserReplaceRequest;
 import app.user.dto.UserResponseDTO;
 import app.user.dto.ChangePasswordDTO;
 import app.user.entity.User;
@@ -96,6 +97,62 @@ public class UserService {
         // save user
         User savedUser = userRepository.save(user);
         return userMapper.toResponseDTO(savedUser);
+    }
+
+    /**
+     * Replaces the editable profile fields for an existing user.
+     *
+     * <p>This operation replaces first name, last name, middle initial, and
+     * email. The university ID, password, role, course, and major are not
+     * changed by this profile operation. Those fields can be handled by a
+     * separate administrative use case when role-based authorization is added.
+     * Hibernate dirty checking persists the managed entity at transaction
+     * commit.</p>
+     *
+     * @param universityId the fixed university ID identifying the user
+     * @param request the complete replacement profile
+     * @return the updated user without password data
+     * @throws IllegalArgumentException if the request, profile fields, or email uniqueness is invalid
+     * @throws UserNotFoundException if no user matches the university ID
+     */
+    @Transactional
+    public UserResponseDTO replaceUserProfile(
+            String universityId,
+            UserReplaceRequest request
+    ) {
+        if (request == null) {
+            throw new IllegalArgumentException("User profile cannot be null");
+        }
+
+        String normalizedUniversityId =
+                normalizeAndValidateUniversityId(universityId);
+
+        User user = userRepository.findByUniversityId(normalizedUniversityId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        validateRequest(request);
+
+        String firstName = request.getFirstName().trim();
+        String lastName = request.getLastName().trim();
+        String middleInitial = request.getMiddleInitial() == null
+                ? null
+                : request.getMiddleInitial().trim();
+        String email = normalizeAndValidateEmail(request.getEmail());
+
+        if (middleInitial != null && middleInitial.isBlank()) {
+            middleInitial = null;
+        }
+
+        if (!email.equals(user.getEmail())
+                && userRepository.existsByEmailIgnoreCase(email)) {
+            throw new IllegalArgumentException("Email is already registered");
+        }
+
+        user.setFirstName(firstName);
+        user.setLastName(lastName);
+        user.setMiddleInitial(middleInitial);
+        user.setEmail(email);
+        return userMapper.toResponseDTO(user);
     }
 
     /**
@@ -362,7 +419,11 @@ public class UserService {
     }
 
     /**
-     * Trims and validates a university ID using the database and DTO format.
+     * Trims and validates a university ID using the API's required format.
+     *
+     * @param universityId the supplied university ID
+     * @return the trimmed university ID
+     * @throws IllegalArgumentException if the ID is blank or malformed
      */
     private String normalizeAndValidateUniversityId(String universityId) {
         // could either be normalized email or null
@@ -388,6 +449,9 @@ public class UserService {
 
     /**
      * Enforces the relationship between role, course, and IT major.
+     *
+     * @param request the user creation request containing academic fields
+     * @throws IllegalArgumentException if the role, course, and major combination is invalid
      */
     private void validateAcademicRules(UserCreateRequestDTO request) {
         UserRole role = request.getUserRole();
@@ -424,6 +488,10 @@ public class UserService {
     /**
      * Trims, lowercases, and validates an email using a locale-independent
      * normalization rule.
+     *
+     * @param email the supplied email address
+     * @return the normalized email address
+     * @throws IllegalArgumentException if the email is blank
      */
     private String normalizeAndValidateEmail(String email) {
         String normalizedEmail = normalizeEmail(email);
@@ -437,6 +505,10 @@ public class UserService {
     /**
      * Ensures values required by the persistence model are not blank when the
      * service is called directly without controller validation.
+     *
+     * @param value the value to check
+     * @param fieldName the field's human-readable name for the error message
+     * @throws IllegalArgumentException if the value is null or blank
      */
     private void validateRequiredValue(String value, String fieldName) {
         if (value == null || value.isBlank()) {
