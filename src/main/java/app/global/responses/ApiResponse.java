@@ -1,6 +1,10 @@
 package app.global.responses;
 
+import lombok.Getter;
+
+@Getter
 public class ApiResponse<T> {
+    // Getters
     private final boolean success;
     private String message;
     private T data; // actual data of the request
@@ -25,20 +29,4 @@ public class ApiResponse<T> {
         this.timestamp = System.currentTimeMillis();
     }
 
-    // Getters
-    public boolean isSuccess() {
-        return success;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public T getData() {
-        return data;
-    }
-
-    public long getTimestamp() {
-        return timestamp;
-    }
 }
