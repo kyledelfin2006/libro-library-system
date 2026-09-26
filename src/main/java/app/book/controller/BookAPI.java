@@ -7,7 +7,6 @@ import app.book.mapper.BookMapper;
 import app.book.service.BookService;
 import app.global.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -69,21 +68,16 @@ public class BookAPI {
 
     @GetMapping("/search")
     @Operation(summary = "Search books",
-            description = "Search title, author, or genre by case-insensitive text match; price matches exactly. Results are unpaginated.")
+            description = "Use type=title, author, genre, or price. Text matches are case-insensitive; price matches exactly. Results are unpaginated.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Unsupported search type or invalid price")
-    public ResponseEntity<List<BookResponseDTO>> searchBooks(
-            @Parameter(description = "Search field", schema = @Schema(allowableValues = {"title", "author", "genre", "price"}))
-            @RequestParam String type,
-            @Parameter(description = "Text query, or exact decimal price when type is price")
-            @RequestParam String value) {
+    public ResponseEntity<List<BookResponseDTO>> searchBooks(@RequestParam String type, @RequestParam String value) {
         return ResponseEntity.ok(mapper.toResponseDTOList(service.searchBooks(type, value)));
     }
 
     @GetMapping("/budget")
-    @Operation(summary = "Find books within a budget", description = "Returns unpaginated results priced at or below maxPrice.")
-    public ResponseEntity<List<BookResponseDTO>> budgetBooks(
-            @Parameter(description = "Inclusive maximum price; must be positive", example = "20.00")
-            @RequestParam BigDecimal maxPrice) {
+    @Operation(summary = "Find books within a budget",
+            description = "Returns unpaginated results priced at or below the positive maxPrice.")
+    public ResponseEntity<List<BookResponseDTO>> budgetBooks(@RequestParam BigDecimal maxPrice) {
         return ResponseEntity.ok(mapper.toResponseDTOList(service.getBooksWithinBudget(maxPrice)));
     }
 
@@ -108,16 +102,14 @@ public class BookAPI {
     @GetMapping("/{id}")
     @Operation(summary = "Get a book by ID", description = "Returns a book without persistence-only fields such as createdAt.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Book not found")
-    public ResponseEntity<BookResponseDTO> getBookById(
-            @Parameter(description = "Generated book identifier", example = "1") @PathVariable Long id) {
+    public ResponseEntity<BookResponseDTO> getBookById(@PathVariable Long id) {
         return ResponseEntity.ok(mapper.toResponseDTO(service.findBookById(id)));
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete a book", description = "Deletes one book by its generated identifier.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Book not found")
-    public ResponseEntity<ApiResponse<Void>> deleteBook(
-            @Parameter(description = "Generated book identifier", example = "1") @PathVariable Long id) {
+    public ResponseEntity<ApiResponse<Void>> deleteBook(@PathVariable Long id) {
         service.deleteBookById(id);
         return ResponseEntity.ok(new ApiResponse<>(true, "Book deleted successfully"));
     }
@@ -134,7 +126,6 @@ public class BookAPI {
     @Operation(summary = "List books sorted by a field", description = "Returns an unpaginated ascending list. Allowed fields: title, author, genre, price, id.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Unsupported sort field")
     public ResponseEntity<List<BookResponseDTO>> getSortedBooks(
-            @Parameter(description = "Sort field", schema = @Schema(allowableValues = {"title", "author", "genre", "price", "id"}))
             @RequestParam(required = false, defaultValue = "title") String category) {
         return ResponseEntity.ok(mapper.toResponseDTOList(service.getBooksSortedBy(category)));
     }
@@ -147,11 +138,11 @@ public class BookAPI {
 
     @GetMapping("/price")
     @Operation(summary = "Filter books by price range",
-            description = "Returns books in the inclusive range. Prices must be positive and minPrice must not exceed maxPrice.")
+            description = "Returns books in the inclusive range. Both prices must be positive; minPrice cannot exceed maxPrice. Example: minPrice=10&maxPrice=25.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid price bounds")
     public ResponseEntity<List<BookResponseDTO>> getPriceRangedBooks(
-            @Parameter(description = "Inclusive minimum price", example = "10.00") @RequestParam BigDecimal minPrice,
-            @Parameter(description = "Inclusive maximum price", example = "25.00") @RequestParam BigDecimal maxPrice) {
+            @RequestParam BigDecimal minPrice,
+            @RequestParam BigDecimal maxPrice) {
         return ResponseEntity.ok(mapper.toResponseDTOList(service.getBooksInPriceRange(minPrice, maxPrice)));
     }
 
@@ -172,7 +163,7 @@ public class BookAPI {
     @Operation(summary = "Partially update a book",
             description = "Updates supplied fields only. Omitted or blank text fields stay unchanged; a supplied price must be positive.")
     public ResponseEntity<ApiResponse<BookResponseDTO>> patchBook(
-            @Parameter(description = "Generated book identifier", example = "1") @PathVariable Long id,
+            @PathVariable Long id,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "Any subset of title, author, genre, and price", required = true,
                     content = @Content(schema = @Schema(implementation = BookRequestDTO.class),
@@ -187,7 +178,7 @@ public class BookAPI {
             description = "Replaces all mutable fields. Every field is required; text is trimmed before persistence.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Validation failed")
     public ResponseEntity<ApiResponse<BookResponseDTO>> replaceBook(
-            @Parameter(description = "Generated book identifier", example = "1") @PathVariable Long id,
+            @PathVariable Long id,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "Complete replacement payload", required = true,
                     content = @Content(schema = @Schema(implementation = BookRequestDTO.class),
