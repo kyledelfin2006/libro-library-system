@@ -194,7 +194,7 @@ The count-and-total-value aggregate uses the typed `LibraryAggregate` constructo
 
 The user feature currently contains the entity, enums, create/response DTOs, mapper, repository, BCrypt `PasswordEncoder` bean, and `UserService`. `UserService` normalizes university IDs and email addresses, rejects duplicates, validates password complexity, hashes passwords before persistence, and enforces the role/course/major rules. Passwords must be at least eight characters and include uppercase and lowercase letters, a number, and a symbol. The enum and V2 database checks define the allowed academic values; the service enforces their cross-field relationships.
 
-`UserAPI` currently exists as an empty placeholder; there are no implemented user routes. There is no `UserDetailsService`, loan feature, or user-domain integration test class yet. `UserReplaceRequest` defines full profile-replacement fields, but is not currently exposed through an HTTP endpoint. `UserService` injects Jakarta `Validator`, validates create and password-change requests, and exposes transactional update operations that normalize supplied fields, protect email uniqueness, verify current passwords, and store only encoded password hashes.
+`UserAPI` exposes user creation, paginated listing, lookup, profile PATCH/PUT, password change, and deletion under `/app/users`. It delegates to `UserService` and uses request/response DTOs. There is no `UserDetailsService`, loan feature, or user-domain integration test class yet. `UserService` injects Jakarta `Validator`, validates create and password-change requests, and exposes transactional update operations that normalize supplied fields, protect email uniqueness, verify current passwords, and store only encoded password hashes.
 
 ### Entity and database model
 
@@ -263,11 +263,11 @@ Handler order matters conceptually. `DataIntegrityViolationException` is a subty
 
 If authentication is introduced, treat it as an API contract and architecture change. Add endpoint authorization rules, an authentication mechanism, tests for allowed and denied requests, credential/secret handling, and updated documentation together. Reconsider CSRF based on whether credentials are cookie-based or token-based.
 
-Before exposing user routes, select the authentication model and apply its endpoint authorization rules. Do not assume `UserDetailsService` is appropriate if the institution's SSO is the chosen identity provider. Loan operations must identify the borrower from the authenticated principal rather than a client-supplied user ID.
+Before deploying user routes to an environment with untrusted clients, select the authentication model and apply its endpoint authorization rules. Do not assume `UserDetailsService` is appropriate if the institution's SSO is the chosen identity provider. Loan operations must identify the borrower from the authenticated principal rather than a client-supplied user ID.
 
 ## Endpoint Inventory
 
-All routes use `/app/books` as their base.
+Book routes use `/app/books`; user routes use `/app/users`.
 
 | Method | Path | Purpose | Response shape |
 |---|---|---|---|
@@ -286,6 +286,18 @@ All routes use `/app/books` as their base.
 | PATCH | `/{id}` | Partially update supplied fields | `ApiResponse<BookResponseDTO>` |
 | PUT | `/{id}` | Replace all mutable fields | `ApiResponse<BookResponseDTO>` |
 | DELETE | `/{id}` | Delete one book | `ApiResponse<Void>` |
+
+User routes:
+
+| Method | Path | Purpose | Response shape |
+|---|---|---|---|
+| GET | `/app/users` | Paginated user list (default size 12) | Spring `Page<UserResponseDTO>` |
+| GET | `/app/users/{universityId}` | Retrieve one user | `UserResponseDTO` |
+| POST | `/app/users` | Create a user | `ApiResponse<UserResponseDTO>`, HTTP 201 |
+| PATCH | `/app/users/{universityId}` | Partially update profile fields | `ApiResponse<UserResponseDTO>` |
+| PUT | `/app/users/{universityId}` | Replace profile fields | `ApiResponse<UserResponseDTO>` |
+| PUT | `/app/users/{universityId}/password` | Change password after current-password verification | `ApiResponse<Void>` |
+| DELETE | `/app/users/{universityId}` | Delete a user | `ApiResponse<Void>` |
 
 When adding an endpoint, update this file and `README.md`, provide request/response examples where useful, and add tests at the appropriate layer.
 
@@ -545,8 +557,8 @@ When a breaking change is intended, document migration guidance and update all e
 - H2 is declared but has no dedicated application profile or integration-test setup.
 - The Docker image requires a prebuilt JAR and does not build source itself.
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
-- User and loan HTTP APIs are incomplete: `UserAPI` is an empty placeholder, there is no loan feature, and no authentication flow.
-- User service behavior has unit coverage, but repository and user-controller behavior do not yet have dedicated tests.
+- User routes are currently permitted by the global development security configuration; create requests include a client-supplied role. Do not treat these routes as safe for deployment until authorization and role assignment are designed.
+- There is no loan feature or authentication flow. User service behavior has unit coverage, but repository and user-controller behavior do not yet have dedicated tests.
 - Test coverage is predominantly unit-level; HTTP, JPA, migration, security, and container paths lack automated integration coverage.
 - Success response shapes are inconsistent across endpoints.
 - `timestamp` fields are epoch milliseconds rather than ISO-8601 values.

@@ -65,7 +65,7 @@ The README is the central entry point for project documentation. Supporting repo
 
 ## Architecture Overview
 
-The system runs as a Spring Boot API alongside PostgreSQL. Book requests pass through the HTTP, business, and persistence layers; Flyway prepares the schema at startup. Shared validation, mapping, security configuration, and error handling support the API. The user service is implemented as a domain foundation, but has no controller or public routes yet.
+The system runs as a Spring Boot API alongside PostgreSQL. Book and user requests pass through the HTTP, business, and persistence layers; Flyway prepares the schema at startup. Shared validation, mapping, security configuration, and error handling support the API.
 
 ```mermaid
 flowchart LR
@@ -74,8 +74,8 @@ flowchart LR
         API["BookAPI<br/>Spring MVC"] --> Service["BookService<br/>business rules · transactions"]
         Service --> Repo["BookRepository<br/>Spring Data JPA"]
         Repo --> ORM["Hibernate / JPA"]
-        User["UserService<br/>profile and password rules"]
-        User -. "not exposed by a controller" .-> UserRepo["UserRepository"]
+        UserAPI["UserAPI<br/>account and profile routes"] --> User["UserService<br/>profile and password rules"]
+        User --> UserRepo["UserRepository"]
         Shared["Shared concerns<br/>DTOs · mappers · Jakarta validation<br/>GlobalExceptionHandler · OpenAPI"]
         Security --> API
         API -.-> Shared
@@ -155,6 +155,7 @@ src/main/java/app/
       ErrorResponse.java
   user/
     config/PasswordConfig.java
+    controller/UserAPI.java
     dto/
       ChangePasswordDTO.java
       UserCreateRequestDTO.java
@@ -254,7 +255,7 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 - Budget filtering through `GET /app/books/budget`.
 - Statistics endpoints for total books, total library value, average price, and the most expensive book.
 - Genre distribution endpoint.
-- User-domain foundation with role/course/major enums, duplicate checks, academic business rules, and BCrypt password hashing; passwords require 8–72 characters with uppercase and lowercase letters, a number, and a symbol. No user controller exists yet.
+- User-domain API for account creation, profile lookup and updates, password changes, and deletion; the service applies duplicate checks, academic business rules, and BCrypt password hashing.
 - OpenAPI 3 documentation through Springdoc Swagger UI and `/v3/api-docs`.
 - Validation with `@Valid` on create and replace requests.
 - Global handling for `BookNotFoundException`, validation errors, malformed JSON, number format errors, database issues, and unsupported methods.
@@ -395,10 +396,17 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 | `GET` | `/app/books/stats` | Returns total books, total value, and the most expensive book | `GET /app/books/stats` | `{"totalBooks":6,"totalValue":123.45,"mostExpensiveBook":{"id":4,"title":"...","author":"...","genre":"...","price":49.99}}` |
 | `GET` | `/app/books/stats/average-price` | Returns the average price of all books | `GET /app/books/stats/average-price` | `{"success":true,"message":"Average Price of Collection: ","data":20.50,"timestamp":172...}` |
 | `GET` | `/app/books/stats/count` | Returns the total number of books | `GET /app/books/stats/count` | `{"success":true,"message":"Book Collection Count","data":6,"timestamp":172...}` |
+| `GET` | `/app/users` | Lists users with pagination | `GET /app/users?page=0&size=12` | Spring `Page<UserResponseDTO>` |
+| `GET` | `/app/users/{universityId}` | Gets one user by university ID | `GET /app/users/2025-4321` | `UserResponseDTO` |
+| `POST` | `/app/users` | Creates a user | `POST /app/users` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
+| `PATCH` | `/app/users/{universityId}` | Updates supplied profile fields | `PATCH /app/users/2025-4321` with `UserCreateUpdateDTO` | `ApiResponse<UserResponseDTO>` |
+| `PUT` | `/app/users/{universityId}` | Replaces profile fields | `PUT /app/users/2025-4321` with `UserReplaceRequest` | `ApiResponse<UserResponseDTO>` |
+| `PUT` | `/app/users/{universityId}/password` | Changes password after current-password verification | `PUT /app/users/2025-4321/password` with `ChangePasswordDTO` | `ApiResponse<Void>` |
+| `DELETE` | `/app/users/{universityId}` | Deletes a user | `DELETE /app/users/2025-4321` | `ApiResponse<Void>` |
 
-### Planned user and loan APIs
+### User API
 
-User and loan controllers are not implemented yet, so they intentionally do not appear as live OpenAPI operations. The user-domain services currently provide the foundation for identity, profile updates, and password changes; a future `UserController` should document those contracts only after its routes, authorization rules, and response shapes are stable. The future loan API should document active-loan constraints, overdue behavior, and loan-history queries in the same way rather than presenting planned routes as callable endpoints.
+User routes are available under `/app/users` for account creation, paginated listing, lookup by university ID, profile PATCH/PUT, password changes, and deletion. They currently inherit the development `permitAll` security configuration. Create requests also accept a role, so do not expose this configuration to untrusted clients; design authorization and role assignment before deployment. Loan routes are not implemented.
 
 ## Setup & Installation
 
@@ -483,14 +491,11 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 - `BookMapper` centralizes conversion between entities and DTOs.
 - `UserService` normalizes identity values, checks duplicates, enforces academic rules, validates create requests with Jakarta Validator, bounds passwords to 8–72 characters before BCrypt processing, and persists only BCrypt-hashed passwords.
 - `UserMapper` keeps password fields out of `UserResponseDTO`.
-- User DTO annotations, the transactional partial-update service contract, and
-  the transactional password-change service contract are implemented, but there
-  is no `UserController` yet and user API serialization still needs integration
-  coverage.
+- `UserAPI` delegates user operations to `UserService` and returns DTOs rather than entities. User API serialization and routing still need MVC integration coverage.
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its 101 tests include fast MVC-slice coverage for the book HTTP contract plus unit coverage for the book and user service behavior, book entity and DTO, typed statistics and genre-distribution projections, mapper behavior, and global REST exception translation. The current suite has no user controller, JPA, Flyway, or PostgreSQL integration tests.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its existing suite includes fast MVC-slice coverage for the book HTTP contract plus unit coverage for the book and user service behavior, book entity and DTO, typed statistics and genre-distribution projections, mapper behavior, and global REST exception translation. User controller, JPA, Flyway, and PostgreSQL integration tests are not yet present.
 
 - `BookTest` verifies book construction and request DTO constraints.
 - `BookApiMvcTest` verifies routes, status codes, JSON response shapes, invalid request payloads, pagination/query binding, and global exception responses without starting JPA or PostgreSQL.
@@ -554,7 +559,7 @@ The detailed, interview-ready account of the development problems I identified a
 
 - Learn Spring Security's filter chain, authentication, `UserDetailsService`, and `SecurityContext`, then choose an institutional SSO, session, or token-based authentication model.
 - Implement and test endpoint-specific authorization before exposing user endpoints; the current `permitAll()` configuration leaves every route public.
-- Add repository and controller coverage for the user domain, then implement and document `UserController` under the selected security model.
+- Add repository and MVC controller coverage for the user domain; implement endpoint authorization and safe role assignment before deployment.
 - Implement the loan domain with active-loan constraints and overdue/history queries, using the authenticated identity for borrower operations.
 - Add JPA, Flyway, and PostgreSQL integration tests alongside the existing unit and MVC-slice tests.
 - Expand search capabilities with more flexible filtering and sorting combinations.
