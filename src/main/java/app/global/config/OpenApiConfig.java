@@ -11,8 +11,8 @@ import org.springframework.context.annotation.Configuration;
         info = @Info(
                 title = "Libro Library API",
                 version = "1.0.0",
-                description = "Book collection API for the Libro library management system prototype. "
-                        + "Book routes are live; user and loan routes are planned and are not exposed yet.",
+                description = "Book collection and user account API for the Libro library management system prototype. "
+                        + "Book and user routes are live; loan routes are not implemented.",
                 license = @License(name = "Project-specific prototype; no distribution license declared")
         )
 )

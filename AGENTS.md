@@ -4,7 +4,7 @@
 
 This file is the working guide for AI coding agents and human contributors to the Libro: Library API System. Read it before changing the project. It documents the repository as it exists, the intended architecture, the contracts between layers, and the checks expected before a contribution is considered complete.
 
-The application is a single-module Spring Boot REST API for managing a library's book collection. It exposes the book CRUD, search, pagination, sorting, price filtering, aggregation, and health endpoints backed by PostgreSQL. A user-domain foundation also exists, but user and loan controllers are not yet implemented.
+The application is a single-module Spring Boot REST API for managing a library's book collection and user accounts. It exposes book CRUD, search, pagination, sorting, price filtering, aggregation, and health endpoints, plus user creation, listing, lookup, profile updates, password changes, and deletion. PostgreSQL backs persistence. Loan routes are not implemented.
 
 ## Project Snapshot
 
@@ -136,6 +136,7 @@ The response path generally converts `Book` entities to DTOs through `BookMapper
 - Delegates business rules to `BookService`.
 - Uses `BookMapper` to prevent entities from becoming the public API representation.
 - Chooses HTTP status codes and response envelopes.
+- Documents every operation sufficiently for Swagger UI to act as the interactive API reference, while Springdoc derives paths and schemas from controller signatures and DTOs wherever possible. Follow [API Documentation Guideline](docs/api-documentation-guideline.md): document non-inferable behavior, keep constraints on DTOs, and avoid repeated annotation boilerplate.
 
 Do not add repository access to the controller. New endpoint logic should remain thin and be independently testable in the service.
 
@@ -299,7 +300,7 @@ User routes:
 | PUT | `/app/users/{universityId}/password` | Change password after current-password verification | `ApiResponse<Void>` |
 | DELETE | `/app/users/{universityId}` | Delete a user | `ApiResponse<Void>` |
 
-When adding an endpoint, update this file and `README.md`, provide request/response examples where useful, and add tests at the appropriate layer.
+When adding an endpoint, update this file and `README.md`, document the operation and public DTO schemas following [API Documentation Guideline](docs/api-documentation-guideline.md), provide request/response examples where useful, and add tests at the appropriate layer.
 
 ## Dependency Guide
 

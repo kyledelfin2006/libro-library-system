@@ -9,13 +9,13 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
 
-Libro is a Spring Boot REST API and Library Management System. It manages books with CRUD operations, search, pagination, sorting, range filtering, genre analytics, and statistics. It also contains a user-domain foundation, while user and loan HTTP APIs are not yet exposed. The prototype uses DTO-driven validation, centralized exception handling, and a Docker-first workflow backed by PostgreSQL 18 with Flyway database migrations.
+Libro is a Spring Boot REST API and Library Management System. It manages books with CRUD operations, search, pagination, sorting, range filtering, genre analytics, and statistics. It also exposes user account and profile routes for creation, listing, lookup, profile updates, password changes, and deletion. Loan HTTP APIs are not implemented. The prototype uses DTO-driven validation, centralized exception handling, and a Docker-first workflow backed by PostgreSQL 18 with Flyway database migrations.
 
 The institutional context behind the user domain is documented in [Institutional Context](docs/institutional-context.md), including its ASU-CCS setting and alignment with existing MIS identity conventions.
 
 The current domain decision is documented in [Domain Decisions](docs/domain-decisions.md): each `Book` represents one physical borrowable copy, so one copy can be assigned to only one active borrower at a time. Separate copies of the same title are separate records.
 
-The API exposes generated OpenAPI documentation through Springdoc. Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running. The live specification includes request validation rules, filter and sorting constraints, pagination behavior, and representative request/response examples for the book API.
+The API exposes generated OpenAPI documentation through Springdoc. Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running. Swagger UI is intended to serve as the interactive API reference and portfolio demonstration. See the [API Documentation Guideline](docs/api-documentation-guideline.md) for how to keep book and user endpoint contracts complete without bloating controller code.
 
 Main Developer: **Aldrin Kyle Delfin**
 
@@ -61,6 +61,7 @@ The README is the central entry point for project documentation. Supporting repo
 - [Development Problems Solved](docs/development-problems-solved.md) is a first-person development reflection covering the major bugs, effects, fixes, and verification decisions made while building the prototype.
 - [Institutional Context](docs/institutional-context.md) records the ASU-CCS academic model and the existing MIS assumptions that shaped the user domain.
 - [Domain Decisions](docs/domain-decisions.md) records the physical-copy interpretation of `Book` and its implications for future loans.
+- [API Documentation Guideline](docs/api-documentation-guideline.md) defines how to keep OpenAPI and Swagger UI useful and accurate without duplicating documentation throughout the codebase.
 - [Agent and Contributor Guide](AGENTS.md) documents the repository architecture, layer contracts, coding rules, testing expectations, and definition of done. It remains at the repository root so coding agents can discover it automatically.
 
 ## Architecture Overview
