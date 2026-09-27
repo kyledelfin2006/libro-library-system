@@ -124,6 +124,7 @@ public class UserService {
             throw new IllegalArgumentException("User profile cannot be null");
         }
 
+        // Normalize and validate the lookup ID before querying the repository.
         String normalizedUniversityId =
                 normalizeAndValidateUniversityId(universityId);
 
