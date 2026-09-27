@@ -151,7 +151,7 @@ I then added a transactional partial-update path for user profile fields. It pre
 
 ### Verification
 
-`UserServiceTest` covers update normalization, validation, unchanged-email behavior, duplicate-email rejection, and dirty-checking expectations. The academic mapping and password creation rules are implemented, while the controller and real authentication integration remain intentionally outside this prototype milestone.
+`UserServiceTest` covers update normalization, validation, unchanged-email behavior, duplicate-email rejection, and dirty-checking expectations. At the time of this milestone, the controller and real authentication integration remained outside scope. `UserAPI` has since been added; dedicated user-controller tests and authentication integration are still pending.
 
 ## 8. The test feedback loop was too easy to misunderstand
 

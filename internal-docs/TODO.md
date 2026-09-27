@@ -40,8 +40,10 @@ credentials, or real user data.
 
 ## User domain
 
-- [ ] Add `UserController` after the authentication model and endpoint access
-  rules are understood and selected.
+- [x] Add `UserAPI` under `/app/users` for create, paginated list, lookup,
+  profile PATCH/PUT, password change, and account deletion. These routes
+  currently use development `permitAll`; this does not satisfy production
+  authentication or authorization requirements.
 - [ ] Add repository and controller tests.
 - [x] Add focused service tests for partial updates, normalization, validation,
   unchanged emails, and duplicate-email rejection.
@@ -73,18 +75,15 @@ credentials, or real user data.
 
 - [ ] Integrate the password policy with the institution's approved authentication
   or SSO solution before production use.
-- [ ] Learn the existing `SecurityFilterChain` and the roles of
-  `UserDetailsService`, `PasswordEncoder`, `Authentication`, and
-  `SecurityContext` before building user endpoints.
-- [ ] Implement `UserDetailsService` using `universityId` as the username.
-- [ ] Choose an authentication model: institutional SSO, sessions, or
-  token-based authentication. Confirm whether local password authentication
-  and `UserDetailsService` are part of that model.
-- [ ] Add login and authentication tests.
-- [ ] Replace any temporary client-supplied `userId` in loan requests with the
-  authenticated user from the security context.
+- [ ] Choose the authentication model (institutional SSO, sessions, or tokens)
+  before deployment to untrusted clients. Decide whether local password
+  authentication is supported; add `UserDetailsService` only if that model
+  requires it.
+- [ ] Add authentication and authorization tests for the selected model.
 - [ ] Replace `permitAll()` with endpoint-specific authorization rules.
 - [ ] Keep CSRF and credential handling appropriate for the selected auth model.
+- [ ] For future loan routes, derive the borrower from the authenticated
+  principal rather than a client-supplied user ID.
 
 ## Verification and documentation
 
@@ -92,15 +91,19 @@ credentials, or real user data.
 - [ ] Add integration coverage for Flyway, JPA mappings, and PostgreSQL checks.
 - [ ] Verify that V2 has not already been applied to a persistent database; if
   it has, create a forward-only V3 migration instead of editing V2.
-- [ ] Update `README.md` to document the users and loans API.
+- [ ] Apply [the API Documentation Guideline](../docs/api-documentation-guideline.md)
+  to all book and user operations: complete operation behavior, request/response
+  schemas, expected statuses/errors, and accurate examples; inspect the
+  generated `/v3/api-docs` and Swagger UI against its readiness checklist.
+- [x] Update `README.md` with the live user API routes.
+- [ ] Document loan routes in `README.md` when those routes are implemented.
 - [ ] Review entity, migration, DTO, and database naming for consistency.
-- [ ] Commit focused changes and push with `git push` from `user-service`.
-- [ ] Open a pull request from `user-service` into `main`.
 
 ## Recommended next slice
 
-Learn and decide the authentication model first, then implement and test
-endpoint-specific security. Build `UserController` with those access rules and
-add controller tests. After the user API is stable, implement the loan entity
-and service so loan operations can use the authenticated identity. Controllers
-should translate HTTP requests and responses, not contain business logic.
+Complete the OpenAPI documentation for the existing book and user routes using
+the project guideline, then add user controller/repository tests. Before any
+untrusted deployment, choose and implement the authentication model and
+endpoint-specific authorization. Loan routes remain future work and should use
+the authenticated principal as the borrower. Controllers should translate HTTP
+requests and responses, not contain business logic.

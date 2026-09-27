@@ -13,7 +13,7 @@ The existing university management information system uses the university ID as 
 - Passwords are encoded with BCrypt before persistence and are never returned in response DTOs.
 - University IDs and email addresses are normalized before duplicate checks and storage.
 
-This is alignment with the existing identity convention, not a claim that Libro currently authenticates against or synchronizes with the MIS. Libro does not yet have a user controller or completed authentication integration.
+This is alignment with the existing identity convention, not a claim that Libro currently authenticates against or synchronizes with the MIS. Libro exposes user account and profile routes, but does not yet have completed authentication integration.
 
 ## CCS academic structure
 

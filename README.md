@@ -558,10 +558,11 @@ The detailed, interview-ready account of the development problems I identified a
 
 ## Upcoming Improvements
 
+- Apply the [API Documentation Guideline](docs/api-documentation-guideline.md) to every book and user operation, then inspect the generated OpenAPI document and Swagger UI for accurate request/response schemas, behavior, statuses, errors, and examples.
 - Learn Spring Security's filter chain, authentication, `UserDetailsService`, and `SecurityContext`, then choose an institutional SSO, session, or token-based authentication model.
 - Implement and test endpoint-specific authorization before exposing user endpoints; the current `permitAll()` configuration leaves every route public.
 - Add repository and MVC controller coverage for the user domain; implement endpoint authorization and safe role assignment before deployment.
-- Implement the loan domain with active-loan constraints and overdue/history queries, using the authenticated identity for borrower operations.
+- Implement the loan domain with active-loan constraints and overdue/history queries, using the authenticated identity for borrower operations; document its API when routes are added.
 - Add JPA, Flyway, and PostgreSQL integration tests alongside the existing unit and MVC-slice tests.
 - Expand search capabilities with more flexible filtering and sorting combinations.
 
