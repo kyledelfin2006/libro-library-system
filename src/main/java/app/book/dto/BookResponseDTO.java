@@ -7,6 +7,7 @@ import lombok.Setter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 
+@Schema(description = "Public book representation. Persistence-only fields are omitted.")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -20,6 +21,6 @@ public class BookResponseDTO {
     private String author;
     @Schema(description = "Normalized genre.", example = "Dystopian")
     private String genre;
-    @Schema(description = "Positive book price.", example = "19.99")
+    @Schema(description = "Positive decimal price for the book.", example = "19.99")
     private BigDecimal price;
 }

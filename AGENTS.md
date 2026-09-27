@@ -47,6 +47,7 @@ library-api-system/
     |   |   |   |-- controller/BookAPI.java
     |   |   |   |-- dto/
     |   |   |   |   |-- BookRequestDTO.java
+    |   |   |   |   |-- BookPatchRequestDTO.java
     |   |   |   |   |-- BookResponseDTO.java
     |   |   |   |   `-- LibraryStatisticsDTO.java
     |   |   |   |-- entity/Book.java
@@ -132,7 +133,7 @@ The response path generally converts `Book` entities to DTOs through `BookMapper
 - Base route: `/app/books`.
 - Parses path variables, query parameters, pagination, and JSON bodies.
 - Applies `@Valid` to complete create and replace payloads.
-- Deliberately does not apply `@Valid` to PATCH payloads because omitted fields are represented by `null`.
+- Uses `BookPatchRequestDTO` for PATCH and deliberately does not apply `@Valid`; its optional fields describe the actual partial-update contract.
 - Delegates business rules to `BookService`.
 - Uses `BookMapper` to prevent entities from becoming the public API representation.
 - Chooses HTTP status codes and response envelopes.
@@ -168,7 +169,7 @@ The controller layer distinguishes full replacement (PUT) from partial updates (
 
 - **PUT (`replaceBook`)**: The controller annotates the request body with `@Valid @RequestBody BookRequestDTO`. This activates all DTO annotations (`@NotBlank`, `@Size`, `@Positive`, `@NotNull`) on every invocation, enforcing a complete, valid payload. The service method (`replaceBook`) additionally performs manual checks as defense-in-depth, protecting callers that bypass the controller's `@Valid` (e.g., scheduled jobs, internal consumers). The mapper's `updateBookFromDto` overwrites every mutable field onto the fetched managed entity.
 
-- **PATCH (`patchBook`)**: The controller annotates the request body with `@RequestBody BookRequestDTO` (no `@Valid`). This is deliberate: a PATCH request represents a partial update where omitted fields arrive as `null`, and applying `@NotBlank` or `@Positive` to a `null` PATCH field would reject legitimate partial updates. Instead, the service applies field-level conditional logic via a `hasText()` helper that skips `null` and blank strings entirely, and only validates price against zero or negativity when a non-null price is supplied.
+- **PATCH (`patchBook`)**: The controller accepts `BookPatchRequestDTO` without `@Valid`. Its optional schema fields match the partial-update contract: omitted or `null` values and blank text are ignored; a supplied price must be positive. The service applies field-level conditional logic and validates the resulting managed entity.
 
 This design solves a problem solved by many implementations incorrectly:
 
@@ -218,7 +219,7 @@ The V1 migration creates indexes on title, author, genre, and price. PostgreSQL 
 
 ### DTO and mapper boundary
 
-`BookRequestDTO` is the inbound contract. It validates required text lengths and positive, non-null prices. Unknown JSON fields are ignored by Jackson.
+`BookRequestDTO` is the complete inbound contract for create and PUT; it validates required text lengths and positive, non-null prices. `BookPatchRequestDTO` is the partial-update contract; all fields are optional and service logic validates supplied values. Unknown JSON fields are ignored by Jackson.
 
 `BookResponseDTO` is the regular outbound book shape and intentionally omits the internal `createdAt` timestamp. `LibraryStatisticsDTO` is an immutable Java record containing total count, total value, and the most expensive book response.
 
@@ -312,7 +313,7 @@ Provides Spring MVC, embedded HTTP server support, JSON serialization through Ja
 
 ### `spring-boot-starter-validation`
 
-Provides Jakarta Validation and its implementation. `@Valid` in `BookAPI` activates constraints on `BookRequestDTO`; the resulting `MethodArgumentNotValidException` is transformed by global advice.
+Provides Jakarta Validation and its implementation. `@Valid` in `BookAPI` activates constraints on complete `BookRequestDTO` bodies; the resulting `MethodArgumentNotValidException` is transformed by global advice. PATCH uses a separate optional DTO and service validation.
 
 ### `spring-boot-starter-data-jpa`
 
@@ -426,7 +427,7 @@ The repository abstracts persistence and let's Spring Data generate routine impl
 
 ### DTO pattern
 
-Request and response models isolate external contracts from JPA entities. Validation belongs on inbound DTOs; entity constraints remain a defense-in-depth persistence invariant. **Entity objects must never be instantiated directly from client input, and must never be returned directly to clients.** All controller inputs are request DTOs (e.g., `BookRequestDTO`) and all controller outputs are response DTOs (e.g., `BookResponseDTO`, `LibraryStatisticsDTO`). `BookMapper` is the sole conversion point.
+Request and response models isolate external contracts from JPA entities. Validation belongs on inbound DTOs; entity constraints remain a defense-in-depth persistence invariant. **Entity objects must never be instantiated directly from client input, and must never be returned directly to clients.** All controller inputs are request DTOs (e.g., `BookRequestDTO`, `BookPatchRequestDTO`) and all controller outputs are response DTOs (e.g., `BookResponseDTO`, `LibraryStatisticsDTO`). `BookMapper` is the sole entity conversion point.
 
 Reasons:
 1. Decouples the entity model from the client-facing API so the database schema can evolve independently.

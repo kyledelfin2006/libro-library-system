@@ -1,6 +1,7 @@
 package app.user.controller;
 
 import app.global.responses.ApiResponse;
+import app.global.responses.ErrorResponse;
 import app.user.dto.ChangePasswordDTO;
 import app.user.dto.UserCreateRequestDTO;
 import app.user.dto.UserCreateUpdateDTO;
@@ -8,6 +9,10 @@ import app.user.dto.UserReplaceRequest;
 import app.user.dto.UserResponseDTO;
 import app.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
@@ -28,7 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/app/users")
-@Tag(name = "Users", description = "User account and profile operations")
+@Tag(name = "Users", description = "User account and profile operations. The current development security configuration permits unauthenticated access; do not expose these routes to untrusted clients.")
 public class UserAPI {
 
     private final UserService service;
@@ -38,7 +43,15 @@ public class UserAPI {
     }
 
     @PostMapping
-    @Operation(summary = "Create a user account")
+    @Operation(summary = "Create a user account",
+            description = "Creates an account. Students must provide a course; IT students must provide an approved major; faculty must leave course and major null. Passwords must be 8–72 characters and include uppercase and lowercase letters, a number, and a symbol. Names are trimmed and email is stored lowercase.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "User created"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Request validation failed or university ID/email is already registered",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "A database uniqueness constraint was concurrently violated",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ResponseEntity<ApiResponse<UserResponseDTO>> createUser(
             @Valid @RequestBody UserCreateRequestDTO request) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -46,22 +59,45 @@ public class UserAPI {
     }
 
     @GetMapping
-    @Operation(summary = "List users with pagination")
+    @Operation(summary = "List users with pagination",
+            description = "Page numbering starts at zero. The default is page 0, size 12, sorted by universityId ascending; the maximum page size is 100. Sort with sort=property,direction using universityId, firstName, lastName, middleInitial, email, userRole, userCourse, or major. Unsupported sort properties return 400.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid pagination or sort parameter",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ResponseEntity<Page<UserResponseDTO>> getAllUsers(
             @ParameterObject @PageableDefault(size = 12, sort = "universityId") Pageable pageable) {
         return ResponseEntity.ok(service.getAllUsers(pageable));
     }
 
     @GetMapping("/{universityId}")
-    @Operation(summary = "Get a user by university ID")
+    @Operation(summary = "Get a user by university ID",
+            description = "Returns the public profile fields. Passwords and password hashes are never included.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "University ID must use the ####-#### format",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ResponseEntity<UserResponseDTO> getUserByUniversityId(
+            @Parameter(description = "University identifier in ####-#### format.", example = "2025-4321")
             @PathVariable String universityId) {
         return ResponseEntity.ok(service.getUserByUniversityId(universityId));
     }
 
     @PatchMapping("/{universityId}")
-    @Operation(summary = "Update supplied profile fields")
+    @Operation(summary = "Update supplied profile fields",
+            description = "Updates only supplied fields; null or omitted fields are unchanged. Supplied names and email cannot be blank. A blank middle initial is treated as omitted. Values are trimmed and email is stored lowercase.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid profile field, university ID, or email is already registered",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "A database uniqueness constraint was concurrently violated",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ResponseEntity<ApiResponse<UserResponseDTO>> updateUser(
+            @Parameter(description = "University identifier in ####-#### format.", example = "2025-4321")
             @PathVariable String universityId,
             @RequestBody UserCreateUpdateDTO request) {
         return ResponseEntity.ok(new ApiResponse<>(true, "User updated successfully",
@@ -69,8 +105,18 @@ public class UserAPI {
     }
 
     @PutMapping("/{universityId}")
-    @Operation(summary = "Replace a user's profile")
+    @Operation(summary = "Replace a user's profile",
+            description = "Replaces first name, last name, middle initial, and email. First name, last name, and email are required; university ID, role, course, major, and password are not changed. Names are trimmed and email is stored lowercase.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Request validation failed, university ID is invalid, or email is already registered",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "A database uniqueness constraint was concurrently violated",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ResponseEntity<ApiResponse<UserResponseDTO>> replaceUserProfile(
+            @Parameter(description = "University identifier in ####-#### format.", example = "2025-4321")
             @PathVariable String universityId,
             @Valid @RequestBody UserReplaceRequest request) {
         return ResponseEntity.ok(new ApiResponse<>(true, "User profile replaced successfully",
@@ -78,8 +124,16 @@ public class UserAPI {
     }
 
     @PutMapping("/{universityId}/password")
-    @Operation(summary = "Change a user's password")
+    @Operation(summary = "Change a user's password",
+            description = "Verifies the current password before storing the new password hash. Both passwords must meet the 8–72 character complexity policy; password values are never returned.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Password format is invalid or the current password does not match",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ResponseEntity<ApiResponse<Void>> updatePassword(
+            @Parameter(description = "University identifier in ####-#### format.", example = "2025-4321")
             @PathVariable String universityId,
             @Valid @RequestBody ChangePasswordDTO request) {
         service.updatePassword(universityId, request);
@@ -87,8 +141,16 @@ public class UserAPI {
     }
 
     @DeleteMapping("/{universityId}")
-    @Operation(summary = "Delete a user account")
+    @Operation(summary = "Delete a user account",
+            description = "Permanently deletes the account identified by university ID.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "University ID must use the ####-#### format",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ResponseEntity<ApiResponse<Void>> deleteUser(
+            @Parameter(description = "University identifier in ####-#### format.", example = "2025-4321")
             @PathVariable String universityId) {
         service.deleteUserByUniversityId(universityId);
         return ResponseEntity.ok(new ApiResponse<>(true, "User deleted successfully"));

@@ -20,6 +20,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.util.Optional;
 
@@ -101,6 +105,28 @@ class UserServiceTest {
         assertEquals("new@example.com", result.getEmail());
         verify(repository).existsByEmailIgnoreCase("new@example.com");
         verify(repository, never()).save(any(User.class));
+    }
+
+    /** Verifies the public user fields remain sortable through pagination. */
+    @Test
+    void getAllUsers_withAllowedSortField_shouldReturnPage() {
+        Pageable pageable = PageRequest.of(0, 12, Sort.by("firstName"));
+        when(repository.findAll(pageable)).thenReturn(Page.empty());
+
+        Page<UserResponseDTO> result = userService.getAllUsers(pageable);
+
+        assertTrue(result.isEmpty());
+        verify(repository).findAll(pageable);
+    }
+
+    /** Verifies unsupported persistence properties are rejected before querying. */
+    @Test
+    void getAllUsers_withUnsupportedSortField_shouldReject() {
+        Pageable pageable = PageRequest.of(0, 12, Sort.by("password"));
+
+        assertThrows(IllegalArgumentException.class, () -> userService.getAllUsers(pageable));
+
+        verifyNoInteractions(repository);
     }
 
     /** Verifies omitted fields remain unchanged during a partial update. */

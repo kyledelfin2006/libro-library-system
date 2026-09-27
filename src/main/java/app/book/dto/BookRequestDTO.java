@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
+@Schema(description = "Complete book data used when creating or replacing a book. All fields are required.")
 public class BookRequestDTO {
 
     // @NotBlank ensures the client doesn't pass a null value, or empty strings
@@ -38,6 +39,6 @@ public class BookRequestDTO {
     // Added @NotNull to ensure the client doesn't pass a null price
     @NotNull(message = "Price is required")
     @Positive(message = "Price must be greater than 0")
-    @Schema(description = "Positive book price in the system currency.", example = "19.99", minimum = "0.01")
+    @Schema(description = "Positive decimal price for the book.", example = "19.99")
     private BigDecimal price;
 }

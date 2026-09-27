@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Configuration;
                 title = "Libro Library API",
                 version = "1.0.0",
                 description = "Book collection and user account API for the Libro library management system prototype. "
-                        + "Book and user routes are live; loan routes are not implemented.",
+                        + "Book and user routes are live; loan routes are not implemented. All routes currently permit unauthenticated access and are intended for trusted development use.",
                 license = @License(name = "Project-specific prototype; no distribution license declared")
         )
 )

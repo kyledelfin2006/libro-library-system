@@ -75,7 +75,7 @@ Unit tests verify that invalid entities are rejected before repository persisten
 
 ### What went wrong
 
-PUT and PATCH reuse `BookRequestDTO`, but they do not mean the same thing. If I applied full validation to PATCH, a request such as `{"price": 15.99}` would fail because omitted title, author, and genre values arrive as `null`. If I used PATCH's skip logic for PUT, a `null` field could be silently ignored and an old value would remain during what should have been a complete replacement.
+At the time, PUT and PATCH reused `BookRequestDTO`, but they did not mean the same thing. Applying full validation to PATCH would reject a request such as `{"price": 15.99}` because omitted title, author, and genre values arrive as `null`. Applying PATCH's skip logic to PUT could silently keep an old value during what should be a complete replacement. The API now uses a dedicated `BookPatchRequestDTO` so the request schema also shows PATCH fields as optional.
 
 ### Effect
 

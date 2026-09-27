@@ -38,6 +38,10 @@ import java.util.Set;
 @AllArgsConstructor
 public class UserService {
 
+    private static final Set<String> SORTABLE_USER_FIELDS = Set.of(
+            "universityId", "firstName", "lastName", "middleInitial", "email", "userRole", "userCourse", "major"
+    );
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserMapper userMapper;
@@ -388,6 +392,10 @@ public class UserService {
         // Guard service callers that bypass controller parameter binding.
         if (pageable == null) {
             throw new IllegalArgumentException("Pageable cannot be null");
+        }
+
+        if (pageable.getSort().stream().anyMatch(order -> !SORTABLE_USER_FIELDS.contains(order.getProperty()))) {
+            throw new IllegalArgumentException("Unsupported user sort field. Allowed fields: universityId, firstName, lastName, middleInitial, email, userRole, userCourse, major");
         }
 
         // Keep page metadata while mapping entities to public response DTOs.

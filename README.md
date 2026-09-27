@@ -15,7 +15,7 @@ The institutional context behind the user domain is documented in [Institutional
 
 The current domain decision is documented in [Domain Decisions](docs/domain-decisions.md): each `Book` represents one physical borrowable copy, so one copy can be assigned to only one active borrower at a time. Separate copies of the same title are separate records.
 
-The API exposes generated OpenAPI documentation through Springdoc. Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running. Swagger UI is intended to serve as the interactive API reference and portfolio demonstration. See the [API Documentation Guideline](docs/api-documentation-guideline.md) for how to keep book and user endpoint contracts complete without bloating controller code.
+The API exposes generated OpenAPI documentation through Springdoc. Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running. Operation descriptions and DTO schemas document book and user behavior for Swagger's interactive API reference. See the [API Documentation Guideline](docs/api-documentation-guideline.md) for the project standard. User endpoints currently permit unauthenticated access and are for development use only.
 
 Main Developer: **Aldrin Kyle Delfin**
 
@@ -139,6 +139,7 @@ src/main/java/app/
       Book.java
     dto/
       BookRequestDTO.java
+      BookPatchRequestDTO.java
       BookResponseDTO.java
       LibraryStatisticsDTO.java
     mapper/
@@ -214,7 +215,7 @@ The application never exposes `Book` (or future entity) objects directly to clie
 
 - **Never** instantiate an entity directly from client input.
 - **Never** return an entity directly in a controller response.
-- Controllers always accept `BookRequestDTO` and return `BookResponseDTO` (or other DTOs).
+- Controllers accept request DTOs (`BookRequestDTO` for create/PUT and `BookPatchRequestDTO` for PATCH) and return response DTOs.
 - `BookMapper` is the sole conversion point between entities and DTOs.
 
 ### Why This Matters
@@ -229,7 +230,7 @@ The application never exposes `Book` (or future entity) objects directly to clie
    Response DTOs explicitly choose which fields are exposed. Sensitive or internal fields never appear in JSON unless intentionally added to the response DTO.
 
 4. **Enforces request validation at the boundary**
-   `BookRequestDTO` carries Jakarta Validation annotations (`@NotBlank`, `@Size`, `@NotNull`, `@Positive`). `@Valid` in the controller triggers these constraints before any business logic runs, ensuring only valid data reaches the service layer.
+   `BookRequestDTO` carries Jakarta Validation annotations (`@NotBlank`, `@Size`, `@NotNull`, `@Positive`). `@Valid` triggers them for create and PUT. PATCH uses a separate optional `BookPatchRequestDTO`; service logic validates supplied values without marking omitted fields as required in OpenAPI.
 
 5. **Allows response customization**
    Response DTOs can reshape, rename, compute, or omit fields without changing the entity. For example, `LibraryStatisticsDTO` aggregates data from multiple repository calls into a single read-only snapshot.
@@ -257,7 +258,7 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 - Statistics endpoints for total books, total library value, average price, and the most expensive book.
 - Genre distribution endpoint.
 - User-domain API for account creation, profile lookup and updates, password changes, and deletion; the service applies duplicate checks, academic business rules, and BCrypt password hashing.
-- OpenAPI 3 documentation through Springdoc Swagger UI and `/v3/api-docs`.
+- OpenAPI 3 documentation through Springdoc Swagger UI and `/v3/api-docs`, with operation-specific behavior, DTO schemas, and expected error responses.
 - Validation with `@Valid` on create and replace requests.
 - Global handling for `BookNotFoundException`, validation errors, malformed JSON, number format errors, database issues, and unsupported methods.
 - Validation errors also include a `fieldErrors` map keyed by request field (or `_global` when no field is available), so clients can render precise messages without parsing the combined `details` string.
@@ -277,7 +278,7 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 
 ### Update flow (`PATCH /app/books/{id}`)
 
-1. The controller passes the incoming DTO to `BookService.patchBook()`.
+1. The controller passes `BookPatchRequestDTO` to `BookService.patchBook()`.
 2. The service loads the managed `Book` entity via `findBookById()`.
 3. Field changes are applied conditionally to the managed entity.
 4. Hibernate dirty checking detects the modifications.
@@ -305,52 +306,16 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 }
 ```
 
-### Partial Updates: PUT vs PATCH Design
+### Partial Updates: PUT vs PATCH
 
-The API deliberately distinguishes **full replacement (PUT)** from **partial updates (PATCH)** through a validation strategy that prevents the two most common mistakes in REST partial-update implementations.
+Separate request types make the OpenAPI schema match each contract:
 
-#### Architectural Decision
+| PUT (replacement) | PATCH (partial update) |
+| --- | --- |
+| `BookRequestDTO`; every field is required and validated. | `BookPatchRequestDTO`; every field is optional. Omitted/null fields and blank text values are ignored. |
+| Replaces all mutable fields. | Changes only supplied fields; a supplied price must be positive. |
 
-`BookRequestDTO` is reused for both PUT and PATCH. The distinction between "replace everything" and "change only what's sent" is expressed through where validation is applied:
-
-| Dimension | `PUT /app/books/{id}` (replace) | `PATCH /app/books/{id}` (partial) |
-|---|---|---|
-| Controller annotation | `@Valid @RequestBody BookRequestDTO` | `@RequestBody BookRequestDTO` (no `@Valid`) |
-| Omitted fields | Rejected — all `@NotBlank`/`@NotNull` constraints fire | Skipped — `null` means "leave unchanged" |
-| Empty strings | Rejected — `@NotBlank` fails on `""` | Skipped — `hasText()` treats `""` as absent |
-| Price `null` | Rejected — `@NotNull` fails | Skipped — only validated when non-null |
-| Price ≤ 0 | Rejected — `@Valid` + `@Positive` | Rejected — manual `compareTo` check in service |
-| Validation layer | DTO annotations (primary) + service guards (defense-in-depth) | Service-level field-by-field conditional logic |
-
-#### Problems Solved
-
-1. **Applying PUT rules to PATCH breaks partial updates entirely.** If `@Valid` were on the PATCH endpoint, sending `{"price": 15.99}` would fail because `title`, `author`, and `genre` arrive as `null` and violate `@NotBlank`. The request is semantically correct for a partial update, but annotation validation rejects it. The solution is omitting `@Valid` on PATCH so null fields pass through unvalidated, then validating only the fields that are actually present.
-
-2. **Applying PATCH rules to PUT allows silent data corruption.** If PUT used the same `hasText()` skip pattern (`if (hasText(dto.getTitle())) { existing.setTitle(dto.getTitle()); }`), a client could PUT `{"title": null, "author": "Orwell", "genre": "Drama", "price": 10.00}` and the `null` title would be silently ignored, leaving the old title in place. This violates the "complete replacement" contract of PUT. The solution is applying `@Valid` on PUT so every field is required and validated, plus redundant service-level checks as defense-in-depth for non-HTTP callers.
-
-3. **Empty strings vs. null are both treated as "no update" on PATCH.** The `hasText()` helper (`s != null && !s.trim().isEmpty()`) ensures `"title": ""` and `"title": "   "` are treated identically to `"title": null` during a partial update. This prevents clients from accidentally blanking a field with an empty string, which would otherwise overwrite valid persisted data with an empty value. On PUT, both cases are rejected by `@NotBlank`.
-
-#### Dirty-Checking Optimization
-
-Neither `patchBook` nor `replaceBook` calls `repository.save()` on the fetched entity. Both are `@Transactional`, so the persistence context keeps the entity managed, and Hibernate's dirty checker automatically detects field changes and flushes the required SQL `UPDATE` at commit. This avoids an unnecessary explicit save call and prevents accidental overwrites of the `createdAt` timestamp.
-
-```java
-@Transactional
-public Book patchBook(Long id, BookRequestDTO updates) {
-    Book existingBook = findBookById(id);
-    if (hasText(updates.getTitle())) {
-        existingBook.setTitle(updates.getTitle().trim());
-    }
-    if (updates.getPrice() != null) {
-        if (updates.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BookValidationException("Price must be greater than 0");
-        }
-        existingBook.setPrice(updates.getPrice());
-    }
-    return existingBook;
-}
-```
-
+Both service operations update a managed entity inside a transaction; Hibernate dirty checking persists the change.
 ### Centralized API errors
 
 ```java
@@ -433,7 +398,7 @@ Docker is the preferred way to run the project because it brings up both Postgre
     ```bash
     docker compose up --build
     ```
-4. Open the [OpenAPI documentation (Swagger UI)](http://localhost:8080/swagger-ui.html) to explore and try the API endpoints. The raw OpenAPI specification is available at [`http://localhost:8080/v3/api-docs`](http://localhost:8080/v3/api-docs).
+4. Open [Swagger UI](http://localhost:8080/swagger-ui.html) to explore and try the API endpoints. The raw OpenAPI specification is available at [`http://localhost:8080/v3/api-docs`](http://localhost:8080/v3/api-docs). Swagger UI is an interactive API reference; it does not deploy the service. All API routes currently permit unauthenticated access and are intended for trusted development use only.
 
 ### Local development
 
@@ -488,7 +453,7 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 - The app uses JPA and Hibernate for entity persistence with `ddl-auto=validate`.
 - `Book.createdAt` maps to `books.created_at` and is set automatically on insert. It is intentionally omitted from `BookResponseDTO`, so clients do not receive it and cannot provide it through create, patch, or replace requests.
 - Updates rely on Hibernate dirty checking inside transactional service methods.
-- `BookRequestDTO` is used for request validation, while `BookResponseDTO` and `LibraryStatisticsDTO` are used for response shaping.
+- `BookRequestDTO` validates create and replacement requests; `BookPatchRequestDTO` describes optional PATCH fields. `BookResponseDTO` and `LibraryStatisticsDTO` shape book responses.
 - `BookMapper` centralizes conversion between entities and DTOs.
 - `UserService` normalizes identity values, checks duplicates, enforces academic rules, validates create requests with Jakarta Validator, bounds passwords to 8–72 characters before BCrypt processing, and persists only BCrypt-hashed passwords.
 - `UserMapper` keeps password fields out of `UserResponseDTO`.
@@ -558,7 +523,7 @@ The detailed, interview-ready account of the development problems I identified a
 
 ## Upcoming Improvements
 
-- Apply the [API Documentation Guideline](docs/api-documentation-guideline.md) to every book and user operation, then inspect the generated OpenAPI document and Swagger UI for accurate request/response schemas, behavior, statuses, errors, and examples.
+- Inspect the generated OpenAPI document and Swagger UI with the application and database running; verify parameter defaults, request/response schemas, statuses, errors, and examples against the implementation.
 - Learn Spring Security's filter chain, authentication, `UserDetailsService`, and `SecurityContext`, then choose an institutional SSO, session, or token-based authentication model.
 - Implement and test endpoint-specific authorization before exposing user endpoints; the current `permitAll()` configuration leaves every route public.
 - Add repository and MVC controller coverage for the user domain; implement endpoint authorization and safe role assignment before deployment.

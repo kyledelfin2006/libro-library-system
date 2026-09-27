@@ -3,6 +3,7 @@ package app.user.dto;
 import app.user.entity.enums.UserCourse;
 import app.user.entity.enums.UserITMajor;
 import app.user.entity.enums.UserRole;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -10,8 +11,10 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(description = "Public user profile. Passwords and password hashes are never included.")
 public class UserResponseDTO {
 
+    @Schema(description = "University identifier in ####-#### format.", example = "2025-4321")
     private String universityId;
 
     private String firstName;
@@ -24,9 +27,9 @@ public class UserResponseDTO {
 
     private UserRole userRole;
 
-    // Applies only to students
+    @Schema(description = "Present for student accounts.")
     private UserCourse userCourse;
 
-    // Applies only to I.T students
+    @Schema(description = "Present only for IT student accounts.")
     private UserITMajor major;
 }

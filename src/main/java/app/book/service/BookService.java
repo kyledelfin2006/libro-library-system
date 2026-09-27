@@ -6,6 +6,7 @@ import app.book.exceptions.BookNotFoundException;
 import app.book.exceptions.BookValidationException;
 import app.book.entity.Book;
 import app.book.dto.BookRequestDTO;
+import app.book.dto.BookPatchRequestDTO;
 import app.book.mapper.BookMapper;
 import app.book.repository.BookRepository;
 import app.book.repository.projection.GenreCount;
@@ -45,6 +46,8 @@ import java.util.stream.Collectors;
 @Service
 public class BookService {
 
+    private static final Set<String> SORTABLE_BOOK_FIELDS = Set.of("id", "title", "author", "genre", "price");
+
     /**
      *  repository the data access object for book entities
      *  mapper the component for converting between DTOs and entities
@@ -61,6 +64,9 @@ public class BookService {
      * @return a page of books matching the given pageable parameters
      */
     public Page<Book> getBooks(Pageable pageable) {
+        if (pageable.getSort().stream().anyMatch(order -> !SORTABLE_BOOK_FIELDS.contains(order.getProperty()))) {
+            throw new IllegalArgumentException("Unsupported book sort field. Allowed fields: id, title, author, genre, price");
+        }
         return repository.findAll(pageable);
     }
 
@@ -141,7 +147,7 @@ public class BookService {
      */
     // Partial updates
     @Transactional
-    public Book patchBook(Long id, BookRequestDTO updates) {
+    public Book patchBook(Long id, BookPatchRequestDTO updates) {
 
         if (updates == null) {
             throw new BookValidationException("Book update data must not be null");
@@ -151,20 +157,20 @@ public class BookService {
         Book existingBook = findBookById(id);
 
         // 2. Only set new value if update is available
-        if (hasText(updates.getTitle())) {
-            existingBook.setTitle(updates.getTitle().trim());
+        if (hasText(updates.title())) {
+            existingBook.setTitle(updates.title().trim());
         }
-        if (hasText(updates.getAuthor())) {
-            existingBook.setAuthor(updates.getAuthor().trim());
+        if (hasText(updates.author())) {
+            existingBook.setAuthor(updates.author().trim());
         }
-        if (hasText(updates.getGenre())) {
-            existingBook.setGenre(updates.getGenre().trim());
+        if (hasText(updates.genre())) {
+            existingBook.setGenre(updates.genre().trim());
         }
-        if (updates.getPrice() != null) {
-            if (updates.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+        if (updates.price() != null) {
+            if (updates.price().compareTo(BigDecimal.ZERO) <= 0) {
                 throw new BookValidationException("Price must be greater than 0");
             }
-            existingBook.setPrice(updates.getPrice());
+            existingBook.setPrice(updates.price());
         }
 
         validateEntity(existingBook);
@@ -341,10 +347,8 @@ public class BookService {
         String fieldName = field.trim().toLowerCase();
 
         // Validate allowed fields to avoid SQL injection through Sort.by()
-        Set<String> allowedFields = Set.of("title", "author", "id", "price", "genre");
-
         // If not allowed throw exception
-        if (!allowedFields.contains(fieldName)) {
+        if (!SORTABLE_BOOK_FIELDS.contains(fieldName)) {
             throw new IllegalArgumentException("Invalid sort field: " + field);
         }
 

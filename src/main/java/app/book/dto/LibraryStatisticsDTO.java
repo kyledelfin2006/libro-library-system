@@ -14,7 +14,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 public record LibraryStatisticsDTO(
         @Schema(description = "Number of books in the collection.", example = "6") long totalBooks,
-        @Schema(description = "Sum of all book prices.", example = "123.45") BigDecimal totalValue,
+        @Schema(description = "Sum of all stored decimal book prices.", example = "123.45") BigDecimal totalValue,
         @Schema(description = "Most expensive book, or null when the collection is empty.") BookResponseDTO mostExpensiveBook
 ) {
 }

@@ -6,6 +6,7 @@ import app.book.mapper.BookMapper;
 import app.book.service.BookService;
 import app.book.entity.Book;
 import app.book.dto.BookRequestDTO;
+import app.book.dto.BookPatchRequestDTO;
 import app.book.repository.BookRepository;
 import app.book.repository.projection.GenreCount;
 import app.book.repository.projection.LibraryAggregate;
@@ -181,7 +182,7 @@ class BookServiceTest {
         when(repository.findById(BOOK_ID)).thenReturn(Optional.of(existing));
 
         // Update only title and price
-        BookRequestDTO updates = new BookRequestDTO("New Title", null, null, new BigDecimal("30.0"));
+        BookPatchRequestDTO updates = new BookPatchRequestDTO("New Title", null, null, new BigDecimal("30.0"));
 
         Book result = bookService.patchBook(BOOK_ID, updates);
 
@@ -200,7 +201,7 @@ class BookServiceTest {
         existing.setId(BOOK_ID);
         when(repository.findById(BOOK_ID)).thenReturn(Optional.of(existing));
 
-        BookRequestDTO updates = new BookRequestDTO(null, "New Author", null, null);
+        BookPatchRequestDTO updates = new BookPatchRequestDTO(null, "New Author", null, null);
 
         Book result = bookService.patchBook(BOOK_ID, updates);
 
@@ -218,7 +219,7 @@ class BookServiceTest {
         existing.setId(BOOK_ID);
         when(repository.findById(BOOK_ID)).thenReturn(Optional.of(existing));
 
-        BookRequestDTO updates = new BookRequestDTO(null, null, "New Genre", null);
+        BookPatchRequestDTO updates = new BookPatchRequestDTO(null, null, "New Genre", null);
 
         Book result = bookService.patchBook(BOOK_ID, updates);
 
@@ -237,7 +238,7 @@ class BookServiceTest {
         when(repository.findById(BOOK_ID)).thenReturn(Optional.of(existing));
 
         // Blank strings should be treated as no update
-        BookRequestDTO updates = new BookRequestDTO("   ", "", "  ", null);
+        BookPatchRequestDTO updates = new BookPatchRequestDTO("   ", "", "  ", null);
 
         Book result = bookService.patchBook(BOOK_ID, updates);
 
@@ -255,7 +256,7 @@ class BookServiceTest {
         existing.setId(BOOK_ID);
         when(repository.findById(BOOK_ID)).thenReturn(Optional.of(existing));
 
-        BookRequestDTO updates = new BookRequestDTO("New Title", null, null, null);
+        BookPatchRequestDTO updates = new BookPatchRequestDTO("New Title", null, null, null);
 
         Book result = bookService.patchBook(BOOK_ID, updates);
 
@@ -268,7 +269,7 @@ class BookServiceTest {
     @Test
     void patchBook_whenPriceIsZeroOrNegative_shouldThrowBookValidationException() {
         when(repository.findById(BOOK_ID)).thenReturn(Optional.of(sampleBook));
-        BookRequestDTO updates = new BookRequestDTO(null, null, null, new BigDecimal("-5.0"));
+        BookPatchRequestDTO updates = new BookPatchRequestDTO(null, null, null, new BigDecimal("-5.0"));
 
         assertThrows(BookValidationException.class, () -> bookService.patchBook(BOOK_ID, updates));
         verify(repository, never()).save(any());
@@ -278,7 +279,7 @@ class BookServiceTest {
     @Test
     void patchBook_whenPriceIsExactlyZero_shouldThrowBookValidationException() {
         when(repository.findById(BOOK_ID)).thenReturn(Optional.of(sampleBook));
-        BookRequestDTO updates = new BookRequestDTO(null, null, null, BigDecimal.ZERO);
+        BookPatchRequestDTO updates = new BookPatchRequestDTO(null, null, null, BigDecimal.ZERO);
 
         assertThrows(BookValidationException.class, () -> bookService.patchBook(BOOK_ID, updates));
         verify(repository, never()).save(any());
@@ -288,7 +289,7 @@ class BookServiceTest {
     @Test
     void patchBook_whenBookNotFound_shouldThrowBookNotFoundException() {
         when(repository.findById(BOOK_ID)).thenReturn(Optional.empty());
-        BookRequestDTO updates = new BookRequestDTO("New", null, null, new BigDecimal("20.0"));
+        BookPatchRequestDTO updates = new BookPatchRequestDTO("New", null, null, new BigDecimal("20.0"));
 
         assertThrows(BookNotFoundException.class, () -> bookService.patchBook(BOOK_ID, updates));
         verify(repository, never()).save(any());
