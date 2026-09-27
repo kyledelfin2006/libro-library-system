@@ -3,6 +3,7 @@ package app.global.exceptions;
 import app.book.exceptions.BookNotFoundException;
 import app.book.exceptions.BookValidationException;
 import app.global.responses.ErrorResponse;
+import app.user.exception.UserNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -303,6 +304,18 @@ public class GlobalExceptionHandler {
                 ex.getValue(), ex.getName());
         ErrorResponse error = new ErrorResponse("Invalid parameter", message, 400);
         return ResponseEntity.badRequest().body(error);
+    }
+
+    /**
+     * Handles when users are not found when queried or asked for.
+     *
+     * @param ex the message exception thrown
+     * @return HTTP 404 not found indicating the unknown user
+     * */
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleUserNotFound(UserNotFoundException ex) {
+        ErrorResponse error = new ErrorResponse("User not found", ex.getMessage(), 404);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
     /**
