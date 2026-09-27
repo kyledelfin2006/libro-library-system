@@ -62,10 +62,12 @@ library-api-system/
     |   |   |   `-- service/BookService.java
     |   |   |-- user/
     |   |   |   |-- config/PasswordConfig.java
+    |   |   |   |-- controller/UserAPI.java
     |   |   |   |-- dto/
     |   |   |   |   |-- ChangePasswordDTO.java
     |   |   |   |   |-- UserCreateRequestDTO.java
     |   |   |   |   |-- UserCreateUpdateDTO.java
+    |   |   |   |   |-- UserReplaceRequest.java
     |   |   |   |   `-- UserResponseDTO.java
     |   |   |   |-- entity/User.java
     |   |   |   |-- entity/enums/
@@ -192,7 +194,7 @@ The count-and-total-value aggregate uses the typed `LibraryAggregate` constructo
 
 The user feature currently contains the entity, enums, create/response DTOs, mapper, repository, BCrypt `PasswordEncoder` bean, and `UserService`. `UserService` normalizes university IDs and email addresses, rejects duplicates, validates password complexity, hashes passwords before persistence, and enforces the role/course/major rules. Passwords must be at least eight characters and include uppercase and lowercase letters, a number, and a symbol. The enum and V2 database checks define the allowed academic values; the service enforces their cross-field relationships.
 
-There is no `UserController`, `UserDetailsService`, loan feature, or user-domain integration test class yet. `UserService` injects Jakarta `Validator`, validates create and password-change requests, and exposes transactional update operations that normalize supplied fields, protect email uniqueness, verify current passwords, and store only encoded password hashes.
+`UserAPI` currently exists as an empty placeholder; there are no implemented user routes. There is no `UserDetailsService`, loan feature, or user-domain integration test class yet. `UserReplaceRequest` defines full profile-replacement fields, but is not currently exposed through an HTTP endpoint. `UserService` injects Jakarta `Validator`, validates create and password-change requests, and exposes transactional update operations that normalize supplied fields, protect email uniqueness, verify current passwords, and store only encoded password hashes.
 
 ### Entity and database model
 
@@ -543,7 +545,7 @@ When a breaking change is intended, document migration guidance and update all e
 - H2 is declared but has no dedicated application profile or integration-test setup.
 - The Docker image requires a prebuilt JAR and does not build source itself.
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
-- User and loan HTTP APIs are incomplete: there is no `UserController`, no loan feature, and no authentication flow.
+- User and loan HTTP APIs are incomplete: `UserAPI` is an empty placeholder, there is no loan feature, and no authentication flow.
 - User service behavior has unit coverage, but repository and user-controller behavior do not yet have dedicated tests.
 - Test coverage is predominantly unit-level; HTTP, JPA, migration, security, and container paths lack automated integration coverage.
 - Success response shapes are inconsistent across endpoints.
