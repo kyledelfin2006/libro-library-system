@@ -120,6 +120,7 @@ public class UserService {
             String universityId,
             UserReplaceRequest request
     ) {
+        // A full profile replacement requires a request body.
         if (request == null) {
             throw new IllegalArgumentException("User profile cannot be null");
         }
@@ -128,11 +129,14 @@ public class UserService {
         String normalizedUniversityId =
                 normalizeAndValidateUniversityId(universityId);
 
+        // Load the managed entity so Hibernate can track field changes.
         User user = userRepository.findByUniversityId(normalizedUniversityId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
+        // Require all profile fields and enforce their DTO constraints.
         validateRequest(request);
 
+        // Trim names and normalize the email before storing them.
         String firstName = request.getFirstName().trim();
         String lastName = request.getLastName().trim();
         String middleInitial = request.getMiddleInitial() == null
@@ -140,19 +144,23 @@ public class UserService {
                 : request.getMiddleInitial().trim();
         String email = normalizeAndValidateEmail(request.getEmail());
 
+        // Treat a blank middle initial as absent in the profile.
         if (middleInitial != null && middleInitial.isBlank()) {
             middleInitial = null;
         }
 
+        // An unchanged email is valid; a different email must be unique.
         if (!email.equals(user.getEmail())
                 && userRepository.existsByEmailIgnoreCase(email)) {
             throw new IllegalArgumentException("Email is already registered");
         }
 
+        // Replace only profile fields; university ID and account fields stay fixed.
         user.setFirstName(firstName);
         user.setLastName(lastName);
         user.setMiddleInitial(middleInitial);
         user.setEmail(email);
+        // Return the public DTO and let transaction commit persist dirty changes.
         return userMapper.toResponseDTO(user);
     }
 
@@ -333,6 +341,7 @@ public class UserService {
      * @return the normalized email, or {@code null}
      */
     private String normalizeEmail(String email) {
+        // Use a stable locale for lowercase conversion and preserve null input.
         return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
     }
 
@@ -376,10 +385,12 @@ public class UserService {
      * @throws IllegalArgumentException if pageable is null
      */
     public Page<UserResponseDTO> getAllUsers(Pageable pageable) {
+        // Guard service callers that bypass controller parameter binding.
         if (pageable == null) {
             throw new IllegalArgumentException("Pageable cannot be null");
         }
 
+        // Keep page metadata while mapping entities to public response DTOs.
         return userRepository.findAll(pageable)
                 .map(userMapper::toResponseDTO);
     }
@@ -393,11 +404,14 @@ public class UserService {
      * @throws IllegalArgumentException if the university ID format is invalid
      */
     public UserResponseDTO getUserByUniversityId(String universityId) {
+        // Normalize the lookup key before querying.
         String normalizedUniversityId = normalizeAndValidateUniversityId(universityId);
 
+        // Translate an absent record into a user-domain 404 exception.
         User user = userRepository.findByUniversityId(normalizedUniversityId)
                 .orElseThrow(() -> new UserNotFoundException(normalizedUniversityId));
 
+        // Keep the persistence entity inside the service boundary.
         return userMapper.toResponseDTO(user);
     }
 
@@ -410,12 +424,15 @@ public class UserService {
      */
     @Transactional
     public void deleteUserByUniversityId(String universityId) {
+        // Validate the key before logging or querying with it.
         String normalizedUniversityId = normalizeAndValidateUniversityId(universityId);
         log.debug("Attempting to delete user with university ID: {}", normalizedUniversityId);
 
+        // Check existence first so a missing user reports a clear not-found error.
         User user = userRepository.findByUniversityId(normalizedUniversityId)
                 .orElseThrow(() -> new UserNotFoundException(normalizedUniversityId));
 
+        // Delete the managed entity within this transaction.
         userRepository.delete(user);
     }
 
@@ -436,7 +453,7 @@ public class UserService {
             throw new IllegalArgumentException("University ID cannot be null or blank");
         }
 
-        // checks id if it follows the required pattern
+        // Enforce the expected four-digit, dash, four-digit format.
         if (!normalizedUniversityId.matches("\\d{4}-\\d{4}")) {
             throw new IllegalArgumentException(
                     "University ID must follow this format: 2025-4321"
@@ -455,6 +472,7 @@ public class UserService {
      * @throws IllegalArgumentException if the role, course, and major combination is invalid
      */
     private void validateAcademicRules(UserCreateRequestDTO request) {
+        // Cache the fields used by the role/course/major rules.
         UserRole role = request.getUserRole();
         UserCourse course = request.getUserCourse();
 
@@ -463,6 +481,7 @@ public class UserService {
         }
 
         if (role == UserRole.FACULTY) {
+            // Faculty users cannot be assigned student academic details.
             if (course != null || request.getMajor() != null) {
                 throw new IllegalArgumentException(
                         "Faculty members cannot have a course or a major"
@@ -472,9 +491,11 @@ public class UserService {
         }
 
         if (course == null) {
+            // Students must belong to a course.
             throw new IllegalArgumentException("Students must have a course");
         }
 
+        // A major applies only to IT students, and IT students must choose one.
         if ((course == UserCourse.EMC || course == UserCourse.IS)
                 && request.getMajor() != null) {
             throw new IllegalArgumentException("Only IT students can have majors");
@@ -495,6 +516,7 @@ public class UserService {
      * @throws IllegalArgumentException if the email is blank
      */
     private String normalizeAndValidateEmail(String email) {
+        // Normalize before checking required-value rules.
         String normalizedEmail = normalizeEmail(email);
 
         // validates if null or blank
@@ -512,6 +534,7 @@ public class UserService {
      * @throws IllegalArgumentException if the value is null or blank
      */
     private void validateRequiredValue(String value, String fieldName) {
+        // Keep required-field checks active for internal service callers too.
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + " cannot be null or blank");
         }
