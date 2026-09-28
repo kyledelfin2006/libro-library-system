@@ -56,13 +56,14 @@ Main Developer: **Aldrin Kyle Delfin**
 
 ## Documentation
 
-The README is the central entry point for project documentation. Supporting reports belong in `docs/`, while files that rely on repository-root discovery remain at the root.
+This README is the project's main portfolio entry point. The development reflection is the featured supporting document; the other references explain the system's context, decisions, API contract, contributor practices, and remaining work.
 
-- [Development Problems Solved](docs/development-problems-solved.md) is a first-person development reflection covering the major bugs, effects, fixes, and verification decisions made while building the prototype.
-- [Institutional Context](docs/institutional-context.md) records the ASU-CCS academic model and the existing MIS assumptions that shaped the user domain.
-- [Domain Decisions](docs/domain-decisions.md) records the physical-copy interpretation of `Book` and its implications for future loans.
-- [API Documentation Guideline](docs/api-documentation-guideline.md) defines how to keep OpenAPI and Swagger UI useful and accurate without duplicating documentation throughout the codebase.
-- [Agent and Contributor Guide](AGENTS.md) documents the repository architecture, layer contracts, coding rules, testing expectations, and definition of done. It remains at the repository root so coding agents can discover it automatically.
+1. [Development Problems Solved](docs/development-problems-solved.md) is the portfolio reflection: it explains major problems, their impact, the fixes, and how the results were verified.
+2. [Institutional Context](docs/institutional-context.md) describes the ASU-CCS academic model and existing MIS assumptions behind the user domain.
+3. [Domain Decisions](docs/domain-decisions.md) explains why a `Book` represents one physical copy and what that means for future loan features.
+4. [API Documentation Guideline](docs/api-documentation-guideline.md) sets the standard for accurate OpenAPI and Swagger documentation without unnecessary annotation boilerplate.
+5. [Agent and Contributor Guide](AGENTS.md) records the architecture, layer contracts, coding rules, testing expectations, and definition of done. It stays at the repository root so coding agents can discover it automatically.
+6. [Development TODO](internal-docs/TODO.md) tracks completed user-domain work and remaining authentication, loan, testing, and documentation tasks. It is a working roadmap, not part of the public API contract.
 
 ## Architecture Overview
 
@@ -117,9 +118,12 @@ flowchart TD
 AGENTS.md
 README.md
 docs/
+  api-documentation-guideline.md
   development-problems-solved.md
   domain-decisions.md
   institutional-context.md
+internal-docs/
+  TODO.md
 
 src/main/java/app/
   LibraryApplication.java
