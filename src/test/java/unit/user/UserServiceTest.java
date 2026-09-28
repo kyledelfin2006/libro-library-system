@@ -1,4 +1,4 @@
-package unit;
+package unit.user;
 
 import app.user.dto.UserCreateUpdateDTO;
 import app.user.dto.UserResponseDTO;

@@ -92,14 +92,16 @@ library-api-system/
     |           |-- V1__create_books_table.sql
     |           `-- V2__create_users_table.sql
     `-- test/
-        |-- java/unit/
+        |-- java/unit/book/
         |   |-- BookApiMvcTest.java
         |   |-- BookMapperTest.java
         |   |-- BookServiceTest.java
-        |   |-- BookTest.java
-        |   |-- GlobalExceptionHandlerTest.java
+        |   `-- BookTest.java
+        |-- java/unit/user/
         |   `-- UserServiceTest.java
-        |-- java/integration/
+        |-- java/unit/global/
+        |   `-- GlobalExceptionHandlerTest.java
+        |-- java/integration/book/
         |   `-- BookPersistenceIT.java
         `-- resources/
             |-- junit-platform.properties
@@ -470,6 +472,8 @@ Central advice maps Java/application exceptions to stable HTTP errors, keeping e
 ## Testing Strategy
 
 Current coverage consists of:
+
+Test sources are grouped by scope and feature: book unit/MVC tests live in `src/test/java/unit/book`, user unit tests in `src/test/java/unit/user`, cross-domain unit tests in `src/test/java/unit/global`, and PostgreSQL-backed integration tests in `src/test/java/integration/book`. Keep new tests in the matching package so the filesystem and Java package names remain aligned.
 
 - `BookApiMvcTest`: 12 Spring Boot 4 MVC-slice tests for route/status contracts, JSON shapes, invalid request bodies, pagination and query binding, and global exception responses. It uses mocked service/mapper beans and does not start JPA, Flyway, or PostgreSQL.
 

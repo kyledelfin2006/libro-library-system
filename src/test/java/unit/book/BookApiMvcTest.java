@@ -1,4 +1,4 @@
-package unit;
+package unit.book;
 
 import app.LibraryApplication;
 import app.book.controller.BookAPI;

@@ -1,4 +1,4 @@
-package unit;
+package unit.global;
 
 import app.book.entity.Book;
 import app.book.exceptions.BookNotFoundException;

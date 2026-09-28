@@ -190,12 +190,18 @@ src/main/resources/
 
 src/test/java/
   unit/
-    BookApiMvcTest.java
-    BookMapperTest.java
-    BookTest.java
-    BookServiceTest.java
-    GlobalExceptionHandlerTest.java
-    UserServiceTest.java
+    book/
+      BookApiMvcTest.java
+      BookMapperTest.java
+      BookTest.java
+      BookServiceTest.java
+    user/
+      UserServiceTest.java
+    global/
+      GlobalExceptionHandlerTest.java
+  integration/
+    book/
+      BookPersistenceIT.java
 
 src/test/resources/
   junit-platform.properties
@@ -469,6 +475,8 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 
 The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The default suite provides fast book MVC-slice tests and unit coverage for book/user services, DTOs, mappings, projections, and exception handling. An opt-in PostgreSQL integration profile adds tests for Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, and a PostgreSQL constraint. User controller MVC coverage remains open; integration-test execution requires Docker.
 
+Tests are grouped by test scope and domain: `src/test/java/unit/book`, `src/test/java/unit/user`, and `src/test/java/unit/global`; PostgreSQL integration tests live in `src/test/java/integration/book`. Keep new tests with the domain they exercise. Put cross-domain unit tests under `unit/global`; place integration tests under the relevant domain even when they touch a shared schema concern.
+
 - `BookTest` verifies book construction and request DTO constraints.
 - `BookApiMvcTest` verifies routes, status codes, JSON response shapes, invalid request payloads, pagination/query binding, and global exception responses without starting JPA or PostgreSQL.
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.
@@ -505,6 +513,12 @@ Run only the global exception-handler tests:
 
 ```powershell
 mvn -Dtest=GlobalExceptionHandlerTest test
+```
+
+Run only book unit/MVC tests:
+
+```powershell
+mvn -Dtest=BookApiMvcTest,BookMapperTest,BookServiceTest,BookTest test
 ```
 
 Generate the JaCoCo report at `target/site/jacoco/index.html`:

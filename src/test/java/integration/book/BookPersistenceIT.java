@@ -1,4 +1,4 @@
-package integration;
+package integration.book;
 
 import app.book.dto.BookPatchRequestDTO;
 import app.book.dto.BookRequestDTO;

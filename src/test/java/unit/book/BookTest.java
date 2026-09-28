@@ -1,4 +1,4 @@
-package unit;
+package unit.book;
 
 import app.book.entity.Book;
 import app.book.dto.BookRequestDTO;

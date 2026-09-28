@@ -14,7 +14,7 @@ Test user routes at the MVC boundary with a mocked service, then verify the gene
 
 ### Implementation
 
-1. Add `UserApiMvcTest` under `src/test/java/unit` with `@WebMvcTest(UserAPI.class)`, mocked `UserService`, and the real `GlobalExceptionHandler`.
+1. Add `UserApiMvcTest` under `src/test/java/unit/user` with `@WebMvcTest(UserAPI.class)`, mocked `UserService`, and the real `GlobalExceptionHandler`.
 2. Cover create, paginated list, lookup, PATCH, PUT, password change, and delete: binding, status codes, response envelope versus direct DTO/Page shapes, validation errors, and 404/409 error bodies.
 3. Add OpenAPI verification to the PostgreSQL-backed integration run. Check that both tags and all live routes appear, that PATCH schemas are optional, password fields are write-only, and response/error schemas and pagination descriptions match the implementation.
 4. Perform one manual Swagger UI review against the guideline checklist after the app starts with the test database. Record only checks actually completed in the TODO and development docs.
