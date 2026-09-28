@@ -99,6 +99,8 @@ library-api-system/
         |   |-- BookTest.java
         |   |-- GlobalExceptionHandlerTest.java
         |   `-- UserServiceTest.java
+        |-- java/integration/
+        |   `-- BookPersistenceIT.java
         `-- resources/
             |-- junit-platform.properties
             `-- logback-test.xml
@@ -345,6 +347,10 @@ Compile-time annotation processing generates DTO/entity accessors, constructors,
 
 Provides the JUnit 5 test platform, Mockito, Spring testing utilities, AssertJ, and related test infrastructure. Current tests instantiate `BookService` with Mockito rather than starting a Spring application context.
 
+### PostgreSQL integration-test dependencies
+
+The opt-in `integration` Maven profile uses Testcontainers PostgreSQL and Spring Boot's `@ServiceConnection` support to test the real PostgreSQL 18 schema. Keep these dependencies test-scoped; ordinary unit tests do not need Docker. Testcontainers module versions are aligned through its imported BOM.
+
 ### Maven build plugins
 
 - `spring-boot-maven-plugin` repackages the artifact as an executable fat JAR.
@@ -396,6 +402,12 @@ mvn clean verify
 ```
 
 `test` runs the test suite. `verify` also generates JaCoCo output under `target/site/jacoco/`. Use `mvn clean package` to produce the JAR expected by the Dockerfile.
+
+Run the PostgreSQL integration suite when Docker is available:
+
+```powershell
+mvn -Pintegration verify
+```
 
 ### Docker workflow
 
@@ -461,14 +473,15 @@ Current coverage consists of:
 
 - `BookApiMvcTest`: 12 Spring Boot 4 MVC-slice tests for route/status contracts, JSON shapes, invalid request bodies, pagination and query binding, and global exception responses. It uses mocked service/mapper beans and does not start JPA, Flyway, or PostgreSQL.
 
-- `UserServiceTest`: 14 Mockito-based service unit tests for partial-update normalization, validation, password verification and encoding, password-length bounds, unchanged-email handling, duplicate-email rejection, missing-user handling, and dirty-checking expectations.
+- `UserServiceTest`: Mockito-based service unit tests for partial-update normalization, validation, password verification and encoding, password-length bounds, unchanged-email handling, duplicate-email rejection, missing-user handling, and dirty-checking expectations.
 
-- `BookServiceTest`: 50 Mockito-based service unit tests for CRUD rules, text normalization, entity-validation enforcement, price-range validation, dirty-checking expectations, search, sorting, pricing, typed statistics projections, genre distribution, and other aggregate behavior.
+- `BookServiceTest`: Mockito-based service unit tests for CRUD rules, text normalization, entity-validation enforcement, price-range validation, dirty-checking expectations, search, sorting, pricing, typed statistics projections, genre distribution, and other aggregate behavior.
 - `BookTest`: five entity-construction, lifecycle, and direct Jakarta Validator tests for request DTO and entity constraints.
 - `BookMapperTest`: four focused tests for entity-to-DTO mapping, null inputs, and list mapping.
 - `GlobalExceptionHandlerTest`: 14 direct unit tests for every exception handler, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
+- `BookPersistenceIT`: PostgreSQL 18 integration tests for Flyway migrations, Hibernate schema validation, repository queries and projections, service transaction dirty checking, and a database constraint. It runs only with `mvn -Pintegration verify` and requires Docker; successful runtime verification is still pending.
 
-The suite contains 101 tests. Its execution setup is deliberately small and optimized:
+The default unit/MVC suite last passed with 104 tests. Its execution setup is deliberately small and optimized:
 
 - `src/test/resources/junit-platform.properties` enables concurrent execution between test classes but keeps methods within each class on the same thread.
 - `BookServiceTest` uses `@TestInstance(PER_CLASS)` so its repository mock and `BookService` are constructed once. `@BeforeEach` resets the repository mock and rebuilds mutable book fixtures, preserving test isolation. The stateless `BookMapper` is real rather than mocked.
@@ -478,7 +491,7 @@ The suite contains 101 tests. Its execution setup is deliberately small and opti
 
 These choices keep the feedback loop small without deleting, merging, or weakening tests. Build times are environment-dependent; first-time Maven dependency downloads, Mockito/Byte Buddy agent startup, and machine resources may change the total.
 
-The exception-handler tests verify direct Java method behavior without loading Spring MVC. The tests do not currently prove controller routing, JSON serialization, security behavior, JPA query correctness, Flyway migration success, PostgreSQL compatibility, or transaction/dirty-checking behavior in a real persistence context. Mockito tests that verify no `save` call document intent but do not substitute for a JPA integration test.
+The exception-handler tests verify direct Java method behavior without loading Spring MVC. User controller routing and serialization, security behavior, and upgrade-path migration behavior still need dedicated coverage. The PostgreSQL integration profile provides real-database coverage when run with Docker; a passing unit/MVC suite alone does not prove those persistence behaviors.
 
 Choose test scope based on the change:
 

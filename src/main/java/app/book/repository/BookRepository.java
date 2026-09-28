@@ -16,6 +16,14 @@ import java.util.Optional;
 public interface BookRepository extends JpaRepository<Book, Long> {
 
     /**
+     * Performs a constant-time database reachability check without scanning the books table.
+     *
+     * @return {@code 1} when the database accepted the query
+     */
+    @Query(value = "SELECT 1", nativeQuery = true)
+    int pingDatabase();
+
+    /**
      * Finds all books whose title contains the given substring (case-insensitive).
      *
      * @param title the substring to search for in the title (non-null)

@@ -30,7 +30,7 @@ Main Developer: **Aldrin Kyle Delfin**
 | Containerization | Docker & Docker Compose |
 | Build Tool | Maven 3.x |
 | Code Generation | Lombok 1.18.46 |
-| Testing | JUnit 5, Mockito, JaCoCo |
+| Testing | JUnit 5, Mockito, Testcontainers, JaCoCo |
 | Serialization | Jackson (JSON) |
 | Validation | Jakarta Bean Validation |
 | Logging | SLF4J via Lombok `@Slf4j` |
@@ -62,8 +62,9 @@ This README is the project's main portfolio entry point. The development reflect
 2. [Institutional Context](docs/institutional-context.md) describes the ASU-CCS academic model and existing MIS assumptions behind the user domain.
 3. [Domain Decisions](docs/domain-decisions.md) explains why a `Book` represents one physical copy and what that means for future loan features.
 4. [API Documentation Guideline](docs/api-documentation-guideline.md) sets the standard for accurate OpenAPI and Swagger documentation without unnecessary annotation boilerplate.
-5. [Agent and Contributor Guide](AGENTS.md) records the architecture, layer contracts, coding rules, testing expectations, and definition of done. It stays at the repository root so coding agents can discover it automatically.
-6. [Development TODO](internal-docs/TODO.md) tracks completed user-domain work and remaining authentication, loan, testing, and documentation tasks. It is a working roadmap, not part of the public API contract.
+5. [Implementation Plan: Remaining Quality Improvements](docs/implementation-plan-quality-improvements.md) tracks the open API, scalability, documentation, and OpenAPI maintainability work.
+6. [Agent and Contributor Guide](AGENTS.md) records the architecture, layer contracts, coding rules, testing expectations, and definition of done. It stays at the repository root so coding agents can discover it automatically.
+7. [Development TODO](internal-docs/TODO.md) tracks completed user-domain work and remaining authentication, loan, testing, and documentation tasks. It is a working roadmap, not part of the public API contract.
 
 ## Architecture Overview
 
@@ -122,6 +123,7 @@ docs/
   development-problems-solved.md
   domain-decisions.md
   institutional-context.md
+  implementation-plan-quality-improvements.md
 internal-docs/
   TODO.md
 
@@ -461,11 +463,11 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 - `BookMapper` centralizes conversion between entities and DTOs.
 - `UserService` normalizes identity values, checks duplicates, enforces academic rules, validates create requests with Jakarta Validator, bounds passwords to 8–72 characters before BCrypt processing, and persists only BCrypt-hashed passwords.
 - `UserMapper` keeps password fields out of `UserResponseDTO`.
-- `UserAPI` delegates user operations to `UserService` and returns DTOs rather than entities. User API serialization and routing still need MVC integration coverage.
+- `UserAPI` delegates user operations to `UserService` and returns DTOs rather than entities. User API serialization and routing still need MVC-slice coverage.
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its existing suite includes fast MVC-slice coverage for the book HTTP contract plus unit coverage for the book and user service behavior, book entity and DTO, typed statistics and genre-distribution projections, mapper behavior, and global REST exception translation. User controller, JPA, Flyway, and PostgreSQL integration tests are not yet present.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The default suite provides fast book MVC-slice tests and unit coverage for book/user services, DTOs, mappings, projections, and exception handling. An opt-in PostgreSQL integration profile adds tests for Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, and a PostgreSQL constraint. User controller MVC coverage remains open; integration-test execution requires Docker.
 
 - `BookTest` verifies book construction and request DTO constraints.
 - `BookApiMvcTest` verifies routes, status codes, JSON response shapes, invalid request payloads, pagination/query binding, and global exception responses without starting JPA or PostgreSQL.
@@ -473,6 +475,7 @@ The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, and JaCoCo. Its e
 - `BookServiceTest` verifies service rules, repository interaction, search, sorting, pricing, typed statistics projections, genre-distribution mapping, and dirty-checking expectations.
 - `GlobalExceptionHandlerTest` directly invokes each of the 14 exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
 - `UserServiceTest` verifies partial-update normalization, DTO and business validation, password verification and encoding, unchanged-email handling, duplicate-email rejection, and dirty-checking expectations. Academic combinations, duplicate checks during creation, and controller behavior still need coverage.
+- `BookPersistenceIT` runs only with the `integration` profile and Docker. It is designed to start PostgreSQL 18 through Testcontainers and check migrations/schema validation, PostgreSQL queries and projections, committed PATCH/PUT updates, and the user ID format constraint. Docker was unavailable during the latest attempted run.
 
 ### Unit-test performance
 
@@ -484,12 +487,18 @@ The suite is configured for fast, deterministic feedback:
 - `GlobalExceptionHandlerTest` uses one stateless handler and real Spring exception objects instead of unnecessary mocks.
 - `logback-test.xml` disables application logs during tests so expected exception scenarios do not spend time printing stack traces.
 
-The suite currently contains 101 tests. Build timings are environment-dependent; first-time dependency downloads, Mockito/Byte Buddy agent startup, and machine resources can change the total. Use `mvn test` for incremental feedback and `mvn clean verify` for the full verification lifecycle.
+The default unit/MVC suite last passed with 104 tests. Build timings are environment-dependent; first-time dependency downloads, Mockito/Byte Buddy agent startup, and machine resources can change the total. Use `mvn test` for incremental feedback and `mvn clean verify` for the default verification lifecycle.
 
 Run all unit tests:
 
 ```powershell
 mvn clean test
+```
+
+Run PostgreSQL integration tests (requires Docker):
+
+```powershell
+mvn -Pintegration verify
 ```
 
 Run only the global exception-handler tests:
@@ -532,7 +541,7 @@ The detailed, interview-ready account of the development problems I identified a
 - Implement and test endpoint-specific authorization before exposing user endpoints; the current `permitAll()` configuration leaves every route public.
 - Add repository and MVC controller coverage for the user domain; implement endpoint authorization and safe role assignment before deployment.
 - Implement the loan domain with active-loan constraints and overdue/history queries, using the authenticated identity for borrower operations; document its API when routes are added.
-- Add JPA, Flyway, and PostgreSQL integration tests alongside the existing unit and MVC-slice tests.
+- Run `mvn -Pintegration verify` on a Docker-enabled machine to execute the PostgreSQL integration tests; add them to CI when a CI workflow is introduced.
 - Expand search capabilities with more flexible filtering and sorting combinations.
 
 ## License

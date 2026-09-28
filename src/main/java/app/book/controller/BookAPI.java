@@ -57,7 +57,7 @@ public class BookAPI {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ApiResponse<Map<String, Boolean>>> healthCheck() {
-        Map<String, Boolean> status = Map.of("api", true, "database", service.getBookCount() >= 0);
+        Map<String, Boolean> status = Map.of("api", true, "database", service.isDatabaseReachable());
         return ResponseEntity.ok(new ApiResponse<>(true, "Health check", status));
     }
 

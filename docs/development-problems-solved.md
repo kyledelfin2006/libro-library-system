@@ -169,7 +169,21 @@ I kept the suite focused and explicit: shared the stateless Jakarta Validator wh
 
 ### Verification
 
-The current suite contains 99 passing tests, including 12 MVC-slice tests: 50 book-service tests, 14 user-service tests, 5 book-entity tests, 4 mapper tests, 14 global-exception-handler tests, and 12 `BookApiMvcTest` contract tests. `mvn test` is the normal fast check; `mvn clean verify` additionally produces the JaCoCo report. User-controller, JPA, Flyway, PostgreSQL, security, and container behavior remain candidates for further integration testing.
+At that milestone, the suite contained 99 passing tests, including 12 MVC-slice tests: 50 book-service tests, 14 user-service tests, 5 book-entity tests, 4 mapper tests, and 14 global-exception-handler tests. Since then, service coverage has grown and the current default suite last passed with 104 tests. `mvn test` is the normal fast check; `mvn clean verify` additionally produces the JaCoCo report. User-controller, security, and successful Docker-backed PostgreSQL execution remain open coverage areas.
+
+## 9. Persistence behavior needed a real PostgreSQL test boundary
+
+### What was missing
+
+The existing service tests mocked repositories, so they could not prove that the Flyway migrations matched PostgreSQL, that the typed JPQL projections executed correctly, or that transactional PATCH and PUT changes were flushed by Hibernate. H2 was present as a dependency but was not configured as a test database and would not verify PostgreSQL-specific constraints.
+
+### How I addressed it
+
+I added an opt-in Maven `integration` profile with Testcontainers 2.x and Spring Boot `@ServiceConnection`. `BookPersistenceIT` is configured to start the same PostgreSQL 18 image used by Docker Compose and exercise the real Flyway migrations, Hibernate schema validation, book searches and aggregate projections, managed PATCH/PUT updates, and the university ID database check. The existing unit/MVC test path remains independent of Docker.
+
+### Verification and remaining limit
+
+`mvn -Pintegration -DskipTests test-compile` succeeds. `mvn -Pintegration verify` runs the 104 default unit/MVC tests successfully, but Failsafe cannot start PostgreSQL because no Docker environment is available in this environment. The test suite is implemented, but its database assertions still need one successful run on a Docker-enabled machine. Use `mvn -Pintegration verify` for that run.
 
 ## What these problems taught me
 

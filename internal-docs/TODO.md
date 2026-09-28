@@ -88,7 +88,11 @@ credentials, or real user data.
 ## Verification and documentation
 
 - [x] Run `mvn test` after user-domain tests are added.
-- [ ] Add integration coverage for Flyway, JPA mappings, and PostgreSQL checks.
+- [x] Add an opt-in PostgreSQL 18 Testcontainers integration suite for Flyway,
+  JPA schema validation, repository queries/projections, service dirty checking,
+  and a database constraint (`mvn -Pintegration verify`).
+- [ ] Run `mvn -Pintegration verify` with Docker available and confirm the
+  PostgreSQL tests pass; the current environment has no Docker daemon.
 - [ ] Verify that V2 has not already been applied to a persistent database; if
   it has, create a forward-only V3 migration instead of editing V2.
 - [x] Apply [the API Documentation Guideline](../docs/api-documentation-guideline.md)

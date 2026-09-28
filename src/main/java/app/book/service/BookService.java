@@ -429,4 +429,13 @@ public class BookService {
     public Long getBookCount(){
         return repository.count();
     }
+
+    /**
+     * Checks database reachability without calculating the exact book count.
+     *
+     * @return {@code true} when the database responds to a lightweight query
+     */
+    public boolean isDatabaseReachable() {
+        return repository.pingDatabase() == 1;
+    }
 }
