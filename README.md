@@ -196,12 +196,17 @@ src/test/java/
       BookTest.java
       BookServiceTest.java
     user/
+      UserApiMvcTest.java
       UserServiceTest.java
     global/
       GlobalExceptionHandlerTest.java
+      OpenApiMvcTest.java
   integration/
+    PostgresTestConfig.java
     book/
       BookPersistenceIT.java
+    user/
+      UserPersistenceIT.java
 
 src/test/resources/
   junit-platform.properties
@@ -469,33 +474,37 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 - `BookMapper` centralizes conversion between entities and DTOs.
 - `UserService` normalizes identity values, checks duplicates, enforces academic rules, validates create requests with Jakarta Validator, bounds passwords to 8–72 characters before BCrypt processing, and persists only BCrypt-hashed passwords.
 - `UserMapper` keeps password fields out of `UserResponseDTO`.
-- `UserAPI` delegates user operations to `UserService` and returns DTOs rather than entities. User API serialization and routing still need MVC-slice coverage.
+- `UserAPI` delegates user operations to `UserService` and returns DTOs rather than entities. Its routing and serialization have MVC-slice coverage.
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The default suite provides fast book MVC-slice tests and unit coverage for book/user services, DTOs, mappings, projections, and exception handling. An opt-in PostgreSQL integration profile adds tests for Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, and a PostgreSQL constraint. User controller MVC coverage remains open; integration-test execution requires Docker.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The default Docker-free suite covers book and user MVC contracts, generated OpenAPI security-sensitive schemas, services, DTOs, mappings, and exception handling. The opt-in PostgreSQL profile checks Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, and database constraints. PostgreSQL integration execution requires Docker.
 
-Tests are grouped by test scope and domain: `src/test/java/unit/book`, `src/test/java/unit/user`, and `src/test/java/unit/global`; PostgreSQL integration tests live in `src/test/java/integration/book`. Keep new tests with the domain they exercise. Put cross-domain unit tests under `unit/global`; place integration tests under the relevant domain even when they touch a shared schema concern.
+Tests are grouped by test scope and domain: `src/test/java/unit/book`, `src/test/java/unit/user`, and `src/test/java/unit/global`; PostgreSQL integration tests live under `src/test/java/integration/book` and `src/test/java/integration/user`. Keep new tests with the domain they exercise. Shared PostgreSQL test configuration lives directly under `integration` so both integration classes use one Spring context and container.
 
 - `BookTest` verifies book construction and request DTO constraints.
 - `BookApiMvcTest` verifies routes, status codes, JSON response shapes, invalid request payloads, pagination/query binding, and global exception responses without starting JPA or PostgreSQL.
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.
 - `BookServiceTest` verifies service rules, repository interaction, search, sorting, pricing, typed statistics projections, genre-distribution mapping, and dirty-checking expectations.
-- `GlobalExceptionHandlerTest` directly invokes each of the 14 exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
-- `UserServiceTest` verifies partial-update normalization, DTO and business validation, password verification and encoding, unchanged-email handling, duplicate-email rejection, and dirty-checking expectations. Academic combinations, duplicate checks during creation, and controller behavior still need coverage.
-- `BookPersistenceIT` runs only with the `integration` profile and Docker. It is designed to start PostgreSQL 18 through Testcontainers and check migrations/schema validation, PostgreSQL queries and projections, committed PATCH/PUT updates, and the user ID format constraint. Docker was unavailable during the latest attempted run.
+- `UserApiMvcTest` verifies all user routes, request binding and validation, paging defaults, direct DTO versus envelope response shapes, 404/409 error responses, and that public responses do not expose password fields. It mocks `UserService` and does not start JPA or PostgreSQL.
+- `OpenApiMvcTest` generates `/v3/api-docs` in an MVC slice and checks representative routes, response codes, write-only password inputs, and absence of password fields in public responses without Docker.
+- `GlobalExceptionHandlerTest` directly invokes the exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
+- `UserServiceTest` verifies partial-update normalization, DTO and business validation, password verification and encoding, unchanged-email handling, duplicate-email rejection, and dirty-checking expectations. Academic combinations still need focused coverage; `UserPersistenceIT` covers selected real-database paths.
+- `BookPersistenceIT` runs only with the `integration` profile and Docker. It checks migrations/schema validation, PostgreSQL book queries and projections, and committed PATCH/PUT updates.
+- `UserPersistenceIT` checks normalized user creation, stored password hashes, committed profile/password changes, and PostgreSQL uniqueness and ID-format constraints. Both integration classes share a PostgreSQL 18 container and serialize access to it; their runtime verification still depends on a working Docker daemon.
 
 ### Unit-test performance
 
 The suite is configured for fast, deterministic feedback:
 
 - Test classes run concurrently through `junit-platform.properties`, while methods inside each class remain sequential to protect shared fixtures.
+- PostgreSQL integration classes use a shared JUnit resource lock so their shared container state cannot race across classes. Read-only schema checks do no cleanup; repository query fixtures roll back, and write tests clean up their rows.
 - `BookServiceTest` creates its repository mock and service once, resets the mock before each scenario, and uses the real stateless `BookMapper`.
 - `BookTest` creates one Jakarta `ValidatorFactory` for the class and closes it after all validation tests.
 - `GlobalExceptionHandlerTest` uses one stateless handler and real Spring exception objects instead of unnecessary mocks.
 - `logback-test.xml` disables application logs during tests so expected exception scenarios do not spend time printing stack traces.
 
-The default unit/MVC suite last passed with 104 tests. Build timings are environment-dependent; first-time dependency downloads, Mockito/Byte Buddy agent startup, and machine resources can change the total. Use `mvn test` for incremental feedback and `mvn clean verify` for the default verification lifecycle.
+Build timings are environment-dependent; first-time dependency downloads, Mockito/Byte Buddy agent startup, and machine resources can change the total. Use `mvn test` for incremental feedback and `mvn clean verify` for the default verification lifecycle. On this Windows/JDK 25 workspace, `mvn clean test -q` took about 27 seconds after these changes; the earlier incremental `mvn test -q` took about 30 seconds, so these runs do not establish a like-for-like speed improvement.
 
 Run all unit tests:
 
@@ -515,6 +524,12 @@ Run only the global exception-handler tests:
 mvn -Dtest=GlobalExceptionHandlerTest test
 ```
 
+Run only the user API MVC contract tests:
+
+```powershell
+mvn -Dtest=UserApiMvcTest test
+```
+
 Run only book unit/MVC tests:
 
 ```powershell
@@ -527,7 +542,7 @@ Generate the JaCoCo report at `target/site/jacoco/index.html`:
 mvn clean verify
 ```
 
-These are isolated unit tests. Controller routing and serialization, repository queries, Flyway migrations, PostgreSQL behavior, security rules, and real JPA transaction behavior still require integration-test coverage.
+The default suite includes plain unit tests and MVC slices. It proves HTTP binding and generated OpenAPI contracts, while real JPA transactions, Flyway migrations, and PostgreSQL constraints require the Docker-backed integration profile. Authentication and authorization behavior awaits the selected security model.
 
 Validation failures retain the `error`, `details`, `timestamp`, and `statusCode` fields and additionally return a structured map:
 

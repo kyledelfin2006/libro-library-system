@@ -10,7 +10,6 @@ import app.book.dto.BookPatchRequestDTO;
 import app.book.repository.BookRepository;
 import app.book.repository.projection.GenreCount;
 import app.book.repository.projection.LibraryAggregate;
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validation;
 import jakarta.validation.ValidatorFactory;
@@ -62,20 +61,11 @@ class BookServiceTest {
     /** Canonical valid create/replace request fixture reset before every test. */
     private BookRequestDTO sampleBookRequestDTO;
 
-    /** Stable identifier used by lookup, update, and delete scenarios. */
-    private final Long BOOK_ID = 1L;
-
-    /** Expected title shared by the canonical fixtures. */
-    private final String TITLE = "Effective Java";
-
-    /** Expected author shared by the canonical fixtures. */
-    private final String AUTHOR = "Joshua Bloch";
-
-    /** Expected genre shared by the canonical fixtures. */
-    private final String GENRE = "Programming";
-
-    /** Expected positive monetary value shared by the canonical fixtures. */
-    private final @Positive(message = "Price must be greater than 0") BigDecimal PRICE = new BigDecimal("45.0");
+    private static final Long BOOK_ID = 1L;
+    private static final String TITLE = "Effective Java";
+    private static final String AUTHOR = "Joshua Bloch";
+    private static final String GENRE = "Programming";
+    private static final BigDecimal PRICE = new BigDecimal("45.0");
 
     /** Resets mock behavior and rebuilds mutable fixtures before each isolated scenario. */
     @BeforeEach
@@ -307,7 +297,8 @@ class BookServiceTest {
         assertEquals("New Title", result.getTitle());
         assertEquals("New Author", result.getAuthor());
         assertEquals("New Genre", result.getGenre());
-        assertEquals(0, new BigDecimal("99.99").compareTo(result.getPrice()));}
+        assertEquals(0, new BigDecimal("99.99").compareTo(result.getPrice()));
+    }
 
     /** Verifies PUT normalization is consistent with POST and PATCH. */
     @Test

@@ -151,7 +151,7 @@ I then added a transactional partial-update path for user profile fields. It pre
 
 ### Verification
 
-`UserServiceTest` covers update normalization, validation, unchanged-email behavior, duplicate-email rejection, and dirty-checking expectations. At the time of this milestone, the controller and real authentication integration remained outside scope. `UserAPI` has since been added; dedicated user-controller tests and authentication integration are still pending.
+`UserServiceTest` covers update normalization, validation, unchanged-email behavior, duplicate-email rejection, and dirty-checking expectations. At the time of this milestone, the controller and real authentication integration remained outside scope. `UserAPI` has since been added, and the MVC contract tests are now in `src/test/java/unit/user/UserApiMvcTest.java`; authentication integration remains future work.
 
 ## 8. The test feedback loop was too easy to misunderstand
 
@@ -169,7 +169,7 @@ I kept the suite focused and explicit: shared the stateless Jakarta Validator wh
 
 ### Verification
 
-At that milestone, the suite contained 99 passing tests, including 12 MVC-slice tests: 50 book-service tests, 14 user-service tests, 5 book-entity tests, 4 mapper tests, and 14 global-exception-handler tests. Since then, service coverage has grown and the current default suite last passed with 104 tests. `mvn test` is the normal fast check; `mvn clean verify` additionally produces the JaCoCo report. User-controller, security, and successful Docker-backed PostgreSQL execution remain open coverage areas.
+At that historical milestone, the suite contained 99 passing tests. Test counts have since changed, so the repository README and contributor guide describe coverage by responsibility rather than maintaining a volatile total. `mvn test` is the normal fast check; `mvn clean verify` additionally produces the JaCoCo report. Security integration and a successful Docker-backed PostgreSQL run remain open verification areas.
 
 ## 9. Persistence behavior needed a real PostgreSQL test boundary
 
@@ -179,11 +179,27 @@ The existing service tests mocked repositories, so they could not prove that the
 
 ### How I addressed it
 
-I added an opt-in Maven `integration` profile with Testcontainers 2.x and Spring Boot `@ServiceConnection`. `BookPersistenceIT` is configured to start the same PostgreSQL 18 image used by Docker Compose and exercise the real Flyway migrations, Hibernate schema validation, book searches and aggregate projections, managed PATCH/PUT updates, and the university ID database check. The existing unit/MVC test path remains independent of Docker.
+I added an opt-in Maven `integration` profile with Testcontainers 2.x and Spring Boot `@ServiceConnection`. `BookPersistenceIT` is configured to exercise the real Flyway migrations, Hibernate schema validation, book searches and aggregate projections, and committed PATCH/PUT updates. `UserPersistenceIT` covers normalized creation, stored password hashes, committed profile/password changes, and PostgreSQL uniqueness and ID-format constraints. Both classes use one context-managed PostgreSQL 18 container and serialize database access. The existing unit/MVC path remains independent of Docker.
 
 ### Verification and remaining limit
 
-`mvn -Pintegration -DskipTests test-compile` succeeds. `mvn -Pintegration verify` runs the 104 default unit/MVC tests successfully, but Failsafe cannot start PostgreSQL because no Docker environment is available in this environment. The test suite is implemented, but its database assertions still need one successful run on a Docker-enabled machine. Use `mvn -Pintegration verify` for that run.
+On 2026-09-30, the Docker-free `mvn clean test -q` suite passed. `mvn -Pintegration verify -q` reached Failsafe but Testcontainers could not find a valid Docker environment, so the book and user persistence assertions remain unverified. Run the integration profile with a working Docker daemon to verify them.
+
+## 10. User routes were missing HTTP-contract coverage
+
+### What was missing
+
+`UserAPI` exposed account creation, pagination, lookup, profile updates, password changes, and deletion, but only `UserService` had focused tests. That left Spring MVC behavior—JSON binding, Jakarta validation, pagination defaults, response serialization, and global error conversion—without a test boundary. The generated OpenAPI document also had no regression check against the live controller methods and DTO schemas.
+
+### How I addressed it
+
+I added `UserApiMvcTest` under `src/test/java/unit/user`. It follows the existing book MVC-slice pattern: load `UserAPI` and the real `GlobalExceptionHandler`, mock `UserService`, and send HTTP requests through `MockMvc`. Tests cover all user routes, successful response shapes, invalid request bodies, missing users, database-conflict responses, pagination binding, and the exclusion of password data from public responses.
+
+I added `OpenApiMvcTest` to the Docker-free suite. It generates `/v3/api-docs` through Springdoc and checks representative book/user routes, expected user response codes, write-only password inputs, and absence of password fields in public response schemas. The focused assertions avoid coupling the API contract to a PostgreSQL container or exact documentation prose.
+
+### Verification and remaining limit
+
+`mvn -Dtest=UserApiMvcTest test` passed the user MVC tests. On 2026-09-30, `mvn clean test -q` passed with the generated OpenAPI assertion included. Failsafe could not start PostgreSQL because Docker was unavailable, and manual Swagger UI review remains pending in `internal-docs/TODO.md`.
 
 ## What these problems taught me
 

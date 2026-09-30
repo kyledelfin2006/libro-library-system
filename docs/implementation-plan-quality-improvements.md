@@ -1,35 +1,8 @@
 # Implementation Plan: Remaining Quality Improvements
 
-This plan tracks the four remaining improvement areas identified for Libro, excluding Spring Security. PostgreSQL integration coverage has been implemented; its Docker-backed execution remains to be run in an environment with Docker. Keep the current feature-oriented, layered architecture: controllers own HTTP binding, services own business rules, repositories own persistence, DTOs own public payloads, and shared API documentation stays concise.
+This plan tracks the three remaining improvement areas identified for Libro, excluding Spring Security. PostgreSQL integration coverage has been implemented; its Docker-backed execution remains to be run in an environment with Docker. Keep the current feature-oriented, layered architecture: controllers own HTTP binding, services own business rules, repositories own persistence, DTOs own public payloads, and shared API documentation stays concise.
 
-## 1. Cover user HTTP contracts and generated OpenAPI
-
-### Problem
-
-`BookApiMvcTest` covers the book HTTP boundary, but there is no equivalent MVC test for `UserAPI`. The generated Swagger UI and `/v3/api-docs` have not yet been inspected in a running application environment.
-
-### Solution
-
-Test user routes at the MVC boundary with a mocked service, then verify the generated OpenAPI document against the live controller/DTO contract. Reuse the existing book MVC-slice approach instead of adding another API abstraction.
-
-### Implementation
-
-1. Add `UserApiMvcTest` under `src/test/java/unit/user` with `@WebMvcTest(UserAPI.class)`, mocked `UserService`, and the real `GlobalExceptionHandler`.
-2. Cover create, paginated list, lookup, PATCH, PUT, password change, and delete: binding, status codes, response envelope versus direct DTO/Page shapes, validation errors, and 404/409 error bodies.
-3. Add OpenAPI verification to the PostgreSQL-backed integration run. Check that both tags and all live routes appear, that PATCH schemas are optional, password fields are write-only, and response/error schemas and pagination descriptions match the implementation.
-4. Perform one manual Swagger UI review against the guideline checklist after the app starts with the test database. Record only checks actually completed in the TODO and development docs.
-
-### Architecture
-
-The MVC tests stop at `UserAPI` and mock `UserService`, matching the existing book test boundary. The OpenAPI check inspects Springdoc output generated from controllers and DTOs; do not maintain a second hand-written route/schema catalog.
-
-### Done when
-
-- Each user route has at least one successful contract test and its expected invalid/not-found case where applicable.
-- Error and success payloads match the existing API contract.
-- The generated `/v3/api-docs` contains accurate book and user operations and schemas, and Swagger UI can render and invoke them in the documented local setup.
-
-## 2. Provide a paginated path for book searches and filters
+## 1. Provide a paginated path for book searches and filters
 
 ### Problem
 
@@ -58,11 +31,11 @@ The controller binds query parameters and delegates. The service validates filte
 - Existing routes continue returning their existing shapes until an explicit compatibility decision is made.
 - MVC and PostgreSQL integration tests cover filter binding, page boundaries, ordering, and result totals.
 
-## 3. Remove stale test-count documentation
+## 2. Remove stale test-count documentation
 
 ### Problem
 
-The README and development reflection contain old test totals, while the latest verified suite ran 104 tests. `AGENTS.md` also lists older per-class totals. Repeated totals are easy to stale and can undermine portfolio claims.
+The README and development reflection contain volatile test totals, while `AGENTS.md` lists per-class totals. Repeated totals are easy to stale and can undermine portfolio claims.
 
 ### Solution
 
@@ -86,7 +59,7 @@ No production-code change. README remains the portfolio entry point; `AGENTS.md`
 - Each document has one clear audience and purpose.
 - Verification claims distinguish unit/MVC checks from JPA, Flyway, PostgreSQL, and live Swagger checks.
 
-## 4. Reduce repeated OpenAPI response annotation noise
+## 3. Reduce repeated OpenAPI response annotation noise
 
 ### Problem
 
@@ -116,7 +89,6 @@ Controllers remain the source of operation-specific HTTP documentation. Shared m
 
 ## Suggested delivery order
 
-1. Add user MVC tests and verify the generated OpenAPI document using the PostgreSQL integration profile.
-2. Design and implement the paginated book query path as a backward-compatible addition.
-3. Refresh stale test-count documentation.
-4. Revisit response-annotation reuse after inspecting the resulting OpenAPI and controller readability.
+1. Design and implement the paginated book query path as a backward-compatible addition.
+2. Refresh stale test-count documentation.
+3. Revisit response-annotation reuse after inspecting the resulting OpenAPI and controller readability.

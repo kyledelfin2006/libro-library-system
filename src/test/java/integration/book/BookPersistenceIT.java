@@ -1,5 +1,6 @@
 package integration.book;
 
+import app.LibraryApplication;
 import app.book.dto.BookPatchRequestDTO;
 import app.book.dto.BookRequestDTO;
 import app.book.entity.Book;
@@ -7,35 +8,27 @@ import app.book.repository.BookRepository;
 import app.book.repository.projection.GenreCount;
 import app.book.repository.projection.LibraryAggregate;
 import app.book.service.BookService;
+import integration.PostgresTestConfig;
 import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** PostgreSQL integration coverage for Flyway, repository queries, and service transactions. */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
-@Testcontainers
+@SpringBootTest(classes = LibraryApplication.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@Import(PostgresTestConfig.class)
+@ResourceLock("postgres")
 class BookPersistenceIT {
-
-    @Container
-    @ServiceConnection
-    private static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:18-alpine");
 
     @Autowired
     private BookRepository bookRepository;
@@ -49,11 +42,6 @@ class BookPersistenceIT {
     @Autowired
     private Flyway flyway;
 
-    @BeforeEach
-    void clearBooks() {
-        bookRepository.deleteAll();
-    }
-
     @Test
     void applicationStartupAppliesMigrationsAndValidatesSchema() {
         assertEquals(2, flyway.info().applied().length);
@@ -66,6 +54,7 @@ class BookPersistenceIT {
     }
 
     @Test
+    @Transactional
     void repositoryQueriesAndTypedProjectionsWorkOnPostgres() {
         bookRepository.saveAllAndFlush(List.of(
                 new Book("Animal Farm", "George Orwell", "Satire", new BigDecimal("12.00")),
@@ -90,33 +79,25 @@ class BookPersistenceIT {
     void patchAndPutPersistManagedChangesAtTransactionCommit() {
         Book saved = bookRepository.saveAndFlush(
                 new Book("Old title", "Old author", "Old genre", new BigDecimal("10.00")));
+        try {
+            bookService.patchBook(saved.getId(), new BookPatchRequestDTO(
+                    "Patched title", null, null, new BigDecimal("11.00")));
 
-        bookService.patchBook(saved.getId(), new BookPatchRequestDTO(
-                "Patched title", null, null, new BigDecimal("11.00")));
+            Book patched = bookRepository.findById(saved.getId()).orElseThrow();
+            assertEquals("Patched title", patched.getTitle());
+            assertEquals("Old author", patched.getAuthor());
+            assertEquals(0, new BigDecimal("11.00").compareTo(patched.getPrice()));
 
-        Book patched = bookRepository.findById(saved.getId()).orElseThrow();
-        assertEquals("Patched title", patched.getTitle());
-        assertEquals("Old author", patched.getAuthor());
-        assertEquals(0, new BigDecimal("11.00").compareTo(patched.getPrice()));
+            bookService.replaceBook(saved.getId(), new BookRequestDTO(
+                    "Replacement title", "Replacement author", "New genre", new BigDecimal("15.00")));
 
-        bookService.replaceBook(saved.getId(), new BookRequestDTO(
-                "Replacement title", "Replacement author", "New genre", new BigDecimal("15.00")));
-
-        Book replaced = bookRepository.findById(saved.getId()).orElseThrow();
-        assertEquals("Replacement title", replaced.getTitle());
-        assertEquals("Replacement author", replaced.getAuthor());
-        assertEquals("New genre", replaced.getGenre());
-        assertEquals(0, new BigDecimal("15.00").compareTo(replaced.getPrice()));
-    }
-
-    @Test
-    @Transactional
-    void postgresEnforcesUserUniversityIdFormatConstraint() {
-        assertThrows(DataIntegrityViolationException.class, () -> jdbcTemplate.update("""
-                INSERT INTO users (university_id, password_hash, last_name, first_name, email,
-                                   user_role, student_course, infotech_major)
-                VALUES ('invalid-id', 'encoded-test-hash', 'Example', 'Test', 'test@example.edu',
-                        'STUDENT', 'IT', 'SE')
-                """));
+            Book replaced = bookRepository.findById(saved.getId()).orElseThrow();
+            assertEquals("Replacement title", replaced.getTitle());
+            assertEquals("Replacement author", replaced.getAuthor());
+            assertEquals("New genre", replaced.getGenre());
+            assertEquals(0, new BigDecimal("15.00").compareTo(replaced.getPrice()));
+        } finally {
+            bookRepository.deleteById(saved.getId());
+        }
     }
 }

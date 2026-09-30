@@ -44,7 +44,11 @@ credentials, or real user data.
   profile PATCH/PUT, password change, and account deletion. These routes
   currently use development `permitAll`; this does not satisfy production
   authentication or authorization requirements.
-- [ ] Add repository and controller tests.
+- [x] Add PostgreSQL-backed user persistence tests for normalized creation,
+  stored password hashes, committed updates, and database constraints.
+- [x] Add MVC-slice tests for all user routes, request binding and validation,
+  pagination, response shapes, not-found and conflict responses, and public
+  response privacy.
 - [x] Add focused service tests for partial updates, normalization, validation,
   unchanged emails, and duplicate-email rejection.
 - [x] Add getters/setters and a no-argument constructor to `ChangePasswordDTO`
@@ -89,8 +93,10 @@ credentials, or real user data.
 
 - [x] Run `mvn test` after user-domain tests are added.
 - [x] Add an opt-in PostgreSQL 18 Testcontainers integration suite for Flyway,
-  JPA schema validation, repository queries/projections, service dirty checking,
-  and a database constraint (`mvn -Pintegration verify`).
+  JPA schema validation, book queries/projections, user persistence, service dirty
+  checking, and database constraints (`mvn -Pintegration verify`).
+- [x] Move generated OpenAPI route/schema assertions into the Docker-free MVC
+  suite so `mvn test` checks representative operations and password privacy.
 - [ ] Run `mvn -Pintegration verify` with Docker available and confirm the
   PostgreSQL tests pass; the current environment has no Docker daemon.
 - [ ] Verify that V2 has not already been applied to a persistent database; if
@@ -98,19 +104,18 @@ credentials, or real user data.
 - [x] Apply [the API Documentation Guideline](../docs/api-documentation-guideline.md)
   to book and user operation descriptions, request/response DTO schemas, and
   expected status/error responses.
-- [ ] Inspect the generated `/v3/api-docs` and Swagger UI with the application
-  and database running; verify parameter defaults, schemas, statuses, errors,
-  and examples. `mvn test` passes (104 tests), but the live endpoint timed out
-  and Docker Compose could not connect because the Docker Desktop engine is
-  unavailable in this environment.
+- [ ] Manually review Swagger UI against the guideline checklist with the
+  application running. The automated generated-spec assertions pass in
+  `OpenApiMvcTest`; a browser review is still pending.
 - [x] Update `README.md` with the live user API routes.
 - [ ] Document loan routes in `README.md` when those routes are implemented.
 - [ ] Review entity, migration, DTO, and database naming for consistency.
 
 ## Recommended next slice
 
-Inspect the generated Swagger UI against the project guideline, then add user
-controller/repository tests. Before any untrusted deployment, choose and
+Run the Docker-backed PostgreSQL integration checks and inspect Swagger UI
+against the project guideline.
+Before any untrusted deployment, choose and
 implement the authentication model and endpoint-specific authorization. Loan
 routes remain future work and should use the authenticated principal as the
 borrower. Controllers should translate HTTP requests and responses, not contain

@@ -98,11 +98,15 @@ library-api-system/
         |   |-- BookServiceTest.java
         |   `-- BookTest.java
         |-- java/unit/user/
+        |   |-- UserApiMvcTest.java
         |   `-- UserServiceTest.java
         |-- java/unit/global/
-        |   `-- GlobalExceptionHandlerTest.java
-        |-- java/integration/book/
-        |   `-- BookPersistenceIT.java
+        |   |-- GlobalExceptionHandlerTest.java
+        |   `-- OpenApiMvcTest.java
+        |-- java/integration/
+        |   |-- PostgresTestConfig.java
+        |   |-- book/BookPersistenceIT.java
+        |   `-- user/UserPersistenceIT.java
         `-- resources/
             |-- junit-platform.properties
             `-- logback-test.xml
@@ -473,21 +477,26 @@ Central advice maps Java/application exceptions to stable HTTP errors, keeping e
 
 Current coverage consists of:
 
-Test sources are grouped by scope and feature: book unit/MVC tests live in `src/test/java/unit/book`, user unit tests in `src/test/java/unit/user`, cross-domain unit tests in `src/test/java/unit/global`, and PostgreSQL-backed integration tests in `src/test/java/integration/book`. Keep new tests in the matching package so the filesystem and Java package names remain aligned.
+Test sources are grouped by scope and feature: book unit/MVC tests live in `src/test/java/unit/book`, user unit tests in `src/test/java/unit/user`, cross-domain unit tests in `src/test/java/unit/global`, and PostgreSQL-backed tests in `src/test/java/integration/book` and `src/test/java/integration/user`. Keep new tests in the matching package so the filesystem and Java package names remain aligned.
 
-- `BookApiMvcTest`: 12 Spring Boot 4 MVC-slice tests for route/status contracts, JSON shapes, invalid request bodies, pagination and query binding, and global exception responses. It uses mocked service/mapper beans and does not start JPA, Flyway, or PostgreSQL.
+- `BookApiMvcTest`: Spring Boot 4 MVC-slice coverage for route/status contracts, JSON shapes, invalid request bodies, pagination and query binding, and global exception responses. It uses mocked service/mapper beans and does not start JPA, Flyway, or PostgreSQL.
+
+- `UserApiMvcTest`: MVC-slice coverage for every user route, binding and validation behavior, pagination, response shapes, 404/409 error bodies, and exclusion of password data from public responses. It uses a mocked `UserService` and does not start JPA, Flyway, or PostgreSQL.
+- `OpenApiMvcTest`: generated `/v3/api-docs` contract checks in an MVC slice, covering representative paths, response codes, write-only password inputs, and public response privacy without Docker.
 
 - `UserServiceTest`: Mockito-based service unit tests for partial-update normalization, validation, password verification and encoding, password-length bounds, unchanged-email handling, duplicate-email rejection, missing-user handling, and dirty-checking expectations.
 
 - `BookServiceTest`: Mockito-based service unit tests for CRUD rules, text normalization, entity-validation enforcement, price-range validation, dirty-checking expectations, search, sorting, pricing, typed statistics projections, genre distribution, and other aggregate behavior.
-- `BookTest`: five entity-construction, lifecycle, and direct Jakarta Validator tests for request DTO and entity constraints.
-- `BookMapperTest`: four focused tests for entity-to-DTO mapping, null inputs, and list mapping.
-- `GlobalExceptionHandlerTest`: 14 direct unit tests for every exception handler, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
-- `BookPersistenceIT`: PostgreSQL 18 integration tests for Flyway migrations, Hibernate schema validation, repository queries and projections, service transaction dirty checking, and a database constraint. It runs only with `mvn -Pintegration verify` and requires Docker; successful runtime verification is still pending.
+- `BookTest`: entity-construction, lifecycle, and direct Jakarta Validator tests for request DTO and entity constraints.
+- `BookMapperTest`: focused tests for entity-to-DTO mapping, null inputs, and list mapping.
+- `GlobalExceptionHandlerTest`: direct unit tests for exception handlers, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
+- `BookPersistenceIT`: PostgreSQL 18 integration tests for Flyway migrations, Hibernate schema validation, repository queries and projections, and committed service updates.
+- `UserPersistenceIT`: PostgreSQL integration tests for normalized creation, stored hashes, committed updates, and uniqueness/format constraints. `PostgresTestConfig` supplies one context-managed PostgreSQL container to both classes. They use the same JUnit resource lock to avoid concurrent database writes. Run them with `mvn -Pintegration verify`; Docker-backed verification is still pending.
 
-The default unit/MVC suite last passed with 104 tests. Its execution setup is deliberately small and optimized:
+The unit/MVC suite execution setup is deliberately small and optimized:
 
 - `src/test/resources/junit-platform.properties` enables concurrent execution between test classes but keeps methods within each class on the same thread.
+- The PostgreSQL integration classes share a Spring context and a JUnit resource lock. Use rollback for query fixtures and targeted cleanup for committed write tests; avoid database cleanup in read-only checks.
 - `BookServiceTest` uses `@TestInstance(PER_CLASS)` so its repository mock and `BookService` are constructed once. `@BeforeEach` resets the repository mock and rebuilds mutable book fixtures, preserving test isolation. The stateless `BookMapper` is real rather than mocked.
 - `BookTest` shares one thread-safe Jakarta `Validator` and closes its `ValidatorFactory` in `@AfterAll` instead of rebuilding a factory per validation test.
 - `GlobalExceptionHandlerTest` shares its stateless handler and constructs real Spring exceptions where practical, avoiding extra mock creation.
@@ -495,7 +504,7 @@ The default unit/MVC suite last passed with 104 tests. Its execution setup is de
 
 These choices keep the feedback loop small without deleting, merging, or weakening tests. Build times are environment-dependent; first-time Maven dependency downloads, Mockito/Byte Buddy agent startup, and machine resources may change the total.
 
-The exception-handler tests verify direct Java method behavior without loading Spring MVC. User controller routing and serialization, security behavior, and upgrade-path migration behavior still need dedicated coverage. The PostgreSQL integration profile provides real-database coverage when run with Docker; a passing unit/MVC suite alone does not prove those persistence behaviors.
+The exception-handler tests verify direct Java method behavior without loading Spring MVC. The generated OpenAPI contract runs in the normal Docker-free suite. Security behavior and upgrade-path migration behavior still need dedicated coverage. The PostgreSQL profile provides real-database coverage when Docker is available; a passing unit/MVC suite alone does not prove persistence behavior.
 
 Choose test scope based on the change:
 
@@ -505,11 +514,13 @@ Choose test scope based on the change:
 | DTO constraint | Validator unit test and invalid boundary cases |
 | Mapper behavior | Focused mapper unit test |
 | Controller contract | MVC test for route, status, body, and validation |
+| Generated OpenAPI contract | Focused MVC slice test for routes, response codes, and sensitive schema fields |
 | Repository query | JPA integration test, preferably PostgreSQL-backed for database-specific behavior |
 | Migration | Fresh and upgrade-path PostgreSQL startup test |
 | Security rule | Authenticated/unauthenticated MVC or integration tests |
 
 Name tests as behavior statements, keep monetary assertions scale-safe, and verify observable outcomes rather than internal calls unless the call itself is the contract. Do not weaken an assertion merely to make a changed implementation pass.
+Keep plain unit tests free of Spring startup and keep full-context or container tests for behavior their smaller neighbors cannot prove. Avoid timing assertions without a measured baseline, and serialize integration classes that share a database.
 
 Before handoff, run at least:
 
@@ -577,11 +588,11 @@ When a breaking change is intended, document migration guidance and update all e
 - The Docker image requires a prebuilt JAR and does not build source itself.
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
 - User routes are currently permitted by the global development security configuration; create requests include a client-supplied role. Do not treat these routes as safe for deployment until authorization and role assignment are designed.
-- There is no loan feature or authentication flow. User service behavior has unit coverage, but repository and user-controller behavior do not yet have dedicated tests.
-- Test coverage is predominantly unit-level; HTTP, JPA, migration, security, and container paths lack automated integration coverage.
+- There is no loan feature or authentication flow. User routes have MVC contract and PostgreSQL integration tests; authentication behavior still needs dedicated tests when a model is chosen.
+- Docker-backed JPA/migration checks are implemented but require a working Docker daemon to verify. Security behavior and a fresh-to-existing migration upgrade path still need tests.
 - Success response shapes are inconsistent across endpoints.
 - `timestamp` fields are epoch milliseconds rather than ISO-8601 values.
-- Health checks prove a database count query can run but are not integrated with Spring Boot Actuator or container health checks.
+- The book health endpoint runs a lightweight database ping but is not integrated with Spring Boot Actuator or container health checks.
 - Ordinary indexes may not accelerate case-insensitive substring searches as expected.
 - The database enforces `NOT NULL` for price but not a positive-value check; application validation is the current positive-price guard.
 
