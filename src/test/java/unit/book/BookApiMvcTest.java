@@ -194,6 +194,69 @@ class BookApiMvcTest {
     }
 
     @Test
+    void queryBooks_bindsFiltersAndReturnsPageMetadata() throws Exception {
+        Book book = book(1L);
+        when(service.queryBooks(any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(book), PageRequest.of(1, 2), 5));
+        when(mapper.toResponseDTO(book)).thenReturn(response(1L));
+
+        mockMvc.perform(get("/app/books/query")
+                        .queryParam("title", "farm")
+                        .queryParam("author", "orwell")
+                        .queryParam("genre", "satire")
+                        .queryParam("minPrice", "10.00")
+                        .queryParam("maxPrice", "25.00")
+                        .queryParam("page", "1")
+                        .queryParam("size", "2")
+                        .queryParam("sort", "price,desc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(1))
+                .andExpect(jsonPath("$.totalElements").value(5))
+                .andExpect(jsonPath("$.totalPages").value(3));
+
+        var page = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+        verify(service).queryBooks(org.mockito.Mockito.eq("farm"), org.mockito.Mockito.eq("orwell"),
+                org.mockito.Mockito.eq("satire"), org.mockito.Mockito.eq(new BigDecimal("10.00")),
+                org.mockito.Mockito.eq(new BigDecimal("25.00")), page.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(1, page.getValue().getPageNumber());
+        org.junit.jupiter.api.Assertions.assertEquals(2, page.getValue().getPageSize());
+        org.junit.jupiter.api.Assertions.assertEquals(Sort.Direction.DESC,
+                page.getValue().getSort().getOrderFor("price").getDirection());
+    }
+
+    @Test
+    void queryBooks_rejectsMalformedPriceBeforeService() throws Exception {
+        mockMvc.perform(get("/app/books/query").queryParam("minPrice", "invalid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.statusCode").value(400));
+        verify(service, never()).queryBooks(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void queryBooks_usesDefaultsAndReturnsValidationErrors() throws Exception {
+        when(service.queryBooks(any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        mockMvc.perform(get("/app/books/query"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
+
+        var page = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+        verify(service).queryBooks(any(), any(), any(), any(), any(), page.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(0, page.getValue().getPageNumber());
+        org.junit.jupiter.api.Assertions.assertEquals(12, page.getValue().getPageSize());
+        org.junit.jupiter.api.Assertions.assertEquals(Sort.Direction.ASC,
+                page.getValue().getSort().getOrderFor("id").getDirection());
+
+        when(service.queryBooks(any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenThrow(new IllegalArgumentException("minPrice must be less than or equal to maxPrice"));
+        mockMvc.perform(get("/app/books/query")
+                        .queryParam("minPrice", "20")
+                        .queryParam("maxPrice", "10"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.statusCode").value(400));
+    }
+
+    @Test
     void search_bindsAndForwardsQueryParameters() throws Exception {
         Book book = book(1L);
         when(service.searchBooks("author", "orwell")).thenReturn(List.of(book));

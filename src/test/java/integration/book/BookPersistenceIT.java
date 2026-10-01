@@ -17,6 +17,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -73,6 +76,35 @@ class BookPersistenceIT {
         List<GenreCount> genres = bookRepository.getGenres();
         assertEquals(3, genres.size());
         assertTrue(genres.stream().anyMatch(genre -> genre.genre().equals("Satire") && genre.count() == 1));
+    }
+
+    @Test
+    @Transactional
+    void paginatedQueryCombinesFiltersAndCountsMatchingRows() {
+        bookRepository.saveAllAndFlush(List.of(
+                new Book("Animal Farm", "George Orwell", "Satire", new BigDecimal("12.00")),
+                new Book("Farm Stories", "George Orwell", "Satire", new BigDecimal("18.00")),
+                new Book("Other Farm", "Other Author", "Satire", new BigDecimal("18.00")),
+                new Book("1984", "George Orwell", "Dystopian", new BigDecimal("24.00"))
+        ));
+
+        Page<Book> first = bookService.queryBooks("farm", "ORWELL", "satire",
+                new BigDecimal("12.00"), new BigDecimal("18.00"),
+                PageRequest.of(0, 1, Sort.by("price")));
+        Page<Book> second = bookService.queryBooks("farm", "ORWELL", "satire",
+                new BigDecimal("12.00"), new BigDecimal("18.00"),
+                PageRequest.of(1, 1, Sort.by("price")));
+
+        assertEquals(2, first.getTotalElements());
+        assertEquals(2, first.getTotalPages());
+        assertEquals("Animal Farm", first.getContent().getFirst().getTitle());
+        assertEquals("Farm Stories", second.getContent().getFirst().getTitle());
+        assertEquals(1, bookService.queryBooks(null, null, null, new BigDecimal("24.00"), null,
+                PageRequest.of(0, 12)).getTotalElements());
+        assertEquals(3, bookService.queryBooks(null, null, null, null, new BigDecimal("18.00"),
+                PageRequest.of(0, 12)).getTotalElements());
+        assertEquals(4, bookService.queryBooks(null, null, null, null, null,
+                PageRequest.of(0, 12)).getTotalElements());
     }
 
     @Test

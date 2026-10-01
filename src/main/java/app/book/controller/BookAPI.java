@@ -10,6 +10,7 @@ import app.global.responses.ApiResponse;
 import app.global.responses.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.Parameters;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -146,6 +147,32 @@ public class BookAPI {
     public ResponseEntity<Page<BookResponseDTO>> getAllBooks(
             @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
         return ResponseEntity.ok(service.getBooks(pageable).map(mapper::toResponseDTO));
+    }
+
+    @GetMapping("/query")
+    @Operation(summary = "Query books with pagination",
+            description = "Optional title, author, and genre filters use case-insensitive substrings and combine with AND. Price bounds are inclusive and may be supplied separately. With no filters, returns all books. Pages start at zero; default page 0, size 12, id ascending; maximum size 100. Sort by id, title, author, genre, or price with sort=property,direction. Invalid ranges or sort fields return 400.")
+    @Parameters({
+            @Parameter(name = "page", description = "Zero-based page index; default 0.", schema = @Schema(type = "integer", defaultValue = "0")),
+            @Parameter(name = "size", description = "Page size; default 12, maximum 100.", schema = @Schema(type = "integer", defaultValue = "12", maximum = "100")),
+            @Parameter(name = "sort", description = "property,direction; properties: id, title, author, genre, price. Direction: asc or desc.", example = "price,desc")
+    })
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Matching book page", useReturnTypeSchema = true),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid decimal, price range, pagination, or sort field",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<Page<BookResponseDTO>> queryBooks(
+            @RequestParam(required = false) String title,
+            @RequestParam(required = false) String author,
+            @RequestParam(required = false) String genre,
+            @Parameter(description = "Inclusive minimum price; may be used without maxPrice.", example = "10.00")
+            @RequestParam(required = false) BigDecimal minPrice,
+            @Parameter(description = "Inclusive maximum price; may be used without minPrice.", example = "25.00")
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(service.queryBooks(title, author, genre, minPrice, maxPrice, pageable)
+                .map(mapper::toResponseDTO));
     }
 
     @GetMapping("/sorted")
