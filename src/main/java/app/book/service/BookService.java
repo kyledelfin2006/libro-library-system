@@ -18,6 +18,7 @@ import jakarta.validation.Validator;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -64,10 +65,31 @@ public class BookService {
      * @return a page of books matching the given pageable parameters
      */
     public Page<Book> getBooks(Pageable pageable) {
+        validateBookSort(pageable);
+        return repository.findAll(pageable);
+    }
+
+    public Page<Book> queryBooks(String title, String author, String genre,
+                                 BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {
+        validateBookSort(pageable);
+        if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
+            throw new IllegalArgumentException("minPrice must be less than or equal to maxPrice");
+        }
+        Sort sort = pageable.getSort();
+        if (sort.getOrderFor("id") == null) {
+            sort = sort.and(Sort.by("id"));
+        }
+        Pageable stablePage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
+        return repository.queryBooks(title == null ? "" : title,
+                author == null ? "" : author,
+                genre == null ? "" : genre,
+                minPrice, maxPrice, stablePage);
+    }
+
+    private void validateBookSort(Pageable pageable) {
         if (pageable.getSort().stream().anyMatch(order -> !SORTABLE_BOOK_FIELDS.contains(order.getProperty()))) {
             throw new IllegalArgumentException("Unsupported book sort field. Allowed fields: id, title, author, genre, price");
         }
-        return repository.findAll(pageable);
     }
 
     /**

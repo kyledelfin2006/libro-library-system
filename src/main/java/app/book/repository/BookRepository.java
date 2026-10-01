@@ -7,13 +7,45 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
+/** Persistence operations for physical book copies and collection statistics. */
 @Repository
 public interface BookRepository extends JpaRepository<Book, Long> {
+
+    /**
+     * Finds a page of books matching every supplied filter.
+     * Text filters are case-insensitive literal substrings; an empty string matches all
+     * values for that field. Price bounds are inclusive and may be {@code null}.
+     * The service validates the bounds and sort fields before calling this method.
+     *
+     * @param title title substring, or an empty string for no title filter
+     * @param author author substring, or an empty string for no author filter
+     * @param genre genre substring, or an empty string for no genre filter
+     * @param minPrice inclusive minimum price, or {@code null} for no minimum
+     * @param maxPrice inclusive maximum price, or {@code null} for no maximum
+     * @param pageable requested page and validated sort order
+     * @return matching books with page metadata and total match count
+     */
+    @Query("""
+            SELECT b FROM Book b
+            WHERE LOCATE(LOWER(:title), LOWER(b.title)) > 0
+              AND LOCATE(LOWER(:author), LOWER(b.author)) > 0
+              AND LOCATE(LOWER(:genre), LOWER(b.genre)) > 0
+              AND b.price >= COALESCE(:minPrice, b.price)
+              AND b.price <= COALESCE(:maxPrice, b.price)
+            """)
+    Page<Book> queryBooks(@Param("title") String title,
+                          @Param("author") String author,
+                          @Param("genre") String genre,
+                          @Param("minPrice") BigDecimal minPrice,
+                          @Param("maxPrice") BigDecimal maxPrice,
+                          Pageable pageable);
 
     /**
      * Performs a constant-time database reachability check without scanning the books table.
@@ -35,8 +67,8 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     /**
      * Finds all books whose author contains the given substring (case-insensitive).
      *
-     * @param author the substring to search for in the title (non-null)
-     * @return a list of books with a title containing {@code author} (ignoring case),
+     * @param author the substring to search for in the author (non-null)
+     * @return a list of books with an author containing {@code author} (ignoring case),
      *         or an empty list if none found
      */
     List<Book> findByAuthorContainingIgnoreCase(String author);
@@ -44,8 +76,8 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     /**
      * Finds all books whose genre contains the given substring (case-insensitive).
      *
-     * @param genre the substring to search for in the title (non-null)
-     * @return a list of books with a title containing {@code title} (ignoring case),
+     * @param genre the substring to search for in the genre (non-null)
+     * @return a list of books with a genre containing {@code genre} (ignoring case),
      *         or an empty list if none found
      */
     List<Book> findByGenreContainingIgnoreCase(String genre);

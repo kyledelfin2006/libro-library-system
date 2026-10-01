@@ -188,6 +188,8 @@ The `hasText()` method (`s != null && !s.trim().isEmpty()`) also correctly handl
 
 Read methods handle pagination, field-restricted sorting, searches, price ranges, genre distribution, and aggregate statistics. Keep input allowlists in the service; never pass arbitrary client field names directly to JPA sorting or query construction.
 
+`GET /app/books/query` combines optional title, author, genre, and inclusive price bounds in one database-paged query. The service validates price bounds and sort properties before repository access, and adds `id` as a tie-breaker for stable pages. Missing text filters match all books; supplied text is matched as a case-insensitive literal substring. Existing unpaginated list routes keep their current contracts.
+
 ### Repository layer
 
 `BookRepository` extends `JpaRepository<Book, Long>`, gaining standard CRUD, pagination, sorting, and count operations. Its custom methods use three Spring Data styles:
@@ -288,6 +290,7 @@ Book routes use `/app/books`; user routes use `/app/users`.
 | GET | `/search?type=...&value=...` | Search by author, title, genre, or exact price | List of `BookResponseDTO` |
 | GET | `/budget?maxPrice=...` | Books at or below a maximum price | List of `BookResponseDTO` |
 | GET | `/all?page=...&size=...&sort=...` | Paginated collection | Spring `Page<BookResponseDTO>` |
+| GET | `/query?title=...&author=...&genre=...&minPrice=...&maxPrice=...` | Paginated book query with optional combined filters and sorting | Spring `Page<BookResponseDTO>` |
 | GET | `/sorted?category=...` | Ascending sort by an allowed field | List of `BookResponseDTO` |
 | GET | `/genre` | Count grouped by genre | Map of genre to count |
 | GET | `/price?minPrice=...&maxPrice=...` | Inclusive price range | List of `BookResponseDTO` |

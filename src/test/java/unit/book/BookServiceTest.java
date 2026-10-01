@@ -18,6 +18,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
@@ -75,6 +78,35 @@ class BookServiceTest {
         sampleBook.setId(BOOK_ID);
 
         sampleBookRequestDTO = new BookRequestDTO(TITLE, AUTHOR, GENRE, PRICE);
+    }
+
+    @Test
+    void queryBooks_combinesFiltersAndAddsStableIdSort() {
+        Pageable requested = PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "price"));
+        when(repository.queryBooks(eq("JAVA"), eq("Bloch"), eq("Programming"),
+                eq(new BigDecimal("10")), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(sampleBook)));
+
+        bookService.queryBooks("JAVA", "Bloch", "Programming", new BigDecimal("10"), null, requested);
+
+        var page = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+        verify(repository).queryBooks(eq("JAVA"), eq("Bloch"), eq("Programming"),
+                eq(new BigDecimal("10")), isNull(), page.capture());
+        assertEquals(1, page.getValue().getPageNumber());
+        assertEquals(2, page.getValue().getPageSize());
+        assertEquals(Sort.Direction.DESC, page.getValue().getSort().getOrderFor("price").getDirection());
+        assertEquals(Sort.Direction.ASC, page.getValue().getSort().getOrderFor("id").getDirection());
+    }
+
+    @Test
+    void queryBooks_rejectsInvalidRangeAndSortBeforeRepositoryAccess() {
+        Pageable allowed = PageRequest.of(0, 12, Sort.by("id"));
+        assertThrows(IllegalArgumentException.class,
+                () -> bookService.queryBooks(null, null, null, BigDecimal.TEN, BigDecimal.ONE, allowed));
+        assertThrows(IllegalArgumentException.class,
+                () -> bookService.queryBooks(null, null, null, null, null,
+                        PageRequest.of(0, 12, Sort.by("createdAt"))));
+        verifyNoInteractions(repository);
     }
 
     // ---------- addBook ----------

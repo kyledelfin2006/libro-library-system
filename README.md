@@ -62,7 +62,7 @@ This README is the project's main portfolio entry point. The development reflect
 2. [Institutional Context](docs/institutional-context.md) describes the ASU-CCS academic model and existing MIS assumptions behind the user domain.
 3. [Domain Decisions](docs/domain-decisions.md) explains why a `Book` represents one physical copy and what that means for future loan features.
 4. [API Documentation Guideline](docs/api-documentation-guideline.md) sets the standard for accurate OpenAPI and Swagger documentation without unnecessary annotation boilerplate.
-5. [Implementation Plan: Remaining Quality Improvements](docs/implementation-plan-quality-improvements.md) tracks the open API, scalability, documentation, and OpenAPI maintainability work.
+5. [Implementation Plan: Remaining Quality Improvements](docs/implementation-plan-quality-improvements.md) tracks the completed paginated query change and the remaining documentation and OpenAPI maintainability work.
 6. [Agent and Contributor Guide](AGENTS.md) records the architecture, layer contracts, coding rules, testing expectations, and definition of done. It stays at the repository root so coding agents can discover it automatically.
 7. [Development TODO](internal-docs/TODO.md) tracks completed user-domain work and remaining authentication, loan, testing, and documentation tasks. It is a working roadmap, not part of the public API contract.
 
@@ -268,7 +268,7 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 
 - CRUD operations for books.
 - Each `Book` represents one physical borrowable copy. Duplicate titles and authors are allowed because separate copies have separate generated IDs; the model does not yet include an ISBN or edition key.
-- Pagination and sorting through `GET /app/books/all` and `GET /app/books/sorted`.
+- Pagination and sorting through `GET /app/books/all` and paginated filtering through `GET /app/books/query`.
 - Advanced search by title, author, genre, or price.
 - Price range filtering through `GET /app/books/price`.
 - Budget filtering through `GET /app/books/budget`.
@@ -366,6 +366,7 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 | --- | --- | --- | --- | --- |
 | `GET` | `/app/books/health` | Health check for the API | `GET /app/books/health` | `{"success":true,"message":"Health check","data":{"api":true,"database":true},"timestamp":172...}` |
 | `GET` | `/app/books/all` | Returns a paginated list of books | `GET /app/books/all?page=0&size=12&sort=id,asc` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99}],"pageable":{...}}` |
+| `GET` | `/app/books/query` | Paginates books with optional title, author, genre, and inclusive price filters | `GET /app/books/query?author=orwell&minPrice=10&sort=price,desc&page=0&size=12` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99}],"totalElements":1,"totalPages":1,...}` |
 | `GET` | `/app/books/{id}` | Fetches a single book by ID | `GET /app/books/1` | `{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99}` |
 | `POST` | `/app/books/add` | Creates a new book using `BookRequestDTO` validation | `POST /app/books/add` with `{"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99}` | `{"success":true,"message":"Book Added Successfully","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99},"timestamp":172...}` |
 | `PATCH` | `/app/books/{id}` | Partially updates a book | `PATCH /app/books/1` with `{"price":15.99}` | `{"success":true,"message":"Book updated successfully","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":15.99},"timestamp":172...}` |
@@ -379,6 +380,7 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 | `GET` | `/app/books/stats` | Returns total books, total value, and the most expensive book | `GET /app/books/stats` | `{"totalBooks":6,"totalValue":123.45,"mostExpensiveBook":{"id":4,"title":"...","author":"...","genre":"...","price":49.99}}` |
 | `GET` | `/app/books/stats/average-price` | Returns the average price of all books | `GET /app/books/stats/average-price` | `{"success":true,"message":"Average Price of Collection: ","data":20.50,"timestamp":172...}` |
 | `GET` | `/app/books/stats/count` | Returns the total number of books | `GET /app/books/stats/count` | `{"success":true,"message":"Book Collection Count","data":6,"timestamp":172...}` |
+
 | `GET` | `/app/users` | Lists users with pagination | `GET /app/users?page=0&size=12` | Spring `Page<UserResponseDTO>` |
 | `GET` | `/app/users/{universityId}` | Gets one user by university ID | `GET /app/users/2025-4321` | `UserResponseDTO` |
 | `POST` | `/app/users` | Creates a user | `POST /app/users` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
@@ -386,6 +388,8 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 | `PUT` | `/app/users/{universityId}` | Replaces profile fields | `PUT /app/users/2025-4321` with `UserReplaceRequest` | `ApiResponse<UserResponseDTO>` |
 | `PUT` | `/app/users/{universityId}/password` | Changes password after current-password verification | `PUT /app/users/2025-4321/password` with `ChangePasswordDTO` | `ApiResponse<Void>` |
 | `DELETE` | `/app/users/{universityId}` | Deletes a user | `DELETE /app/users/2025-4321` | `ApiResponse<Void>` |
+
+`/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minPrice` and `maxPrice` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `price`; invalid ranges, decimals, or sort fields return HTTP 400. Existing list routes retain their response shapes.
 
 ### User API
 

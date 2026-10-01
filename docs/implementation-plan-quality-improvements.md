@@ -1,24 +1,16 @@
 # Implementation Plan: Remaining Quality Improvements
 
-This plan tracks the three remaining improvement areas identified for Libro, excluding Spring Security. PostgreSQL integration coverage has been implemented; its Docker-backed execution remains to be run in an environment with Docker. Keep the current feature-oriented, layered architecture: controllers own HTTP binding, services own business rules, repositories own persistence, DTOs own public payloads, and shared API documentation stays concise.
+This plan tracks the quality improvements identified for Libro, excluding Spring Security. Problem 1 has been implemented, with its PostgreSQL integration test pending execution in an environment with Docker; Problems 2 and 3 remain. Keep the current feature-oriented, layered architecture: controllers own HTTP binding, services own business rules, repositories own persistence, DTOs own public payloads, and shared API documentation stays concise.
 
-## 1. Provide a paginated path for book searches and filters
+## 1. Provide a paginated path for book searches and filters — implemented; PostgreSQL check pending
 
 ### Problem
 
 `/search`, `/budget`, `/sorted`, and `/price` return complete `List<BookResponseDTO>` results. Their payload and query work grow with the number of matching records. `/all` is paginated, but filtering endpoints do not provide a paginated equivalent.
 
-### Solution
-
-Add a paginated query path for interactive clients while preserving existing list routes during a compatibility period. First choose one clear public query shape rather than adding a separate paginated route for every filter.
-
 ### Implementation
 
-1. Document current list-route usage and decide whether a single `GET /app/books/query` endpoint with optional text and price filters covers the needed UI use cases.
-2. Bind filters as typed controller parameters and `Pageable` with the existing zero-based defaults, maximum page size, and sort-field allowlist.
-3. Put filter validation and combination rules in `BookService`; add repository methods/projections that return `Page<Book>` without loading the full result set.
-4. Map page content through `BookMapper` and preserve page metadata in the response. Document filter semantics, sort fields, limits, and 400 responses in OpenAPI.
-5. Keep existing list routes and their response shapes unchanged initially. Only deprecate or remove them in a versioned contract change after clients have a migration path; do not silently truncate their results.
+`GET /app/books/query` accepts optional title, author, genre, minimum price, and maximum price filters. Filters combine with AND; text uses case-insensitive literal substring matching; price bounds are inclusive and can be used separately. The endpoint returns `Page<BookResponseDTO>` using the existing zero-based defaults, size cap, and sort allowlist. `BookService` validates ranges and sorting, while `BookRepository` pages and counts matching rows in PostgreSQL. Existing list routes retain their response shapes. Do not deprecate or remove them without a separate versioned contract change.
 
 ### Architecture
 
@@ -87,8 +79,7 @@ Controllers remain the source of operation-specific HTTP documentation. Shared m
 - Generated OpenAPI output is unchanged in meaning and still matches runtime behavior.
 - No generic annotation registry, customizer framework, or duplicate YAML contract is introduced.
 
-## Suggested delivery order
+## Suggested next steps
 
-1. Design and implement the paginated book query path as a backward-compatible addition.
-2. Refresh stale test-count documentation.
-3. Revisit response-annotation reuse after inspecting the resulting OpenAPI and controller readability.
+1. Refresh stale test-count documentation.
+2. Revisit response-annotation reuse after inspecting the resulting OpenAPI and controller readability.
