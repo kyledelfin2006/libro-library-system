@@ -62,7 +62,7 @@ This README is the project's main portfolio entry point. The development reflect
 2. [Institutional Context](docs/institutional-context.md) describes the ASU-CCS academic model and existing MIS assumptions behind the user domain.
 3. [Domain Decisions](docs/domain-decisions.md) explains why a `Book` represents one physical copy and what that means for future loan features.
 4. [API Documentation Guideline](docs/api-documentation-guideline.md) sets the standard for accurate OpenAPI and Swagger documentation without unnecessary annotation boilerplate.
-5. [Implementation Plan: Remaining Quality Improvements](docs/implementation-plan-quality-improvements.md) tracks the completed paginated query change and the remaining documentation and OpenAPI maintainability work.
+5. [Implementation Plan: Remaining Quality Improvements](docs/implementation-plan-quality-improvements.md) tracks the remaining OpenAPI maintainability work.
 6. [Agent and Contributor Guide](AGENTS.md) records the architecture, layer contracts, coding rules, testing expectations, and definition of done. It stays at the repository root so coding agents can discover it automatically.
 7. [Development TODO](internal-docs/TODO.md) tracks completed user-domain work and remaining authentication, loan, testing, and documentation tasks. It is a working roadmap, not part of the public API contract.
 
@@ -508,7 +508,7 @@ The suite is configured for fast, deterministic feedback:
 - `GlobalExceptionHandlerTest` uses one stateless handler and real Spring exception objects instead of unnecessary mocks.
 - `logback-test.xml` disables application logs during tests so expected exception scenarios do not spend time printing stack traces.
 
-Build timings are environment-dependent; first-time dependency downloads, Mockito/Byte Buddy agent startup, and machine resources can change the total. Use `mvn test` for incremental feedback and `mvn clean verify` for the default verification lifecycle. On this Windows/JDK 25 workspace, `mvn clean test -q` took about 27 seconds after these changes; the earlier incremental `mvn test -q` took about 30 seconds, so these runs do not establish a like-for-like speed improvement.
+Use `mvn test` for incremental feedback and `mvn clean verify` for the default verification lifecycle. Read test counts and failures from the reports produced by that run under `target/surefire-reports/`; the opt-in integration profile writes its results under `target/failsafe-reports/`. Build times depend on the machine, cache, and dependency downloads.
 
 Run all unit tests:
 
@@ -572,10 +572,10 @@ The detailed, interview-ready account of the development problems I identified a
 - Inspect the generated OpenAPI document and Swagger UI with the application and database running; verify parameter defaults, request/response schemas, statuses, errors, and examples against the implementation.
 - Learn Spring Security's filter chain, authentication, `UserDetailsService`, and `SecurityContext`, then choose an institutional SSO, session, or token-based authentication model.
 - Implement and test endpoint-specific authorization before exposing user endpoints; the current `permitAll()` configuration leaves every route public.
-- Add repository and MVC controller coverage for the user domain; implement endpoint authorization and safe role assignment before deployment.
+- Add focused tests for the remaining user academic-rule combinations; implement endpoint authorization and safe role assignment before deployment.
 - Implement the loan domain with active-loan constraints and overdue/history queries, using the authenticated identity for borrower operations; document its API when routes are added.
 - Run `mvn -Pintegration verify` on a Docker-enabled machine to execute the PostgreSQL integration tests; add them to CI when a CI workflow is introduced.
-- Expand search capabilities with more flexible filtering and sorting combinations.
+- Benchmark case-insensitive substring searches as the catalog grows; add database search indexes only if measurements justify them.
 
 ## License
 

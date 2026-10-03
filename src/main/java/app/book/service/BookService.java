@@ -11,7 +11,6 @@ import app.book.mapper.BookMapper;
 import app.book.repository.BookRepository;
 import app.book.repository.projection.GenreCount;
 import app.book.repository.projection.LibraryAggregate;
-import jakarta.transaction.Transactional;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
@@ -22,6 +21,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.Locale;
 import java.util.*;
@@ -69,6 +69,12 @@ public class BookService {
         return repository.findAll(pageable);
     }
 
+    /**
+     * Validates optional filters and delegates a stable, database-paged read.
+     * A final {@code id} order keeps page boundaries deterministic when books
+     * share the requested sort value.
+     */
+    @Transactional(readOnly = true)
     public Page<Book> queryBooks(String title, String author, String genre,
                                  BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {
         validateBookSort(pageable);

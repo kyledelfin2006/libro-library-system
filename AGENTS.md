@@ -206,7 +206,7 @@ The count-and-total-value aggregate uses the typed `LibraryAggregate` constructo
 
 The user feature currently contains the entity, enums, create/response DTOs, mapper, repository, BCrypt `PasswordEncoder` bean, and `UserService`. `UserService` normalizes university IDs and email addresses, rejects duplicates, validates password complexity, hashes passwords before persistence, and enforces the role/course/major rules. Passwords must be at least eight characters and include uppercase and lowercase letters, a number, and a symbol. The enum and V2 database checks define the allowed academic values; the service enforces their cross-field relationships.
 
-`UserAPI` exposes user creation, paginated listing, lookup, profile PATCH/PUT, password change, and deletion under `/app/users`. It delegates to `UserService` and uses request/response DTOs. There is no `UserDetailsService`, loan feature, or user-domain integration test class yet. `UserService` injects Jakarta `Validator`, validates create and password-change requests, and exposes transactional update operations that normalize supplied fields, protect email uniqueness, verify current passwords, and store only encoded password hashes.
+`UserAPI` exposes user creation, paginated listing, lookup, profile PATCH/PUT, password change, and deletion under `/app/users`. It delegates to `UserService` and uses request/response DTOs. There is no `UserDetailsService` or loan feature yet; `UserPersistenceIT` provides PostgreSQL-backed user-domain coverage when the integration profile runs. `UserService` injects Jakarta `Validator`, validates create and password-change requests, and exposes transactional update operations that normalize supplied fields, protect email uniqueness, verify current passwords, and store only encoded password hashes.
 
 ### Entity and database model
 
@@ -354,7 +354,7 @@ Compile-time annotation processing generates DTO/entity accessors, constructors,
 
 ### `spring-boot-starter-test`
 
-Provides the JUnit 5 test platform, Mockito, Spring testing utilities, AssertJ, and related test infrastructure. Current tests instantiate `BookService` with Mockito rather than starting a Spring application context.
+Provides the JUnit 5 test platform, Mockito, Spring testing utilities, AssertJ, and related test infrastructure. `BookServiceTest` instantiates the service with a mocked repository; the MVC tests start a Spring web slice.
 
 ### PostgreSQL integration-test dependencies
 
@@ -478,9 +478,7 @@ Central advice maps Java/application exceptions to stable HTTP errors, keeping e
 
 ## Testing Strategy
 
-Current coverage consists of:
-
-Test sources are grouped by scope and feature: book unit/MVC tests live in `src/test/java/unit/book`, user unit tests in `src/test/java/unit/user`, cross-domain unit tests in `src/test/java/unit/global`, and PostgreSQL-backed tests in `src/test/java/integration/book` and `src/test/java/integration/user`. Keep new tests in the matching package so the filesystem and Java package names remain aligned.
+Test sources are grouped by scope and feature: book unit/MVC tests live in `src/test/java/unit/book`, user unit tests in `src/test/java/unit/user`, cross-domain unit tests in `src/test/java/unit/global`, and PostgreSQL-backed tests in `src/test/java/integration/book` and `src/test/java/integration/user`. Keep new tests in the matching package so the filesystem and Java package names remain aligned. Use the current run's `target/surefire-reports/` and `target/failsafe-reports/` as the source for test counts; do not maintain totals in this guide.
 
 - `BookApiMvcTest`: Spring Boot 4 MVC-slice coverage for route/status contracts, JSON shapes, invalid request bodies, pagination and query binding, and global exception responses. It uses mocked service/mapper beans and does not start JPA, Flyway, or PostgreSQL.
 
