@@ -146,6 +146,7 @@ The response path generally converts `Book` entities to DTOs through `BookMapper
 - Uses `BookMapper` to prevent entities from becoming the public API representation.
 - Chooses HTTP status codes and response envelopes.
 - Documents every operation sufficiently for Swagger UI to act as the interactive API reference, while Springdoc derives paths and schemas from controller signatures and DTOs wherever possible. Follow [API Documentation Guideline](docs/api-documentation-guideline.md): document non-inferable behavior, keep constraints on DTOs, and avoid repeated annotation boilerplate.
+- Uses `@ErrorApiResponse` for expected errors with the shared `ErrorResponse` schema. Keep response status and endpoint-specific meaning beside the operation; the composed annotation centralizes only repeated schema metadata.
 
 Do not add repository access to the controller. New endpoint logic should remain thin and be independently testable in the service.
 

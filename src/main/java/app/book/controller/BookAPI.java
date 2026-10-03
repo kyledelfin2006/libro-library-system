@@ -6,14 +6,12 @@ import app.book.dto.BookResponseDTO;
 import app.book.dto.LibraryStatisticsDTO;
 import app.book.mapper.BookMapper;
 import app.book.service.BookService;
+import app.global.config.ErrorApiResponse;
 import app.global.responses.ApiResponse;
-import app.global.responses.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Parameters;
-import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
@@ -53,10 +51,7 @@ public class BookAPI {
     @GetMapping("/health")
     @Operation(summary = "Check API and database health",
             description = "Runs a database query to confirm the database is reachable. A successful response includes true api and database statuses; a database failure returns the standard error response.")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "Database health query failed",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
+    @ErrorApiResponse(responseCode = "500", description = "Database health query failed")
     public ResponseEntity<ApiResponse<Map<String, Boolean>>> healthCheck() {
         Map<String, Boolean> status = Map.of("api", true, "database", service.isDatabaseReachable());
         return ResponseEntity.ok(new ApiResponse<>(true, "Health check", status));
@@ -72,10 +67,7 @@ public class BookAPI {
     @GetMapping("/search")
     @Operation(summary = "Search books",
             description = "Search title, author, or genre with a case-insensitive substring. Price searches require an exact numeric value.")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Unsupported search type or invalid price value",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
+    @ErrorApiResponse(responseCode = "400", description = "Unsupported search type or invalid price value")
     public ResponseEntity<List<BookResponseDTO>> searchBooks(
             @Parameter(description = "Field to search: author, title, genre, or price.", example = "title", schema = @Schema(allowableValues = {"author", "title", "genre", "price"}))
             @RequestParam String type,
@@ -87,10 +79,7 @@ public class BookAPI {
     @GetMapping("/budget")
     @Operation(summary = "Find books within a budget",
             description = "Returns all books priced at or below maxPrice, inclusively. Results are unpaginated.")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "maxPrice is not a valid decimal",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
+    @ErrorApiResponse(responseCode = "400", description = "maxPrice is not a valid decimal")
     public ResponseEntity<List<BookResponseDTO>> budgetBooks(
             @Parameter(description = "Inclusive maximum price.", example = "25.00")
             @RequestParam BigDecimal maxPrice) {
@@ -100,11 +89,8 @@ public class BookAPI {
     @PostMapping("/add")
     @Operation(summary = "Add a book",
             description = "Creates a physical book-copy record. Duplicate titles are allowed; each copy receives its own generated ID.")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Book created"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Request validation failed",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Book created")
+    @ErrorApiResponse(responseCode = "400", description = "Request validation failed")
     public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(
             @Valid @RequestBody BookRequestDTO input) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -114,24 +100,16 @@ public class BookAPI {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a book by ID")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Book ID must be a number",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Book not found",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
+    @ErrorApiResponse(responseCode = "400", description = "Book ID must be a number")
+    @ErrorApiResponse(responseCode = "404", description = "Book not found")
     public ResponseEntity<BookResponseDTO> getBookById(@PathVariable Long id) {
         return ResponseEntity.ok(mapper.toResponseDTO(service.findBookById(id)));
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete a book")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Book ID must be a number",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Book not found",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
+    @ErrorApiResponse(responseCode = "400", description = "Book ID must be a number")
+    @ErrorApiResponse(responseCode = "404", description = "Book not found")
     public ResponseEntity<ApiResponse<Void>> deleteBook(@PathVariable Long id) {
         service.deleteBookById(id);
         return ResponseEntity.ok(new ApiResponse<>(true, "Book deleted successfully"));
@@ -140,10 +118,7 @@ public class BookAPI {
     @GetMapping("/all")
     @Operation(summary = "List books with pagination",
             description = "Page numbering starts at zero. The default is page 0, size 12, sorted by id ascending; the maximum page size is 100. Sort with sort=property,direction using id, title, author, genre, or price. Unsupported sort properties return 400.")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid pagination or sort parameter",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
+    @ErrorApiResponse(responseCode = "400", description = "Invalid pagination or sort parameter")
     public ResponseEntity<Page<BookResponseDTO>> getAllBooks(
             @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
         return ResponseEntity.ok(service.getBooks(pageable).map(mapper::toResponseDTO));
@@ -157,11 +132,8 @@ public class BookAPI {
             @Parameter(name = "size", description = "Page size; default 12, maximum 100.", schema = @Schema(type = "integer", defaultValue = "12", maximum = "100")),
             @Parameter(name = "sort", description = "property,direction; properties: id, title, author, genre, price. Direction: asc or desc.", example = "price,desc")
     })
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Matching book page", useReturnTypeSchema = true),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid decimal, price range, pagination, or sort field",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Matching book page", useReturnTypeSchema = true)
+    @ErrorApiResponse(responseCode = "400", description = "Invalid decimal, price range, pagination, or sort field")
     public ResponseEntity<Page<BookResponseDTO>> queryBooks(
             @RequestParam(required = false) String title,
             @RequestParam(required = false) String author,
@@ -178,10 +150,7 @@ public class BookAPI {
     @GetMapping("/sorted")
     @Operation(summary = "List books sorted by a field",
             description = "Returns an unpaginated list sorted ascending by title, author, id, price, or genre. The default field is title.")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Unsupported sort field",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
+    @ErrorApiResponse(responseCode = "400", description = "Unsupported sort field")
     public ResponseEntity<List<BookResponseDTO>> getSortedBooks(
             @Parameter(description = "Allowed values: title, author, id, price, genre.", schema = @Schema(allowableValues = {"title", "author", "id", "price", "genre"}))
             @RequestParam(required = false, defaultValue = "title") String category) {
@@ -198,10 +167,7 @@ public class BookAPI {
     @GetMapping("/price")
     @Operation(summary = "Filter books by price range",
             description = "Returns books with prices between minPrice and maxPrice, inclusive. minPrice must not exceed maxPrice.")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid decimal value or minPrice exceeds maxPrice",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
+    @ErrorApiResponse(responseCode = "400", description = "Invalid decimal value or minPrice exceeds maxPrice")
     public ResponseEntity<List<BookResponseDTO>> getPriceRangedBooks(
             @Parameter(description = "Inclusive minimum price.", example = "10.00")
             @RequestParam BigDecimal minPrice,
@@ -228,12 +194,8 @@ public class BookAPI {
     @PatchMapping("/{id}")
     @Operation(summary = "Partially update a book",
             description = "Updates only supplied fields. Omitted or blank text fields remain unchanged; a supplied price must be greater than zero. Text values are trimmed before storage.")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid book ID or supplied field",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Book not found",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
+    @ErrorApiResponse(responseCode = "400", description = "Invalid book ID or supplied field")
+    @ErrorApiResponse(responseCode = "404", description = "Book not found")
     public ResponseEntity<ApiResponse<BookResponseDTO>> patchBook(
             @PathVariable Long id,
             @RequestBody BookPatchRequestDTO updates) {
@@ -244,12 +206,8 @@ public class BookAPI {
     @PutMapping("/{id}")
     @Operation(summary = "Replace a book",
             description = "Replaces every mutable book field. Title, author, genre, and a positive price are required; text values are trimmed before storage.")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid book ID or request validation failed",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Book not found",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
+    @ErrorApiResponse(responseCode = "400", description = "Invalid book ID or request validation failed")
+    @ErrorApiResponse(responseCode = "404", description = "Book not found")
     public ResponseEntity<ApiResponse<BookResponseDTO>> replaceBook(
             @PathVariable Long id,
             @Valid @RequestBody BookRequestDTO updates) {

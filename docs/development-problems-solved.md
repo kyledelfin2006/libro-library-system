@@ -233,6 +233,22 @@ I removed the historical total and timing examples. The README now explains whic
 
 Readers can see what a passing unit or MVC test establishes without mistaking it for proof of Flyway, JPA, PostgreSQL constraints, authentication, or a manual Swagger UI review. Test totals come from the run being reported, not from prose that may have been written weeks earlier. I searched the README, contributor guide, docs, and TODO for exact totals and per-class counts after editing; no document now presents a stored test total as current. This was a documentation change, so I did not change production code or add tests.
 
+## 13. Repeated OpenAPI error schemas obscured endpoint documentation
+
+### What was wrong
+
+Book and user controller methods repeated the same nested `@Content` and `@Schema(implementation = ErrorResponse.class)` declaration for each expected error. The status code and message differed by endpoint, but the payload schema did not. This made each response block longer and allowed the common error schema declaration to drift.
+
+### How I addressed it
+
+I added the narrowly scoped `@ErrorApiResponse` composed annotation under `app.global.config`. It supplies only the shared `ErrorResponse` schema; each controller method still declares its own HTTP status and human-readable reason. Because the annotation is repeatable, methods with multiple error statuses can list them directly beside their operation without an `@ApiResponses` container. Normal success responses remain documented with Springdoc's standard `@ApiResponse` annotation.
+
+I extended `OpenApiMvcTest` to assert that the paginated query's 400 response retains its endpoint-specific description and references the shared `ErrorResponse` schema. The API documentation guideline and contributor instructions now describe the reusable annotation and its intended boundary.
+
+### Effect and verification
+
+Before, controllers mixed endpoint meaning with repeated schema wiring. After, endpoint-specific HTTP behavior remains at the controller while the repeated payload detail has one source of truth. This is documentation metadata only; request handling and runtime error bodies did not change. On 2026-10-03, `mvn -Dtest=OpenApiMvcTest test` passed, including generation of `/v3/api-docs` and assertions for the response description and schema reference.
+
 ## What these problems taught me
 
 The recurring pattern was that the visible failure was usually one layer away from the real cause. A restart loop was a schema contract problem. A validation failure was a difference between full replacement and partial update. A fragile aggregate was a repository type-contract problem. A user model was an integration-boundary problem, not only an entity-design problem.
