@@ -118,19 +118,30 @@ Keep production code below the root `app` package. `LibraryApplication` sits at 
 
 ## Runtime Architecture
 
-The standard request path is:
+Book and user API operations follow their own controller and service paths, then share the JPA persistence boundary:
 
 ```text
 HTTP client
   -> Spring Security filter chain
-  -> BookAPI controller
-  -> BookService
-  -> BookRepository
+  -> BookAPI or UserAPI controller
+  -> BookService or UserService
+  -> BookRepository or UserRepository
   -> Hibernate/JPA
   -> PostgreSQL
 ```
 
-The response path generally converts `Book` entities to DTOs through `BookMapper`. Exceptions escape their originating layer and are converted to JSON by `GlobalExceptionHandler`.
+HTTP Basic authentication has a separate account-lookup path through the same user repository:
+
+```text
+HTTP Basic credentials
+  -> Spring Security filter chain
+  -> LibroUserDetailsService.loadUserByUsername(universityId)
+  -> UserRepository.findByUniversityId(universityId)
+  -> Hibernate/JPA
+  -> PostgreSQL users table
+```
+
+`UserService` uses `UserRepository` for signup and account operations; `LibroUserDetailsService` uses it to load the stored password hash and role for authentication. Signup is public, while other routes require authentication. Neither controller accesses a repository directly. Response paths generally convert entities to DTOs through the feature mapper. Exceptions escape their originating layer and are converted to JSON by `GlobalExceptionHandler`.
 
 ### Application entry point
 
@@ -209,7 +220,7 @@ The count-and-total-value aggregate uses the typed `LibraryAggregate` constructo
 
 The user feature currently contains the entity, enums, create/response DTOs, mapper, repository, BCrypt `PasswordEncoder` bean, and `UserService`. `UserService` normalizes university IDs and email addresses, rejects duplicates, validates password complexity, hashes passwords before persistence, and enforces the role/course/major rules. Passwords must be at least eight characters and include uppercase and lowercase letters, a number, and a symbol. The enum and V2 database checks define the allowed academic values; the service enforces their cross-field relationships.
 
-`UserAPI` exposes signup at `POST /app/users/signup`, plus paginated listing, lookup, profile PATCH/PUT, password change, and deletion under `/app/users`. These routes use request/response DTOs. `LibroUserDetailsService` loads accounts by university ID and maps the stored role to Spring Security authorities. `SecurityConfig` permits signup and requires HTTP Basic authentication for all other routes. `UserPersistenceIT` provides PostgreSQL-backed user-domain coverage when the integration profile runs. `UserService` injects Jakarta `Validator`, validates create and password-change requests, and exposes transactional update operations that normalize supplied fields, protect email uniqueness, verify current passwords, and store only encoded password hashes.
+`UserAPI` exposes signup at `POST /app/users/signup`, plus paginated listing, lookup, profile PATCH/PUT, password change, and deletion under `/app/users`. These routes use request/response DTOs. Both `UserService` and `LibroUserDetailsService` inject `UserRepository`, but serve separate flows: `UserService` performs account use cases, while `LibroUserDetailsService.loadUserByUsername` calls `findByUniversityId` during HTTP Basic authentication and maps the stored password hash and role into Spring Security `UserDetails`. Both paths reach the same JPA repository and `users` table; authentication lookup does not pass through `UserAPI` or `UserService`. `SecurityConfig` permits signup and requires HTTP Basic authentication for all other routes. `UserPersistenceIT` provides PostgreSQL-backed user-domain coverage when the integration profile runs. `UserService` injects Jakarta `Validator`, validates create and password-change requests, and exposes transactional update operations that normalize supplied fields, protect email uniqueness, verify current passwords, and store only encoded password hashes.
 
 ### Entity and database model
 

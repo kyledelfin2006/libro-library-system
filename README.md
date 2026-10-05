@@ -68,21 +68,27 @@ This README is the project's main portfolio entry point. The development reflect
 
 ## Architecture Overview
 
-The system runs as a Spring Boot API alongside PostgreSQL. Book and user requests pass through the HTTP, business, and persistence layers; Flyway prepares the schema at startup. Shared validation, mapping, security configuration, and error handling support the API.
+The system runs as a Spring Boot API alongside PostgreSQL. Book and user requests pass through the HTTP, business, and persistence layers; Flyway prepares the schema at startup. Shared validation, mapping, security configuration, and error handling support the API. `UserRepository` has two clear consumers: `UserService` for account use cases and `LibroUserDetailsService` for the account lookup Spring Security needs during HTTP Basic authentication.
 
 ```mermaid
 flowchart LR
-    Client["API Client"] -->|HTTP / JSON + Basic credentials| Security["Spring Security<br/>signup public; other routes authenticated"]
+    Client["API Client"] -->|HTTP / JSON + optional Basic credentials| Security["Spring Security<br/>signup public; other routes authenticated"]
     subgraph App["Docker Compose: Spring Boot application"]
         API["BookAPI<br/>Spring MVC"] --> Service["BookService<br/>business rules · transactions"]
-        Service --> Repo["BookRepository<br/>Spring Data JPA"]
-        Repo --> ORM["Hibernate / JPA"]
+        Service --> BookRepo["BookRepository<br/>Spring Data JPA"]
+        BookRepo --> ORM["Hibernate / JPA"]
         UserAPI["UserAPI<br/>account and profile routes"] --> User["UserService<br/>profile and password rules"]
         User --> UserRepo["UserRepository"]
+        Security -->|load account for Basic authentication| UserDetails["LibroUserDetailsService<br/>lookup by university ID · map role"]
+        UserDetails -->|findByUniversityId| UserRepo
+        UserRepo --> ORM
         Shared["Shared concerns<br/>DTOs · mappers · Jakarta validation<br/>GlobalExceptionHandler · OpenAPI"]
-        Security --> API
+        Security -->|authorized request| API
+        Security -->|authorized request| UserAPI
         API -.-> Shared
         Service -.-> Shared
+        UserAPI -.-> Shared
+        User -.-> Shared
     end
     ORM -->|JDBC| DB[("PostgreSQL 18")]
     Flyway["Flyway migrations<br/>V1 books · V2 users"] -->|startup schema changes| DB
@@ -91,27 +97,38 @@ flowchart LR
 
     classDef service fill:#e8f1fb,stroke:#5078a0,color:#172b3d
     classDef data fill:#edf5ed,stroke:#62836a,color:#203528
-    class API,Service,Repo,ORM,User,UserRepo,Shared,Security service
+    class API,Service,BookRepo,ORM,UserAPI,User,UserRepo,UserDetails,Shared,Security service
     class DB,Flyway data
 ```
+
+The authentication branch is separate from user account operations. For a protected request, Spring Security asks `LibroUserDetailsService` to load the account by university ID; that service reads the same `UserRepository` used by `UserService`, then returns Spring Security's user details with the stored password hash and mapped role. Signup is permitted without authentication; the remaining routes require authentication. Controllers do not access the repository directly.
 
 ### Layered Design
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 18}, "themeVariables": {"fontSize": "12px"}}}%%
 flowchart TD
-    C["<b>Controller Layer (BookAPI)</b><br/>HTTP routing · Request validation<br/>Response mapping · Delegates to Service"]
-    S["<b>Service Layer (BookService)</b><br/>Business logic · Transaction boundaries<br/>Orchestrates Repository"]
-    R["<b>Repository Layer (BookRepository)</b><br/>Spring Data JPA abstraction<br/>Query methods · Custom JPQL queries"]
+    C["<b>Controller Layer (BookAPI / UserAPI)</b><br/>HTTP routing · Request validation<br/>Response mapping · Delegates to services"]
+    S["<b>Service Layer (BookService / UserService)</b><br/>Business logic · Transaction boundaries<br/>Orchestrates repositories"]
+    BR["<b>BookRepository</b><br/>Spring Data JPA<br/>Book queries and persistence"]
+    UR["<b>UserRepository</b><br/>Spring Data JPA<br/>Account queries and persistence"]
+    A["<b>Authentication Lookup</b><br/>LibroUserDetailsService<br/>Loads account by university ID"]
     P["<b>Persistence Layer (JPA / Hibernate)</b><br/>Entity management · Dirty checking<br/>Flush / commit · Maps objects to tables"]
     D["<b>Database (PostgreSQL 18)</b><br/>Tables · Indexes · Constraints<br/>Flyway migrations"]
-    X["<b>Cross-cutting Concerns</b><br/>DTOs · BookMapper<br/>GlobalExceptionHandler · SecurityConfig"]
+    X["<b>Cross-cutting Concerns</b><br/>DTOs · feature mappers<br/>GlobalExceptionHandler · SecurityConfig"]
 
-    C --> S --> R --> P --> D
+    C --> S
+    S --> BR --> P
+    S --> UR --> P
+    A -->|findByUniversityId| UR
     X -.-> C
     X -.-> S
-    X -.-> R
+    X -.-> BR
+    X -.-> UR
+    X -.-> A
 ```
+
+Both user flows converge on `UserRepository`: `UserService` uses it for signup, profile, and password operations; `LibroUserDetailsService` uses it only to load the account Spring Security authenticates. The authentication lookup does not route through `UserAPI` or `UserService`.
 
 ## File Structure
 
