@@ -15,7 +15,7 @@ The institutional context behind the user domain is documented in [Institutional
 
 The current domain decision is documented in [Domain Decisions](docs/domain-decisions.md): each `Book` represents one physical borrowable copy, so one copy can be assigned to only one active borrower at a time. Separate copies of the same title are separate records.
 
-The API exposes generated OpenAPI documentation through Springdoc. Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running. Operation descriptions and DTO schemas document book and user behavior for Swagger's interactive API reference. See the [API Documentation Guideline](docs/api-documentation-guideline.md) for the project standard. User endpoints currently permit unauthenticated access and are for development use only.
+The API exposes generated OpenAPI documentation through Springdoc. Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running; both require HTTP Basic authentication under the current catch-all security rule. `POST /app/users/signup` is the only unauthenticated route. Other routes require a university ID and password. CSRF protection remains enabled, so unsafe requests also need a valid CSRF token. See the [API Documentation Guideline](docs/api-documentation-guideline.md) for the project standard.
 
 Main Developer: **Aldrin Kyle Delfin**
 
@@ -64,7 +64,7 @@ This README is the project's main portfolio entry point. The development reflect
 4. [API Documentation Guideline](docs/api-documentation-guideline.md) sets the standard for accurate OpenAPI and Swagger documentation without unnecessary annotation boilerplate.
 5. [Implementation Plan: Remaining Quality Improvements](docs/implementation-plan-quality-improvements.md) tracks the remaining OpenAPI maintainability work.
 6. [Agent and Contributor Guide](AGENTS.md) records the architecture, layer contracts, coding rules, testing expectations, and definition of done. It stays at the repository root so coding agents can discover it automatically.
-7. [Development TODO](internal-docs/TODO.md) tracks completed user-domain work and remaining authentication, loan, testing, and documentation tasks. It is a working roadmap, not part of the public API contract.
+7. [Development TODO](internal-docs/TODO.md) tracks completed user-domain work and remaining authorization, loan, testing, and documentation tasks. It is a working roadmap, not part of the public API contract.
 
 ## Architecture Overview
 
@@ -72,7 +72,7 @@ The system runs as a Spring Boot API alongside PostgreSQL. Book and user request
 
 ```mermaid
 flowchart LR
-    Client["API Client"] -->|HTTP / JSON| Security["Spring Security<br/>permitAll; CSRF disabled"]
+    Client["API Client"] -->|HTTP / JSON + Basic credentials| Security["Spring Security<br/>signup public; other routes authenticated"]
     subgraph App["Docker Compose: Spring Boot application"]
         API["BookAPI<br/>Spring MVC"] --> Service["BookService<br/>business rules · transactions"]
         Service --> Repo["BookRepository<br/>Spring Data JPA"]
@@ -279,7 +279,7 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 - Validation with `@Valid` on create and replace requests.
 - Global handling for `BookNotFoundException`, validation errors, malformed JSON, number format errors, database issues, and unsupported methods.
 - Validation errors also include a `fieldErrors` map keyed by request field (or `_global` when no field is available), so clients can render precise messages without parsing the combined `details` string.
-- Open security configuration for local development and testing.
+- HTTP Basic authentication through Spring Security; signup is public and other routes require authentication.
 - Versioned database schema via Flyway.
 
 ## Request Lifecycle
@@ -307,7 +307,7 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 2. Spring Boot starts `app.LibraryApplication`.
 3. The Spring Boot Flyway starter runs pending migrations before JPA initializes.
 4. Hibernate validates the migrated schema with `ddl-auto=validate`.
-5. `SecurityConfig` allows all requests and disables CSRF.
+5. `SecurityConfig` permits `POST /app/users/signup`, requires HTTP Basic authentication for other requests, and retains Spring Security's CSRF protection.
 6. The API becomes ready at `http://localhost:8080`.
 
 ## Code Highlights
@@ -419,7 +419,7 @@ Docker is the preferred way to run the project because it brings up both Postgre
     ```bash
     docker compose up --build
     ```
-4. Open [Swagger UI](http://localhost:8080/swagger-ui.html) to explore and try the API endpoints. The raw OpenAPI specification is available at [`http://localhost:8080/v3/api-docs`](http://localhost:8080/v3/api-docs). Swagger UI is an interactive API reference; it does not deploy the service. All API routes currently permit unauthenticated access and are intended for trusted development use only.
+4. Open [Swagger UI](http://localhost:8080/swagger-ui.html) to explore and try the API endpoints. The raw OpenAPI specification is available at [`http://localhost:8080/v3/api-docs`](http://localhost:8080/v3/api-docs). Both routes require HTTP Basic authentication. Swagger UI is an interactive API reference; it does not deploy the service. Unsafe requests are subject to CSRF protection as well as authentication rules.
 
 ### Local development
 
@@ -484,13 +484,14 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 
 The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The default Docker-free suite covers book and user MVC contracts, generated OpenAPI security-sensitive schemas, services, DTOs, mappings, and exception handling. The opt-in PostgreSQL profile checks Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, and database constraints. PostgreSQL integration execution requires Docker.
 
-Tests are grouped by test scope and domain: `src/test/java/unit/book`, `src/test/java/unit/user`, and `src/test/java/unit/global`; PostgreSQL integration tests live under `src/test/java/integration/book` and `src/test/java/integration/user`. Keep new tests with the domain they exercise. Shared PostgreSQL test configuration lives directly under `integration` so both integration classes use one Spring context and container.
+Tests are grouped by test scope and domain: `src/test/java/unit/auth`, `src/test/java/unit/book`, `src/test/java/unit/user`, and `src/test/java/unit/global`; PostgreSQL integration tests live under `src/test/java/integration/book` and `src/test/java/integration/user`. Keep new tests with the domain they exercise. Shared PostgreSQL test configuration lives directly under `integration` so both integration classes use one Spring context and container.
 
 - `BookTest` verifies book construction and request DTO constraints.
 - `BookApiMvcTest` verifies routes, status codes, JSON response shapes, invalid request payloads, pagination/query binding, and global exception responses without starting JPA or PostgreSQL.
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.
 - `BookServiceTest` verifies service rules, repository interaction, search, sorting, pricing, typed statistics projections, genre-distribution mapping, and dirty-checking expectations.
 - `UserApiMvcTest` verifies all user routes, request binding and validation, paging defaults, direct DTO versus envelope response shapes, 404/409 error responses, and that public responses do not expose password fields. It mocks `UserService` and does not start JPA or PostgreSQL.
+- `SecurityFlowMvcTest` exercises the real filter chain and `LibroUserDetailsService` with a mocked user repository: public signup, unauthenticated rejection, valid university-ID/password authentication, and incorrect-password rejection.
 - `OpenApiMvcTest` generates `/v3/api-docs` in an MVC slice and checks representative routes, response codes, write-only password inputs, and absence of password fields in public responses without Docker.
 - `GlobalExceptionHandlerTest` directly invokes the exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
 - `UserServiceTest` verifies partial-update normalization, DTO and business validation, password verification and encoding, unchanged-email handling, duplicate-email rejection, and dirty-checking expectations. Academic combinations still need focused coverage; `UserPersistenceIT` covers selected real-database paths.
@@ -546,7 +547,7 @@ Generate the JaCoCo report at `target/site/jacoco/index.html`:
 mvn clean verify
 ```
 
-The default suite includes plain unit tests and MVC slices. It proves HTTP binding and generated OpenAPI contracts, while real JPA transactions, Flyway migrations, and PostgreSQL constraints require the Docker-backed integration profile. Authentication and authorization behavior awaits the selected security model.
+The default suite includes plain unit tests and MVC slices. It verifies HTTP Basic authentication and request protection through the real filter chain, while real JPA transactions, Flyway migrations, and PostgreSQL constraints require the Docker-backed integration profile. Role-specific authorization and production identity-provider choices remain open.
 
 Validation failures retain the `error`, `details`, `timestamp`, and `statusCode` fields and additionally return a structured map:
 
@@ -570,9 +571,10 @@ The detailed, interview-ready account of the development problems I identified a
 ## Upcoming Improvements
 
 - Inspect the generated OpenAPI document and Swagger UI with the application and database running; verify parameter defaults, request/response schemas, statuses, errors, and examples against the implementation.
-- Learn Spring Security's filter chain, authentication, `UserDetailsService`, and `SecurityContext`, then choose an institutional SSO, session, or token-based authentication model.
-- Implement and test endpoint-specific authorization before exposing user endpoints; the current `permitAll()` configuration leaves every route public.
-- Add focused tests for the remaining user academic-rule combinations; implement endpoint authorization and safe role assignment before deployment.
+- Decide whether local HTTP Basic accounts are sufficient for deployment or whether Libro must integrate with institutional SSO.
+- Define and implement role-specific permissions for `STUDENT` and `FACULTY`; currently any authenticated account can access every protected route.
+- Revisit CSRF handling and document the HTTP Basic scheme and CSRF requirements in OpenAPI before external use.
+- Restrict client-supplied role assignment during signup before deployment; add focused tests for remaining academic-rule combinations.
 - Implement the loan domain with active-loan constraints and overdue/history queries, using the authenticated identity for borrower operations; document its API when routes are added.
 - Run `mvn -Pintegration verify` on a Docker-enabled machine to execute the PostgreSQL integration tests; add them to CI when a CI workflow is introduced.
 - Benchmark case-insensitive substring searches as the catalog grows; add database search indexes only if measurements justify them.

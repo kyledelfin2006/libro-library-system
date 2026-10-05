@@ -49,7 +49,7 @@ Do not copy the same prose into controller comments, annotations, README tables,
 - Document parameters whose meaning is ambiguous or whose allowed values/limits are not represented elsewhere. Use typed Java parameters and validation for actual enforcement; documentation alone is not validation.
 - For pagination, make the zero-based page convention, default size, maximum size, allowed sort fields, and sort direction discoverable in Swagger. Keep the rules next to the endpoint or in one reusable description only if the same behavior applies consistently.
 - Add examples for representative create/update payloads and unusual query formats when DTO examples and inferred parameter schemas are not enough. Keep one source of truth where possible; avoid copying the same JSON example into multiple annotations and README sections.
-- Document security requirements accurately. The current API permits unauthenticated access; do not declare bearer or cookie security in OpenAPI until the application enforces it. Before an untrusted deployment, authentication and endpoint authorization must be implemented and documented together.
+- Document security requirements accurately. The current filter chain leaves `POST /app/users/signup` public and requires HTTP Basic authentication on other routes; CSRF protection remains enabled for unsafe methods. Represent the enforced HTTP Basic scheme and signup exception in OpenAPI, and describe CSRF requirements where clients need them. Do not declare bearer or cookie authentication unless the application enforces it.
 
 ## Keeping annotations readable
 

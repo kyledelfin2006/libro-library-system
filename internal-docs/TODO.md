@@ -18,7 +18,7 @@ credentials, or real user data.
 - [x] Added database uniqueness, format, role, course, and major constraints.
 - [x] Added indexes for common user filters.
 - [x] Added `UserRepository` lookup, existence, role, and course methods.
-- [x] Added the Spring Security dependency and a development `permitAll` filter chain.
+- [x] Added Spring Security HTTP Basic authentication using the university ID and stored BCrypt password hash; signup is public and other routes require authentication.
 - [x] Added the BCrypt `PasswordEncoder` bean.
 - [x] Added `UserMapper` for request/entity and entity/response conversion.
 - [x] Added `UserService` create, paginated-read, lookup, and delete operations.
@@ -40,10 +40,9 @@ credentials, or real user data.
 
 ## User domain
 
-- [x] Add `UserAPI` under `/app/users` for create, paginated list, lookup,
-  profile PATCH/PUT, password change, and account deletion. These routes
-  currently use development `permitAll`; this does not satisfy production
-  authentication or authorization requirements.
+- [x] Add `UserAPI` under `/app/users` for public signup, paginated list,
+  lookup, profile PATCH/PUT, password change, and account deletion. All routes
+  except signup require HTTP Basic authentication.
 - [x] Add PostgreSQL-backed user persistence tests for normalized creation,
   stored password hashes, committed updates, and database constraints.
 - [x] Add MVC-slice tests for all user routes, request binding and validation,
@@ -77,15 +76,21 @@ credentials, or real user data.
 
 ## Spring Security and authentication
 
-- [ ] Integrate the password policy with the institution's approved authentication
-  or SSO solution before production use.
-- [ ] Choose the authentication model (institutional SSO, sessions, or tokens)
-  before deployment to untrusted clients. Decide whether local password
-  authentication is supported; add `UserDetailsService` only if that model
-  requires it.
-- [ ] Add authentication and authorization tests for the selected model.
-- [ ] Replace `permitAll()` with endpoint-specific authorization rules.
-- [ ] Keep CSRF and credential handling appropriate for the selected auth model.
+- [x] Add `LibroUserDetailsService` to load users by university ID, map roles to
+  Spring authorities, and verify credentials with the BCrypt `PasswordEncoder`.
+- [x] Require authentication except for `POST /app/users/signup`; retain CSRF
+  protection for unsafe methods.
+- [x] Add MVC security-flow tests for anonymous signup, anonymous rejection,
+  successful Basic authentication, and incorrect-password rejection. The tests
+  use the real `LibroUserDetailsService` and a mocked `UserRepository`.
+- [ ] Decide whether local HTTP Basic accounts are sufficient or institutional
+  SSO is required before deployment to untrusted clients.
+- [ ] Define role-specific permissions for `STUDENT` and `FACULTY`; currently
+  every authenticated user can access every protected route.
+- [ ] Review CSRF behavior for intended API clients and document the HTTP Basic
+  scheme, public signup exception, and CSRF requirements in OpenAPI.
+- [ ] Remove client control over role assignment during public signup before
+  deployment.
 - [ ] For future loan routes, derive the borrower from the authenticated
   principal rather than a client-supplied user ID.
 
@@ -97,6 +102,7 @@ credentials, or real user data.
   checking, and database constraints (`mvn -Pintegration verify`).
 - [x] Move generated OpenAPI route/schema assertions into the Docker-free MVC
   suite so `mvn test` checks representative operations and password privacy.
+- [x] Add Docker-free MVC tests for the current HTTP Basic security flow.
 - [ ] Run `mvn -Pintegration verify` with Docker available and confirm the
   PostgreSQL tests pass; the current environment has no Docker daemon.
 - [ ] Verify that V2 has not already been applied to a persistent database; if
@@ -114,9 +120,9 @@ credentials, or real user data.
 ## Recommended next slice
 
 Run the Docker-backed PostgreSQL integration checks and inspect Swagger UI
-against the project guideline.
-Before any untrusted deployment, choose and
-implement the authentication model and endpoint-specific authorization. Loan
-routes remain future work and should use the authenticated principal as the
-borrower. Controllers should translate HTTP requests and responses, not contain
+  against the project guideline. Before an untrusted deployment, decide whether
+local authentication is acceptable, implement role-specific access and safe
+role assignment, and settle CSRF/OpenAPI documentation. Loan routes remain
+future work and should use the authenticated principal as the borrower.
+Controllers should translate HTTP requests and responses, not contain
 business logic.

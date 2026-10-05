@@ -151,7 +151,7 @@ I then added a transactional partial-update path for user profile fields. It pre
 
 ### Verification
 
-`UserServiceTest` covers update normalization, validation, unchanged-email behavior, duplicate-email rejection, and dirty-checking expectations. At the time of this milestone, the controller and real authentication integration remained outside scope. `UserAPI` has since been added, and the MVC contract tests are now in `src/test/java/unit/user/UserApiMvcTest.java`; authentication integration remains future work.
+`UserServiceTest` covers update normalization, validation, unchanged-email behavior, duplicate-email rejection, and dirty-checking expectations. At the time of this milestone, the controller and authentication integration remained outside scope. `UserAPI` and its MVC tests were added afterward; the current HTTP Basic flow and its test coverage are described in the README and TODO.
 
 ## 8. The test feedback loop was too easy to misunderstand
 
@@ -231,7 +231,7 @@ I removed the historical total and timing examples. The README now explains whic
 
 ### Effect and verification
 
-Readers can see what a passing unit or MVC test establishes without mistaking it for proof of Flyway, JPA, PostgreSQL constraints, authentication, or a manual Swagger UI review. Test totals come from the run being reported, not from prose that may have been written weeks earlier. I searched the README, contributor guide, docs, and TODO for exact totals and per-class counts after editing; no document now presents a stored test total as current. This was a documentation change, so I did not change production code or add tests.
+Readers can see what a passing unit or MVC test establishes without mistaking it for proof of Flyway, JPA, PostgreSQL constraints, repository-backed authentication against PostgreSQL, or a manual Swagger UI review. Test totals come from the run being reported, not from prose that may have been written weeks earlier. I searched the README, contributor guide, docs, and TODO for exact totals and per-class counts after editing; no document now presents a stored test total as current. This was a documentation change, so I did not change production code or add tests.
 
 ## 13. Repeated OpenAPI error schemas obscured endpoint documentation
 

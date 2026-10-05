@@ -18,7 +18,7 @@ The application is a single-module Spring Boot REST API for managing a library's
 | Database | PostgreSQL 18                                                           |
 | Schema management | Flyway SQL migrations                                                   |
 | Validation | Jakarta Bean Validation                                                 |
-| Security | Spring Security filter chain; all requests currently permitted and CSRF disabled |
+| Security | Spring Security HTTP Basic; public signup, authenticated remaining routes, CSRF enabled |
 | Boilerplate reduction | Lombok 1.18.46                                                          |
 | Testing | JUnit 5, Mockito, Jakarta Validator                                     |
 | Coverage | JaCoCo report during Maven `verify`                                     |
@@ -92,6 +92,8 @@ library-api-system/
     |           |-- V1__create_books_table.sql
     |           `-- V2__create_users_table.sql
     `-- test/
+        |-- java/unit/auth/
+        |   `-- SecurityFlowMvcTest.java
         |-- java/unit/book/
         |   |-- BookApiMvcTest.java
         |   |-- BookMapperTest.java
@@ -272,9 +274,9 @@ Handler order matters conceptually. `DataIntegrityViolationException` is a subty
 
 ### Security
 
-`SecurityConfig` installs Spring Security but currently permits every request and disables CSRF. This is an explicit development-stage posture, not production authentication. Do not describe the API as protected.
+`SecurityConfig` permits `POST /app/users/signup` without authentication and requires HTTP Basic authentication for every other request. CSRF protection remains enabled. This is a development-stage authentication setup; use HTTPS outside local development, and review role-specific authorization and CSRF behavior before deployment.
 
-If authentication is introduced, treat it as an API contract and architecture change. Add endpoint authorization rules, an authentication mechanism, tests for allowed and denied requests, credential/secret handling, and updated documentation together. Reconsider CSRF based on whether credentials are cookie-based or token-based.
+The current mechanism is local HTTP Basic authentication backed by `LibroUserDetailsService` and BCrypt. It identifies users but does not apply role-specific permissions: any authenticated account can reach all protected routes. Signup accepts a client-supplied role. Before untrusted deployment, decide whether local credentials or institutional SSO are appropriate, define role permissions, restrict role assignment, document HTTP Basic and CSRF in OpenAPI, and verify credential handling over HTTPS.
 
 Before deploying user routes to an environment with untrusted clients, select the authentication model and apply its endpoint authorization rules. Do not assume `UserDetailsService` is appropriate if the institution's SSO is the chosen identity provider. Loan operations must identify the borrower from the authenticated principal rather than a client-supplied user ID.
 
@@ -356,6 +358,10 @@ Compile-time annotation processing generates DTO/entity accessors, constructors,
 ### `spring-boot-starter-test`
 
 Provides the JUnit 5 test platform, Mockito, Spring testing utilities, AssertJ, and related test infrastructure. `BookServiceTest` instantiates the service with a mocked repository; the MVC tests start a Spring web slice.
+
+### `spring-security-test`
+
+Test-scoped Spring Security MockMvc support used to exercise the real filter chain and provide CSRF tokens in MVC tests. It does not change production security behavior.
 
 ### PostgreSQL integration-test dependencies
 
@@ -479,11 +485,12 @@ Central advice maps Java/application exceptions to stable HTTP errors, keeping e
 
 ## Testing Strategy
 
-Test sources are grouped by scope and feature: book unit/MVC tests live in `src/test/java/unit/book`, user unit tests in `src/test/java/unit/user`, cross-domain unit tests in `src/test/java/unit/global`, and PostgreSQL-backed tests in `src/test/java/integration/book` and `src/test/java/integration/user`. Keep new tests in the matching package so the filesystem and Java package names remain aligned. Use the current run's `target/surefire-reports/` and `target/failsafe-reports/` as the source for test counts; do not maintain totals in this guide.
+Test sources are grouped by scope and feature: security MVC tests live in `src/test/java/unit/auth`, book unit/MVC tests in `src/test/java/unit/book`, user unit tests in `src/test/java/unit/user`, cross-domain unit tests in `src/test/java/unit/global`, and PostgreSQL-backed tests in `src/test/java/integration/book` and `src/test/java/integration/user`. Keep new tests in the matching package so the filesystem and Java package names remain aligned. Use the current run's `target/surefire-reports/` and `target/failsafe-reports/` as the source for test counts; do not maintain totals in this guide.
 
 - `BookApiMvcTest`: Spring Boot 4 MVC-slice coverage for route/status contracts, JSON shapes, invalid request bodies, pagination and query binding, and global exception responses. It uses mocked service/mapper beans and does not start JPA, Flyway, or PostgreSQL.
 
 - `UserApiMvcTest`: MVC-slice coverage for every user route, binding and validation behavior, pagination, response shapes, 404/409 error bodies, and exclusion of password data from public responses. It uses a mocked `UserService` and does not start JPA, Flyway, or PostgreSQL.
+- `SecurityFlowMvcTest`: MVC-slice checks for public signup, unauthenticated rejection, valid and invalid HTTP Basic credentials, and university-ID lookup through the real `LibroUserDetailsService` backed by a mocked repository.
 - `OpenApiMvcTest`: generated `/v3/api-docs` contract checks in an MVC slice, covering representative paths, response codes, write-only password inputs, and public response privacy without Docker.
 
 - `UserServiceTest`: Mockito-based service unit tests for partial-update normalization, validation, password verification and encoding, password-length bounds, unchanged-email handling, duplicate-email rejection, missing-user handling, and dirty-checking expectations.
@@ -506,7 +513,7 @@ The unit/MVC suite execution setup is deliberately small and optimized:
 
 These choices keep the feedback loop small without deleting, merging, or weakening tests. Build times are environment-dependent; first-time Maven dependency downloads, Mockito/Byte Buddy agent startup, and machine resources may change the total.
 
-The exception-handler tests verify direct Java method behavior without loading Spring MVC. The generated OpenAPI contract runs in the normal Docker-free suite. Security behavior and upgrade-path migration behavior still need dedicated coverage. The PostgreSQL profile provides real-database coverage when Docker is available; a passing unit/MVC suite alone does not prove persistence behavior.
+The exception-handler tests verify direct Java method behavior without loading Spring MVC. The generated OpenAPI contract and HTTP Basic security flow run in the normal Docker-free suite. Security tests mock `UserRepository`, so they do not verify the university-ID query against PostgreSQL. The PostgreSQL profile provides real-database coverage when Docker is available; a passing unit/MVC suite alone does not prove persistence behavior.
 
 Choose test scope based on the change:
 
@@ -584,14 +591,14 @@ When a breaking change is intended, document migration guidance and update all e
 
 ## Known Limitations and Risks
 
-- Authentication and authorization are not implemented; every endpoint is public.
-- CSRF is disabled.
+- HTTP Basic authentication protects every route except public signup; role-specific authorization has not been defined.
+- CSRF protection remains enabled.
 - H2 is declared but has no dedicated application profile or integration-test setup.
 - The Docker image requires a prebuilt JAR and does not build source itself.
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
-- User routes are currently permitted by the global development security configuration; create requests include a client-supplied role. Do not treat these routes as safe for deployment until authorization and role assignment are designed.
-- There is no loan feature or authentication flow. User routes have MVC contract and PostgreSQL integration tests; authentication behavior still needs dedicated tests when a model is chosen.
-- Docker-backed JPA/migration checks are implemented but require a working Docker daemon to verify. Security behavior and a fresh-to-existing migration upgrade path still need tests.
+- Signup accepts a client-supplied role; role assignment and role-specific authorization need review before deployment.
+- There is no loan feature. User routes have MVC contract, PostgreSQL integration, and HTTP Basic security-flow coverage; the security MVC tests mock the user repository.
+- Docker-backed JPA/migration checks are implemented but require a working Docker daemon to verify. A fresh-to-existing migration upgrade path still needs tests.
 - Success response shapes are inconsistent across endpoints.
 - `timestamp` fields are epoch milliseconds rather than ISO-8601 values.
 - The book health endpoint runs a lightweight database ping but is not integrated with Spring Boot Actuator or container health checks.
