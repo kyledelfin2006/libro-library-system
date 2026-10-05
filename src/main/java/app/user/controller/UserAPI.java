@@ -37,7 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/app/users")
-@Tag(name = "Users", description = "User account and profile operations. The current development security configuration permits unauthenticated access; do not expose these routes to untrusted clients.")
+@Tag(name = "Users", description = "User account and profile operations. Account registration is available at POST /app/users/signup; other user operations require authentication.")
 public class UserAPI {
 
     private final UserService service;
@@ -57,8 +57,8 @@ public class UserAPI {
      * @param request account data supplied by the client
      * @return HTTP 201 with the created public profile in a success envelope
      */
-    @PostMapping
-    @Operation(summary = "Create a user account",
+    @PostMapping("/signup")
+    @Operation(summary = "Sign up for a user account",
             description = "Creates an account. Students must provide a course; IT students must provide an approved major; faculty must leave course and major null. Passwords must be 8–72 characters and include uppercase and lowercase letters, a number, and a symbol. Names are trimmed and email is stored lowercase.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "User created")
     @ErrorApiResponse(responseCode = "400", description = "Request validation failed or university ID/email is already registered")

@@ -82,7 +82,7 @@ class UserApiMvcTest {
     void createUser_returnsCreatedEnvelopeAndPublicProfile() throws Exception {
         when(service.createUser(any(UserCreateRequestDTO.class))).thenReturn(user());
 
-        mockMvc.perform(post("/app/users")
+        mockMvc.perform(post("/app/users/signup")
                         .contentType(APPLICATION_JSON)
                         .content(createRequest()))
                 .andExpect(status().isCreated())
@@ -104,7 +104,7 @@ class UserApiMvcTest {
 
     @Test
     void createUser_withInvalidPayloadReturnsFieldErrorsWithoutCallingService() throws Exception {
-        mockMvc.perform(post("/app/users")
+        mockMvc.perform(post("/app/users/signup")
                         .contentType(APPLICATION_JSON)
                         .content("{\"universityId\":\"bad\",\"password\":\"weak\",\"email\":\"not-an-email\"}"))
                 .andExpect(status().isBadRequest())
@@ -122,7 +122,7 @@ class UserApiMvcTest {
         when(service.createUser(any(UserCreateRequestDTO.class)))
                 .thenThrow(new DataIntegrityViolationException("internal constraint detail"));
 
-        mockMvc.perform(post("/app/users")
+        mockMvc.perform(post("/app/users/signup")
                         .contentType(APPLICATION_JSON)
                         .content(createRequest()))
                 .andExpect(status().isConflict())

@@ -383,7 +383,7 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 
 | `GET` | `/app/users` | Lists users with pagination | `GET /app/users?page=0&size=12` | Spring `Page<UserResponseDTO>` |
 | `GET` | `/app/users/{universityId}` | Gets one user by university ID | `GET /app/users/2025-4321` | `UserResponseDTO` |
-| `POST` | `/app/users` | Creates a user | `POST /app/users` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
+| `POST` | `/app/users/signup` | Creates a user account | `POST /app/users/signup` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 | `PATCH` | `/app/users/{universityId}` | Updates supplied profile fields | `PATCH /app/users/2025-4321` with `UserCreateUpdateDTO` | `ApiResponse<UserResponseDTO>` |
 | `PUT` | `/app/users/{universityId}` | Replaces profile fields | `PUT /app/users/2025-4321` with `UserReplaceRequest` | `ApiResponse<UserResponseDTO>` |
 | `PUT` | `/app/users/{universityId}/password` | Changes password after current-password verification | `PUT /app/users/2025-4321/password` with `ChangePasswordDTO` | `ApiResponse<Void>` |
@@ -393,7 +393,7 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 
 ### User API
 
-User routes are available under `/app/users` for account creation, paginated listing, lookup by university ID, profile PATCH/PUT, password changes, and deletion. They currently inherit the development `permitAll` security configuration. Create requests also accept a role, so do not expose this configuration to untrusted clients; design authorization and role assignment before deployment. Loan routes are not implemented.
+User routes are available under `/app/users` for signup, paginated listing, lookup by university ID, profile PATCH/PUT, password changes, and deletion. `POST /app/users/signup` is public; all other routes require HTTP Basic authentication with a university ID and password. Account creation currently accepts a role, so role assignment and operation-specific authorization should be reviewed before exposing the API to untrusted clients. Loan routes are not implemented.
 
 ## Setup & Installation
 
