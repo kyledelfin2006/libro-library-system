@@ -59,6 +59,10 @@ class OpenApiMvcTest {
     void generatedSpecDescribesRoutesAndProtectsPasswordFields() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.securitySchemes.basicAuth.type").value("http"))
+                .andExpect(jsonPath("$.components.securitySchemes.basicAuth.scheme").value("basic"))
+                .andExpect(jsonPath("$.security[0].basicAuth").isEmpty())
+                .andExpect(jsonPath("$.paths['/app/users/signup'].post.security").isEmpty())
                 .andExpect(jsonPath("$.paths['/app/books/{id}'].get.tags[0]").value("Books"))
                 .andExpect(jsonPath("$.paths['/app/books/query'].get.parameters[?(@.name == 'minPrice')]").exists())
                 .andExpect(jsonPath("$.paths['/app/books/query'].get.parameters[?(@.name == 'page')]").exists())

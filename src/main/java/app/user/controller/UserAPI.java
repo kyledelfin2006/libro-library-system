@@ -10,6 +10,7 @@ import app.user.dto.UserResponseDTO;
 import app.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
@@ -58,6 +59,7 @@ public class UserAPI {
      * @return HTTP 201 with the created public profile in a success envelope
      */
     @PostMapping("/signup")
+    @SecurityRequirements
     @Operation(summary = "Sign up for a user account",
             description = "Creates an account. Students must provide a course; IT students must provide an approved major; faculty must leave course and major null. Passwords must be 8–72 characters and include uppercase and lowercase letters, a number, and a symbol. Names are trimmed and email is stored lowercase.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "User created")
