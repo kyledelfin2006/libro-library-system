@@ -55,8 +55,7 @@ public class UserCreateRequestDTO {
     @Schema(example = "alex.rivera@example.edu")
     private String email;
 
-    @NotNull(message = "User role is required")
-    @Schema(description = "Account role. Students require a course; faculty must leave course and major null.")
+    @Schema(description = "Ignored by account-creation endpoints; signup creates a student and administrator faculty creation creates a faculty account.")
     private UserRole userRole;
 
     @Schema(description = "Required for students. Allowed values are IT, EMC, and IS.")

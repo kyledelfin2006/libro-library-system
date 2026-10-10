@@ -38,7 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/app/users")
-@Tag(name = "Users", description = "User account and profile operations. Account registration is available at POST /app/users/signup; other user operations require authentication.")
+@Tag(name = "Users", description = "Student signup is public. Administrators create faculty accounts and delete student or faculty accounts; other user operations require authentication.")
 public class UserAPI {
 
     private final UserService service;
@@ -61,7 +61,7 @@ public class UserAPI {
     @PostMapping("/signup")
     @SecurityRequirements
     @Operation(summary = "Sign up for a user account",
-            description = "Creates an account. Students must provide a course; IT students must provide an approved major; faculty must leave course and major null. Passwords must be 8–72 characters and include uppercase and lowercase letters, a number, and a symbol. Names are trimmed and email is stored lowercase.")
+            description = "Creates a student account; any supplied role is ignored. Students must provide a course, and IT students must provide an approved major. Passwords must be 8–72 characters and include uppercase and lowercase letters, a number, and a symbol. Names are trimmed and email is stored lowercase.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "User created")
     @ErrorApiResponse(responseCode = "400", description = "Request validation failed or university ID/email is already registered")
     @ErrorApiResponse(responseCode = "409", description = "A database uniqueness constraint was concurrently violated")
@@ -69,6 +69,16 @@ public class UserAPI {
             @Valid @RequestBody UserCreateRequestDTO request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new ApiResponse<>(true, "User created successfully", service.createUser(request)));
+    }
+
+    @PostMapping("/faculty")
+    @Operation(summary = "Create a faculty account", description = "Creates a faculty account. Only administrators may use this operation; the submitted role is ignored and the account is always FACULTY.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Faculty account created")
+    @ErrorApiResponse(responseCode = "400", description = "Request validation failed or university ID/email is already registered")
+    public ResponseEntity<ApiResponse<UserResponseDTO>> createFaculty(
+            @Valid @RequestBody UserCreateRequestDTO request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new ApiResponse<>(true, "Faculty account created successfully", service.createFaculty(request)));
     }
 
     /**

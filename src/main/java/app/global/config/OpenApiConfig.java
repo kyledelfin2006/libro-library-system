@@ -22,7 +22,7 @@ import org.springframework.context.annotation.Configuration;
                 version = "1.0.0",
                 description = "Book collection and user account API for the Libro library management system prototype. "
                         + "Book and user routes are live; loan routes are not implemented. HTTP Basic authentication uses a university ID and password; POST /app/users/signup is public, and all other routes require authentication. "
-                        + "CSRF protection remains enabled, so state-changing requests also need a valid CSRF token.",
+                        + "Signup is public and creates students only. Administrators create faculty. Students may read books; faculty and administrators may manage books; only administrators may create faculty or delete student/faculty accounts. CSRF protection remains enabled, so state-changing requests also need a valid CSRF token.",
                 license = @License(name = "Project-specific prototype; no distribution license declared")
         )
 )

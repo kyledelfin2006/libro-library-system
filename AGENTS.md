@@ -18,7 +18,7 @@ The application is a single-module Spring Boot REST API for managing a library's
 | Database | PostgreSQL 18                                                           |
 | Schema management | Flyway SQL migrations                                                   |
 | Validation | Jakarta Bean Validation                                                 |
-| Security | Spring Security HTTP Basic; public signup, authenticated remaining routes, CSRF enabled |
+| Security | Spring Security HTTP Basic; role-based access for STUDENT, FACULTY, and ADMINISTRATOR; CSRF enabled |
 | Boilerplate reduction | Lombok 1.18.46                                                          |
 | Testing | JUnit 5, Mockito, Jakarta Validator                                     |
 | Coverage | JaCoCo report during Maven `verify`                                     |
@@ -90,7 +90,7 @@ library-api-system/
     |       |-- application.properties
     |       `-- db/migration/
     |           |-- V1__create_books_table.sql
-    |           `-- V2__create_users_table.sql
+    |           |-- V2__create_users_table.sql
     `-- test/
         |-- java/unit/auth/
         |   `-- SecurityFlowMvcTest.java
@@ -220,7 +220,7 @@ The count-and-total-value aggregate uses the typed `LibraryAggregate` constructo
 
 The user feature currently contains the entity, enums, create/response DTOs, mapper, repository, BCrypt `PasswordEncoder` bean, and `UserService`. `UserService` normalizes university IDs and email addresses, rejects duplicates, validates password complexity, hashes passwords before persistence, and enforces the role/course/major rules. Passwords must be at least eight characters and include uppercase and lowercase letters, a number, and a symbol. The enum and V2 database checks define the allowed academic values; the service enforces their cross-field relationships.
 
-`UserAPI` exposes signup at `POST /app/users/signup`, plus paginated listing, lookup, profile PATCH/PUT, password change, and deletion under `/app/users`. These routes use request/response DTOs. Both `UserService` and `LibroUserDetailsService` inject `UserRepository`, but serve separate flows: `UserService` performs account use cases, while `LibroUserDetailsService.loadUserByUsername` calls `findByUniversityId` during HTTP Basic authentication and maps the stored password hash and role into Spring Security `UserDetails`. Both paths reach the same JPA repository and `users` table; authentication lookup does not pass through `UserAPI` or `UserService`. `SecurityConfig` permits signup and requires HTTP Basic authentication for all other routes. `UserPersistenceIT` provides PostgreSQL-backed user-domain coverage when the integration profile runs. `UserService` injects Jakarta `Validator`, validates create and password-change requests, and exposes transactional update operations that normalize supplied fields, protect email uniqueness, verify current passwords, and store only encoded password hashes.
+`UserAPI` exposes public student signup at `POST /app/users/signup`, administrator-only faculty creation at `POST /app/users/faculty`, plus paginated listing, lookup, profile PATCH/PUT, password change, and administrator-only student/faculty deletion. Signup ignores the submitted role and creates a student; faculty creation fixes the role to FACULTY in the service. `SecurityConfig` permits book reads to all roles and book writes to FACULTY and ADMINISTRATOR; account creation/deletion rules are administrator-only. V2 defines all roles and cross-field constraints and seeds the bootstrap administrator from a supplied BCrypt hash. `LibroUserDetailsService` loads the stored hash and role for HTTP Basic and maps the role into Spring Security authorities.
 
 ### Entity and database model
 
@@ -285,9 +285,9 @@ Handler order matters conceptually. `DataIntegrityViolationException` is a subty
 
 ### Security
 
-`SecurityConfig` permits `POST /app/users/signup` without authentication and requires HTTP Basic authentication for every other request. CSRF protection remains enabled. This is a development-stage authentication setup; use HTTPS outside local development, and review role-specific authorization and CSRF behavior before deployment.
+`SecurityConfig` permits `POST /app/users/signup` without authentication. Book reads require any of STUDENT, FACULTY, or ADMINISTRATOR; book writes require FACULTY or ADMINISTRATOR. `POST /app/users/faculty` and `DELETE /app/users/{universityId}` require ADMINISTRATOR. Other routes require authentication. CSRF protection remains enabled. HTTP Basic is a development-stage authentication setup; use HTTPS outside local development.
 
-The current mechanism is local HTTP Basic authentication backed by `LibroUserDetailsService` and BCrypt. It identifies users but does not apply role-specific permissions: any authenticated account can reach all protected routes. Signup accepts a client-supplied role. Before untrusted deployment, decide whether local credentials or institutional SSO are appropriate, define role permissions, restrict role assignment, document HTTP Basic and CSRF in OpenAPI, and verify credential handling over HTTPS.
+The current mechanism is local HTTP Basic authentication backed by `LibroUserDetailsService` and BCrypt. Public signup always creates STUDENT. Faculty are created by administrators; administrators are seeded by Flyway V2 from the `LIBRO_ADMIN_PASSWORD_HASH` environment variable, which must contain a BCrypt hash. The seeded login is `0000-0000`. Do not place a raw password in the migration or commit the hash. Before untrusted deployment, decide whether local credentials or institutional SSO are appropriate, review CSRF behavior, and verify credential handling over HTTPS.
 
 Before deploying user routes to an environment with untrusted clients, select the authentication model and apply its endpoint authorization rules. Do not assume `UserDetailsService` is appropriate if the institution's SSO is the chosen identity provider. Loan operations must identify the borrower from the authenticated principal rather than a client-supplied user ID.
 
@@ -321,10 +321,11 @@ User routes:
 | GET | `/app/users` | Paginated user list (default size 12) | Spring `Page<UserResponseDTO>` |
 | GET | `/app/users/{universityId}` | Retrieve one user | `UserResponseDTO` |
 | POST | `/app/users/signup` | Create a user account (public) | `ApiResponse<UserResponseDTO>`, HTTP 201 |
+| POST | `/app/users/faculty` | Create a faculty account (administrator only) | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 | PATCH | `/app/users/{universityId}` | Partially update profile fields | `ApiResponse<UserResponseDTO>` |
 | PUT | `/app/users/{universityId}` | Replace profile fields | `ApiResponse<UserResponseDTO>` |
 | PUT | `/app/users/{universityId}/password` | Change password after current-password verification | `ApiResponse<Void>` |
-| DELETE | `/app/users/{universityId}` | Delete a user | `ApiResponse<Void>` |
+| DELETE | `/app/users/{universityId}` | Delete a student or faculty account (administrator only) | `ApiResponse<Void>` |
 
 When adding an endpoint, update this file and `README.md`, document the operation and public DTO schemas following [API Documentation Guideline](docs/api-documentation-guideline.md), provide request/response examples where useful, and add tests at the appropriate layer.
 
@@ -407,7 +408,7 @@ Important persistence settings:
 
 ## Database Migration Rules
 
-`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` creates `users` with identity, role, course, major, uniqueness, format, and cross-field constraints. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
+`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` creates `users` with identity, all roles, course, major, uniqueness, format, and cross-field constraints, then inserts the bootstrap administrator using the configured BCrypt hash. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
 
 For every schema change:
 
@@ -602,12 +603,12 @@ When a breaking change is intended, document migration guidance and update all e
 
 ## Known Limitations and Risks
 
-- HTTP Basic authentication protects every route except public signup; role-specific authorization has not been defined.
+- HTTP Basic authentication protects routes except public signup; book and account routes enforce the configured role rules.
 - CSRF protection remains enabled.
 - H2 is declared but has no dedicated application profile or integration-test setup.
 - The Docker image requires a prebuilt JAR and does not build source itself.
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
-- Signup accepts a client-supplied role; role assignment and role-specific authorization need review before deployment.
+- Signup always creates a student; faculty creation and student/faculty deletion require an administrator.
 - There is no loan feature. User routes have MVC contract, PostgreSQL integration, and HTTP Basic security-flow coverage; the security MVC tests mock the user repository.
 - Docker-backed JPA/migration checks are implemented but require a working Docker daemon to verify. A fresh-to-existing migration upgrade path still needs tests.
 - Success response shapes are inconsistent across endpoints.

@@ -61,6 +61,15 @@ public class UserService {
      */
     @Transactional
     public UserResponseDTO createUser(UserCreateRequestDTO request) {
+        return createUserWithRole(request, UserRole.STUDENT);
+    }
+
+    @Transactional
+    public UserResponseDTO createFaculty(UserCreateRequestDTO request) {
+        return createUserWithRole(request, UserRole.FACULTY);
+    }
+
+    private UserResponseDTO createUserWithRole(UserCreateRequestDTO request, UserRole role) {
         if (request == null) {
             throw new IllegalArgumentException("User request cannot be null");
         }
@@ -88,11 +97,16 @@ public class UserService {
         }
 
         // enforces the relationship between role, course, and IT major
-        validateAcademicRules(request);
+        validateAcademicRules(request, role);
 
         // encodes password using bcrypt
         String encodedPasswordHash = passwordEncoder.encode(request.getPassword());
         User user = userMapper.toEntity(request, encodedPasswordHash);
+        user.setUserRole(role);
+        if (role == UserRole.FACULTY) {
+            user.setUserCourse(null);
+            user.setMajor(null);
+        }
 
         // persist the normalized values, not the original client input.
         user.setUniversityId(universityId);
@@ -440,6 +454,10 @@ public class UserService {
         User user = userRepository.findByUniversityId(normalizedUniversityId)
                 .orElseThrow(() -> new UserNotFoundException(normalizedUniversityId));
 
+        if (user.getUserRole() == UserRole.ADMINISTRATOR) {
+            throw new IllegalArgumentException("Administrator accounts cannot be deleted through this endpoint");
+        }
+
         // Delete the managed entity within this transaction.
         userRepository.delete(user);
     }
@@ -479,14 +497,8 @@ public class UserService {
      * @param request the user creation request containing academic fields
      * @throws IllegalArgumentException if the role, course, and major combination is invalid
      */
-    private void validateAcademicRules(UserCreateRequestDTO request) {
-        // Cache the fields used by the role/course/major rules.
-        UserRole role = request.getUserRole();
+    private void validateAcademicRules(UserCreateRequestDTO request, UserRole role) {
         UserCourse course = request.getUserCourse();
-
-        if (role == null) {
-            throw new IllegalArgumentException("User role cannot be null");
-        }
 
         if (role == UserRole.FACULTY) {
             // Faculty users cannot be assigned student academic details.

@@ -15,6 +15,18 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/app/users/signup").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/app/users/faculty").hasRole("ADMINISTRATOR")
+                        .requestMatchers(HttpMethod.DELETE, "/app/users/**").hasRole("ADMINISTRATOR")
+                        .requestMatchers(HttpMethod.GET, "/app/books/**")
+                        .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR")
+                        .requestMatchers(HttpMethod.POST, "/app/books/**")
+                        .hasAnyRole("FACULTY", "ADMINISTRATOR")
+                        .requestMatchers(HttpMethod.PUT, "/app/books/**")
+                        .hasAnyRole("FACULTY", "ADMINISTRATOR")
+                        .requestMatchers(HttpMethod.PATCH, "/app/books/**")
+                        .hasAnyRole("FACULTY", "ADMINISTRATOR")
+                        .requestMatchers(HttpMethod.DELETE, "/app/books/**")
+                        .hasAnyRole("FACULTY", "ADMINISTRATOR")
                         .anyRequest().authenticated()
                 )
                 .httpBasic(basic -> {});

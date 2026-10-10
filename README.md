@@ -324,7 +324,7 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 2. Spring Boot starts `app.LibraryApplication`.
 3. The Spring Boot Flyway starter runs pending migrations before JPA initializes.
 4. Hibernate validates the migrated schema with `ddl-auto=validate`.
-5. `SecurityConfig` permits `POST /app/users/signup`, requires HTTP Basic authentication for other requests, and retains Spring Security's CSRF protection.
+5. `SecurityConfig` permits `POST /app/users/signup`, applies role rules to book and account operations, and retains HTTP Basic authentication and CSRF protection.
 6. The API becomes ready at `http://localhost:8080`.
 
 ## Code Highlights
@@ -401,16 +401,17 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 | `GET` | `/app/users` | Lists users with pagination | `GET /app/users?page=0&size=12` | Spring `Page<UserResponseDTO>` |
 | `GET` | `/app/users/{universityId}` | Gets one user by university ID | `GET /app/users/2025-4321` | `UserResponseDTO` |
 | `POST` | `/app/users/signup` | Creates a user account | `POST /app/users/signup` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
+| `POST` | `/app/users/faculty` | Administrator creates a faculty account | `POST /app/users/faculty` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 | `PATCH` | `/app/users/{universityId}` | Updates supplied profile fields | `PATCH /app/users/2025-4321` with `UserCreateUpdateDTO` | `ApiResponse<UserResponseDTO>` |
 | `PUT` | `/app/users/{universityId}` | Replaces profile fields | `PUT /app/users/2025-4321` with `UserReplaceRequest` | `ApiResponse<UserResponseDTO>` |
 | `PUT` | `/app/users/{universityId}/password` | Changes password after current-password verification | `PUT /app/users/2025-4321/password` with `ChangePasswordDTO` | `ApiResponse<Void>` |
-| `DELETE` | `/app/users/{universityId}` | Deletes a user | `DELETE /app/users/2025-4321` | `ApiResponse<Void>` |
+| `DELETE` | `/app/users/{universityId}` | Administrator deletes a student or faculty account | `DELETE /app/users/2025-4321` | `ApiResponse<Void>` |
 
 `/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minPrice` and `maxPrice` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `price`; invalid ranges, decimals, or sort fields return HTTP 400. Existing list routes retain their response shapes.
 
 ### User API
 
-User routes are available under `/app/users` for signup, paginated listing, lookup by university ID, profile PATCH/PUT, password changes, and deletion. `POST /app/users/signup` is public; all other routes require HTTP Basic authentication with a university ID and password. Account creation currently accepts a role, so role assignment and operation-specific authorization should be reviewed before exposing the API to untrusted clients. Loan routes are not implemented.
+User routes are available under `/app/users` for signup, paginated listing, lookup by university ID, profile PATCH/PUT, password changes, and deletion. Signup is public and always creates a student, regardless of a supplied role value. Only administrators can create faculty accounts or delete student/faculty accounts. Students can read and search books; faculty and administrators can also add, update, and delete books. HTTP Basic authentication uses a university ID and password. Flyway V2 seeds one bootstrap administrator as `0000-0000`; set `LIBRO_ADMIN_PASSWORD_HASH` to a BCrypt hash before startup and protect that configuration. The seeded account uses `admin@library.local`. Loan routes are not implemented.
 
 ## Setup & Installation
 
@@ -427,7 +428,9 @@ Docker is the preferred way to run the project because it brings up both Postgre
     POSTGRES_DB=librarydb
     POSTGRES_USER=admin
     POSTGRES_PASSWORD=change_me
+    LIBRO_ADMIN_PASSWORD_HASH=<BCrypt hash for a password you choose>
     ```
+    Replace the hash placeholder before starting the app. Flyway V2 seeds the administrator as university ID `0000-0000`; only the BCrypt hash is stored in the database. Keep `.env` private.
 2. Build the application jar:
     ```bash
     mvn clean package
@@ -564,7 +567,7 @@ Generate the JaCoCo report at `target/site/jacoco/index.html`:
 mvn clean verify
 ```
 
-The default suite includes plain unit tests and MVC slices. It verifies HTTP Basic authentication and request protection through the real filter chain, while real JPA transactions, Flyway migrations, and PostgreSQL constraints require the Docker-backed integration profile. Role-specific authorization and production identity-provider choices remain open.
+The default suite includes plain unit tests and MVC slices. It verifies HTTP Basic authentication and request protection through the real filter chain, while real JPA transactions, Flyway migrations, and PostgreSQL constraints require the Docker-backed integration profile. Role-based permissions are enforced for book and account operations; production identity-provider choices remain open.
 
 Validation failures retain the `error`, `details`, `timestamp`, and `statusCode` fields and additionally return a structured map:
 
@@ -589,9 +592,9 @@ The detailed, interview-ready account of the development problems I identified a
 
 - Inspect the generated OpenAPI document and Swagger UI with the application and database running; verify parameter defaults, request/response schemas, statuses, errors, and examples against the implementation.
 - Decide whether local HTTP Basic accounts are sufficient for deployment or whether Libro must integrate with institutional SSO.
-- Define and implement role-specific permissions for `STUDENT` and `FACULTY`; currently any authenticated account can access every protected route.
+- Add focused security tests for student, faculty, and administrator access decisions.
 - Revisit CSRF handling and document the HTTP Basic scheme and CSRF requirements in OpenAPI before external use.
-- Restrict client-supplied role assignment during signup before deployment; add focused tests for remaining academic-rule combinations.
+- Decide whether HTTP Basic remains appropriate or institutional SSO is required before deployment.
 - Implement the loan domain with active-loan constraints and overdue/history queries, using the authenticated identity for borrower operations; document its API when routes are added.
 - Run `mvn -Pintegration verify` on a Docker-enabled machine to execute the PostgreSQL integration tests; add them to CI when a CI workflow is introduced.
 - Benchmark case-insensitive substring searches as the catalog grows; add database search indexes only if measurements justify them.

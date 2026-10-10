@@ -28,6 +28,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB} # References the db container above
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      LIBRO_ADMIN_PASSWORD_HASH: ${LIBRO_ADMIN_PASSWORD_HASH}
     ports:
       - "8080:8080" # Maps host port 8080 to container port 8080
     restart: unless-stopped
