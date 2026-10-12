@@ -5,10 +5,10 @@ This file is the repository's internal entry point for AI agents and human contr
 ## Start here
 
 1. Read this file for contributor rules and the source-of-truth map.
-2. Read [Current System Engineering Reference](internal-docs/engineering-reference.md) for the repository map, current layer contracts, API inventory, configuration, and test strategy.
+2. Read [Current System Engineering Reference](guiding-docs/engineering-reference.md) for the repository map, current layer contracts, API inventory, configuration, and test strategy.
 3. Read the relevant focused document before editing:
-   - [Role and JWT target specification](internal-docs/security-roles-and-jwt-guide.md) for the planned role policy, JWT design, and future loan rules.
-   - [Development roadmap](internal-docs/TODO.md) for outstanding work.
+   - [Role and JWT target specification](guiding-docs/security-roles-and-jwt-guide.md) for the planned role policy, JWT design, and future loan rules.
+   - [Development roadmap](guiding-docs/TODO.md) for outstanding work.
    - [API documentation guideline](docs/api-documentation-guideline.md) for controller/OpenAPI documentation.
    - [Domain decisions](docs/domain-decisions.md) for the physical-copy model and loan constraints.
 
@@ -23,8 +23,8 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 | What roles and columns the database accepts | Latest applied Flyway migrations; JPA mappings must match |
 | Current entity and relationship model | JPA entities plus [Domain Decisions](docs/domain-decisions.md) |
 | API documentation conventions | [API Documentation Guideline](docs/api-documentation-guideline.md) |
-| Planned role policy, JWT design, and loan behavior | [Role and JWT target specification](internal-docs/security-roles-and-jwt-guide.md); it is a target, not live implementation |
-| Remaining work | [Development roadmap](internal-docs/TODO.md) |
+| Planned role policy, JWT design, and loan behavior | [Role and JWT target specification](guiding-docs/security-roles-and-jwt-guide.md); it is a target, not live implementation |
+| Remaining work | [Development roadmap](guiding-docs/TODO.md) |
 | Recruiter-facing project description | [README](README.md) and the public-facing documents it links to |
 
 ## Current implementation facts
@@ -71,7 +71,7 @@ These are a snapshot, not a substitute for checking the code when a task changes
 1. Trace the existing request path and read the relevant source-of-truth docs.
 2. Make the smallest cohesive change at the correct layer.
 3. Update contract documentation and tests for behavior that changed.
-4. Run the appropriate Maven checks described in [Current System Engineering Reference](internal-docs/engineering-reference.md), and report exactly which checks ran.
+4. Run the appropriate Maven checks described in [Current System Engineering Reference](guiding-docs/engineering-reference.md), and report exactly which checks ran.
 
 ## Definition of done
 

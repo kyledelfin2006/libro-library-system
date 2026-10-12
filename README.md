@@ -52,7 +52,7 @@ Main Developer: **Aldrin Kyle Delfin**
 * [Data Management](https://github.com/kyledelfin2006/library-api-system#data-management)
 * [Testing](https://github.com/kyledelfin2006/library-api-system#testing)
 * [Documentation](#documentation)
-* [Development Problems Solved](#development-problems-solved)
+* [Problems I Solved](#problems-i-solved)
 * [Upcoming Improvements](https://github.com/kyledelfin2006/library-api-system#upcoming-improvements)
 * [License](https://github.com/kyledelfin2006/library-api-system#license)
 
@@ -70,9 +70,9 @@ This README remains the project's main portfolio entry point. Supporting documen
 ### For agents, AI, and contributors
 
 1. [Agent and Contributor Guide](AGENTS.md) records current facts, source-of-truth rules, do's and don'ts, and the contribution workflow.
-2. [Current System Engineering Reference](internal-docs/engineering-reference.md) contains the detailed repository map, layer contracts, endpoint inventory, configuration, and test strategy.
-3. [Development Roadmap](internal-docs/TODO.md) tracks current implementation status and remaining work.
-4. [Security Roles and JWT Guide](internal-docs/security-roles-and-jwt-guide.md) defines the target role policy and planned JWT/loan design; those features are not implemented yet.
+2. [Current System Engineering Reference](guiding-docs/engineering-reference.md) contains the detailed repository map, layer contracts, endpoint inventory, configuration, and test strategy.
+3. [Development Roadmap](guiding-docs/TODO.md) tracks current implementation status and remaining work.
+4. [Security Roles and JWT Guide](guiding-docs/security-roles-and-jwt-guide.md) defines the target role policy and planned JWT/loan design; those features are not implemented yet.
 5. [API Documentation Guideline](docs/api-documentation-guideline.md) sets the standard for accurate OpenAPI and Swagger documentation without unnecessary annotation boilerplate.
 
 ## Architecture Overview
@@ -216,7 +216,7 @@ docs/
   development-problems-solved.md
   domain-decisions.md
   institutional-context.md
-internal-docs/
+guiding-docs/
   engineering-reference.md
   security-roles-and-jwt-guide.md
   TODO.md
@@ -689,9 +689,18 @@ Validation failures retain the `error`, `details`, `timestamp`, and `statusCode`
 }
 ```
 
-## Development Problems Solved
+## Problems I Solved
 
-The detailed, interview-ready account of the development problems I identified and solved is in [Development Problems Solved](docs/development-problems-solved.md). It consolidates the former gap and Docker/Flyway problem documents into one reflective reference.
+I worked through problems at several boundaries of the system and fixed them where they originated:
+
+- **Database startup and schema drift:** aligned the PostgreSQL schema with the Java entity model, made Flyway the schema authority, and kept Hibernate validation enabled.
+- **Unreliable container startup:** added PostgreSQL health checks and made the application wait for the database to become ready.
+- **Create, replace, and partial-update validation:** separated PUT's full-replacement rules from PATCH's optional-field behavior, with service-level validation as a second boundary.
+- **Fragile aggregate results:** replaced positional query results with typed projections for collection statistics and genre counts.
+- **Unbounded filtered results:** added a paginated query that combines text and price filters while validating sort fields.
+- **Account and credential safety:** normalized institutional IDs and emails, enforced account rules, stored BCrypt hashes, and kept password data out of response DTOs.
+
+The [Development Problems Solved](docs/development-problems-solved.md) write-up gives the symptoms, reasoning, fixes, and verification details for these problems. It also distinguishes unit/MVC evidence from PostgreSQL integration checks that still require Docker.
 
 ## Upcoming Improvements
 

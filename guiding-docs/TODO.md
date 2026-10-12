@@ -15,7 +15,7 @@ This is the working implementation roadmap. It is not the public project overvie
 | JWT login and Bearer validation | Not implemented |
 | LIBRARIAN role and target owner/directory rules | Specified, not implemented |
 
-Current account routes do not yet enforce the target owner-only and student-directory restrictions. Keep this distinction visible in documentation and tests until implementation changes.
+Current account routes do not yet enforce the target owner and administrator/librarian account-management boundaries or student-directory restrictions. Keep this distinction visible in documentation and tests until implementation changes.
 
 ## Recommended implementation order
 
@@ -26,7 +26,7 @@ Current account routes do not yet enforce the target owner-only and student-dire
 - [ ] Restrict faculty account creation and student/faculty deletion to LIBRARIAN.
 - [ ] Restrict the student directory and student profile access to ADMINISTRATOR and LIBRARIAN.
 - [ ] Restrict profile and password changes to the account owner.
-- [ ] Preserve the target book permissions: ADMINISTRATOR can add books; do not grant book update/delete; LIBRARIAN has no book-write permissions.
+- [ ] Implement the target book permissions: ADMINISTRATOR can add, update, and delete books; LIBRARIAN can update and delete books but cannot add them.
 - [ ] Add authorization tests for allowed and denied requests, including cross-account profile/password attempts.
 
 ### 2. Add loans

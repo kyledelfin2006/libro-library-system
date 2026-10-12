@@ -23,10 +23,10 @@ All four roles can use student capabilities. The additional powers are deliberat
 | View student directory/profiles | No | No | Yes | Yes |
 | Create faculty accounts | No | No | No | Yes |
 | Delete student or faculty accounts | No | No | No | Yes |
-| Update or delete books | No | No | No | No |
-| Manage another user's profile/password | No | No | No | No |
+| Update or delete books | No | No | Yes | Yes |
+| Manage another user's profile/password | No | No | Yes | Yes |
 
-`FACULTY` has the same end-user permissions as `STUDENT`. `ADMINISTRATOR` and `LIBRARIAN` inherit those permissions in addition to the capabilities shown above. This policy grants no book update/delete permission; keep existing PUT, PATCH, and DELETE book endpoints inaccessible unless the policy is revised.
+`FACULTY` has the same end-user permissions as `STUDENT`. `ADMINISTRATOR` and `LIBRARIAN` inherit those permissions in addition to the capabilities shown above. Both administrators and librarians may update or delete books and manage other users' profiles and passwords, subject to the account boundaries below.
 
 Account boundaries:
 
@@ -34,8 +34,8 @@ Account boundaries:
 - Only `LIBRARIAN` may create a faculty account through `POST /app/users/faculty`.
 - `GET /app/users` lists students only and is available to administrators and librarians.
 - `GET /app/users/{universityId}` is available to that account's owner. Administrators and librarians may additionally read a student profile, but may not use this rule to read faculty or staff profiles.
-- Profile PATCH/PUT and password change are owner-only.
-- `DELETE /app/users/{universityId}` is librarian-only and may target only students or faculty. It must never delete administrators or librarians.
+- Profile PATCH/PUT and password change are available to the owner, administrators, and librarians. Administrator and librarian access is for managing another user's account; neither role may use it to change another administrator's or librarian's profile/password.
+- `DELETE /app/users/{universityId}` is available to administrators and librarians and may target only students or faculty. It must never delete administrators or librarians.
 - To preserve loan history and its foreign-key references, account deletion must return HTTP 409 while any loan record references that user.
 
 Use Spring authorities named `ROLE_STUDENT`, `ROLE_FACULTY`, `ROLE_ADMINISTRATOR`, and `ROLE_LIBRARIAN`. Keep authorization rules in the security layer and ownership checks in the service layer, where the authenticated university ID is passed explicitly. Do not trust a user ID in a request body to identify the caller.
@@ -96,8 +96,8 @@ Spring Security documents Resource Server support for JWT Bearer tokens and the 
 ## Acceptance checks
 
 - Anonymous requests can reach only signup and login. Missing, malformed, expired, wrong-signature, and wrong-issuer tokens receive HTTP 401; a valid token without the required role receives HTTP 403.
-- Each role can perform exactly the operations in the role matrix. Students/faculty cannot list or read other accounts, update another user's profile/password, create faculty, or delete accounts.
-- Signup with `FACULTY`, `ADMINISTRATOR`, or `LIBRARIAN` in the payload still creates a student. Only librarians create faculty or delete student/faculty accounts; they cannot delete administrator/librarian accounts.
+- Each role can perform exactly the operations in the role matrix. Students/faculty cannot list or read other accounts, update another user's profile/password, create faculty, or delete accounts. Administrators and librarians can manage student/faculty profiles and passwords, but not those of other administrators or librarians.
+- Signup with `FACULTY`, `ADMINISTRATOR`, or `LIBRARIAN` in the payload still creates a student. Only librarians create faculty; administrators and librarians may delete student/faculty accounts, but neither can delete administrator/librarian accounts.
 - Login uses the stored BCrypt hash and does not reveal whether the university ID exists.
 - Token claims contain the correct subject and role, use the configured issuer and 15-minute expiry, and contain no credential/profile secrets.
 - A loan always uses the authenticated caller as borrower. A borrower cannot return another user's loan. Two concurrent borrow attempts cannot create two active loans for one book copy.
