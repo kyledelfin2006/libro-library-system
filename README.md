@@ -39,6 +39,8 @@ Main Developer: **Aldrin Kyle Delfin**
 
 * [Architecture Overview](https://github.com/kyledelfin2006/library-api-system#architecture-overview)
 * [Layered Design](https://github.com/kyledelfin2006/library-api-system#layered-design)
+* [Current Authentication and Authorization Flow](https://github.com/kyledelfin2006/library-api-system#current-authentication-and-authorization-flow)
+* [Current Persistence Model](https://github.com/kyledelfin2006/library-api-system#current-persistence-model)
 * [File Structure](https://github.com/kyledelfin2006/library-api-system#file-structure)
 * [Core Design Patterns](https://github.com/kyledelfin2006/library-api-system#core-design-patterns)
 * [Key Features](https://github.com/kyledelfin2006/library-api-system#key-features)
@@ -56,15 +58,22 @@ Main Developer: **Aldrin Kyle Delfin**
 
 ## Documentation
 
-This README is the project's main portfolio entry point. The development reflection is the featured supporting document; the other references explain the system's context, decisions, API contract, contributor practices, and remaining work.
+This README remains the project's main portfolio entry point. Supporting documents are grouped by audience so readers can choose a project overview or implementation reference.
 
-1. [Development Problems Solved](docs/development-problems-solved.md) is the portfolio reflection: it explains major problems, their impact, the fixes, and how the results were verified.
-2. [Institutional Context](docs/institutional-context.md) describes the ASU-CCS academic model and existing MIS assumptions behind the user domain.
-3. [Domain Decisions](docs/domain-decisions.md) explains why a `Book` represents one physical copy and what that means for future loan features.
-4. [API Documentation Guideline](docs/api-documentation-guideline.md) sets the standard for accurate OpenAPI and Swagger documentation without unnecessary annotation boilerplate.
-5. [Implementation Plan: Remaining Quality Improvements](docs/implementation-plan-quality-improvements.md) tracks the remaining OpenAPI maintainability work.
-6. [Agent and Contributor Guide](AGENTS.md) records the architecture, layer contracts, coding rules, testing expectations, and definition of done. It stays at the repository root so coding agents can discover it automatically.
-7. [Development TODO](internal-docs/TODO.md) tracks completed user-domain work and remaining authorization, loan, testing, and documentation tasks. It is a working roadmap, not part of the public API contract.
+### For recruiters and project reviewers
+
+1. The Architecture Overview and Request Lifecycle sections below explain the current system with component, security, persistence, and startup diagrams.
+2. [Development Problems Solved](docs/development-problems-solved.md) explains major engineering challenges, decisions, and verification.
+3. [Institutional Context](docs/institutional-context.md) describes the ASU-CCS academic model and existing MIS assumptions behind the user domain.
+4. [Domain Decisions](docs/domain-decisions.md) explains why a Book represents one physical copy and what that means for future loan features.
+
+### For agents, AI, and contributors
+
+1. [Agent and Contributor Guide](AGENTS.md) records current facts, source-of-truth rules, do's and don'ts, and the contribution workflow.
+2. [Current System Engineering Reference](internal-docs/engineering-reference.md) contains the detailed repository map, layer contracts, endpoint inventory, configuration, and test strategy.
+3. [Development Roadmap](internal-docs/TODO.md) tracks current implementation status and remaining work.
+4. [Security Roles and JWT Guide](internal-docs/security-roles-and-jwt-guide.md) defines the target role policy and planned JWT/loan design; those features are not implemented yet.
+5. [API Documentation Guideline](docs/api-documentation-guideline.md) sets the standard for accurate OpenAPI and Swagger documentation without unnecessary annotation boilerplate.
 
 ## Architecture Overview
 
@@ -103,6 +112,47 @@ flowchart LR
 
 The authentication branch is separate from user account operations. For a protected request, Spring Security asks `LibroUserDetailsService` to load the account by university ID; that service reads the same `UserRepository` used by `UserService`, then returns Spring Security's user details with the stored password hash and mapped role. Signup is permitted without authentication; the remaining routes require authentication. Controllers do not access the repository directly.
 
+### Current Authentication and Authorization Flow
+
+This is the live HTTP Basic flow. The client sends its university ID and password with every protected request. Spring Security loads the account and role, checks the password with BCrypt, then applies the route's role rule. Basic credentials are Base64-encoded, not encrypted; use HTTPS outside local development.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Security as Spring Security
+    participant UserLookup as LibroUserDetailsService
+    participant Users as UserRepository
+    participant DB as PostgreSQL
+    participant Encoder as BCrypt PasswordEncoder
+    participant API as Protected endpoint
+
+    Client->>Security: HTTP request with Basic credentials
+    Security->>UserLookup: Load account by university ID
+    UserLookup->>Users: findByUniversityId
+    Users->>DB: Read account, hash, and role
+    DB-->>Users: User record
+    Users-->>UserLookup: Stored account details
+    UserLookup-->>Security: UserDetails with hash and authority
+    Security->>Encoder: Verify submitted password against hash
+    Encoder-->>Security: Match or reject
+    alt credentials are valid and route allows the role
+        Security->>API: Continue with authenticated principal
+        API-->>Client: Endpoint response
+    else invalid credentials or denied role
+        Security-->>Client: Authentication or authorization error
+    end
+```
+
+Most account routes currently require authentication without checking that the caller owns the account. The user list is also not restricted to a student-only directory. These are known gaps; the internal security guide describes the planned policy, not current behavior.
+
+| Current rule | Allowed access |
+| --- | --- |
+| Public signup | POST /app/users/signup |
+| Read books | STUDENT, FACULTY, ADMINISTRATOR |
+| Create, update, or delete books | FACULTY, ADMINISTRATOR |
+| Create faculty or delete a user account | ADMINISTRATOR |
+| Other protected routes | Any authenticated account |
+
 ### Layered Design
 
 ```mermaid
@@ -130,6 +180,32 @@ flowchart TD
 
 Both user flows converge on `UserRepository`: `UserService` uses it for signup, profile, and password operations; `LibroUserDetailsService` uses it only to load the account Spring Security authenticates. The authentication lookup does not route through `UserAPI` or `UserService`.
 
+### Current Persistence Model
+
+The current schema stores books and users as separate domains. A Book row is one physical copy. There is no loan table or user-to-book relationship yet; the future loan design must identify the borrower from the authenticated principal and allow only one active loan per copy. See [Domain Decisions](docs/domain-decisions.md) for the reasoning.
+
+```mermaid
+erDiagram
+    BOOK {
+        BIGINT id PK
+        VARCHAR title
+        VARCHAR author
+        VARCHAR genre
+        DECIMAL price
+        TIMESTAMP created_at
+    }
+    USER {
+        BIGINT id PK
+        VARCHAR university_id UK
+        VARCHAR password_hash
+        VARCHAR user_role
+        VARCHAR email UK
+        VARCHAR user_course
+        VARCHAR major
+        TIMESTAMP created_at
+    }
+```
+
 ## File Structure
 
 ```text
@@ -140,8 +216,9 @@ docs/
   development-problems-solved.md
   domain-decisions.md
   institutional-context.md
-  implementation-plan-quality-improvements.md
 internal-docs/
+  engineering-reference.md
+  security-roles-and-jwt-guide.md
   TODO.md
 
 src/main/java/app/
@@ -320,12 +397,25 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 
 ### Startup flow
 
-1. Compose waits until PostgreSQL passes `pg_isready`.
-2. Spring Boot starts `app.LibraryApplication`.
-3. The Spring Boot Flyway starter runs pending migrations before JPA initializes.
-4. Hibernate validates the migrated schema with `ddl-auto=validate`.
-5. `SecurityConfig` permits `POST /app/users/signup`, applies role rules to book and account operations, and retains HTTP Basic authentication and CSRF protection.
-6. The API becomes ready at `http://localhost:8080`.
+```mermaid
+sequenceDiagram
+    participant Compose as Docker Compose
+    participant DB as PostgreSQL
+    participant App as Spring Boot
+    participant Flyway
+    participant JPA as Hibernate / JPA
+    Compose->>DB: Start database
+    Compose->>DB: Wait for pg_isready health check
+    Compose->>App: Start application after DB is healthy
+    App->>Flyway: Discover pending migrations
+    Flyway->>DB: Apply versioned SQL migrations
+    App->>JPA: Initialize entity mappings
+    JPA->>DB: Validate schema with ddl-auto=validate
+    JPA-->>App: Schema matches mappings
+    App-->>Compose: API ready on port 8080
+```
+
+Flyway owns schema creation and updates; Hibernate validates the resulting schema instead of changing it. The filter chain exposes public signup, retains HTTP Basic and CSRF protection, and enforces the current route rules.
 
 ## Code Highlights
 
@@ -351,6 +441,21 @@ Separate request types make the OpenAPI schema match each contract:
 
 Both service operations update a managed entity inside a transaction; Hibernate dirty checking persists the change.
 ### Centralized API errors
+
+Request validation and business-rule validation converge on the shared exception handler. This keeps error responses consistent while preserving endpoint-specific status codes.
+
+```mermaid
+flowchart LR
+    JSON["JSON request"] --> DTO["Request DTO"]
+    DTO --> DTOCheck{"DTO constraints pass?"}
+    DTOCheck -->|no| Advice["GlobalExceptionHandler"]
+    DTOCheck -->|yes| Service["Service business rules"]
+    Service --> EntityCheck{"Resulting entity valid?"}
+    EntityCheck -->|no| Advice
+    EntityCheck -->|yes| Repository["Repository"]
+    Repository --> Response["Response DTO"]
+    Advice --> Error["ErrorResponse with fieldErrors"]
+```
 
 ```java
 @ExceptionHandler(BookNotFoundException.class)
@@ -591,10 +696,9 @@ The detailed, interview-ready account of the development problems I identified a
 ## Upcoming Improvements
 
 - Inspect the generated OpenAPI document and Swagger UI with the application and database running; verify parameter defaults, request/response schemas, statuses, errors, and examples against the implementation.
-- Decide whether local HTTP Basic accounts are sufficient for deployment or whether Libro must integrate with institutional SSO.
+- Replace HTTP Basic with the planned short-lived JWT Bearer flow, or choose institutional SSO before deployment.
 - Add focused security tests for student, faculty, and administrator access decisions.
 - Revisit CSRF handling and document the HTTP Basic scheme and CSRF requirements in OpenAPI before external use.
-- Decide whether HTTP Basic remains appropriate or institutional SSO is required before deployment.
 - Implement the loan domain with active-loan constraints and overdue/history queries, using the authenticated identity for borrower operations; document its API when routes are added.
 - Run `mvn -Pintegration verify` on a Docker-enabled machine to execute the PostgreSQL integration tests; add them to CI when a CI workflow is introduced.
 - Benchmark case-insensitive substring searches as the catalog grows; add database search indexes only if measurements justify them.

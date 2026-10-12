@@ -1,128 +1,72 @@
-# Libro User and Loan Development TODO
+# Internal Engineering Roadmap
 
-This is the public development roadmap for the user and loan domains. It
-describes implementation status and planned work; it must not contain secrets,
-credentials, or real user data.
+This is the working implementation roadmap. It is not the public project overview or an API contract. The role/JWT design is specified in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md); this checklist tracks implementation status.
 
-## Current accomplishments
+## Current state
 
-- [x] Added the `User` JPA entity under `app.user.entity`.
-- [x] Added `UserRole` values: `STUDENT` and `FACULTY`.
-- [x] Added `UserCourse` values: `IT`, `EMC`, and `IS`.
-- [x] Added IT-major values: `SE`, `SMBPO`, `IST`, and `HN`.
-- [x] Added university ID and password-hash fields.
-- [x] Added `lastName`, `firstName`, `middleInitial`, and `email` fields.
-- [x] Added basic name and email validation annotations.
-- [x] Added the `createdAt` field and `@PrePersist` timestamp callback.
-- [x] Added Flyway V2 for the `users` table.
-- [x] Added database uniqueness, format, role, course, and major constraints.
-- [x] Added indexes for common user filters.
-- [x] Added `UserRepository` lookup, existence, role, and course methods.
-- [x] Added Spring Security HTTP Basic authentication using the university ID and stored BCrypt password hash; signup is public and other routes require authentication.
-- [x] Added the BCrypt `PasswordEncoder` bean.
-- [x] Added `UserMapper` for request/entity and entity/response conversion.
-- [x] Added `UserService` create, paginated-read, lookup, and delete operations.
-- [x] Added Jakarta `Validator` request validation to user creation.
-- [x] Added the initial `UserCreateUpdateDTO` and `ChangePasswordDTO` types.
-- [x] Add `UserCreateRequestDTO`.
-- [x] Add `UserResponseDTO`; never include the raw password or `passwordHash`.
-- [x] Add the initial update DTO (`UserCreateUpdateDTO`).
-- [x] Add the `UserService` foundation for create, read, and delete operations.
-- [x] Complete the update operation: expose a transactional service contract, validate and normalize partial updates, and fix duplicate email handling.
-- [x] Validate university ID format and normalize input deliberately.
-- [x] Validate duplicate university IDs and emails in the service.
-- [x] Enforce academic rules in the service:
-- [x] Faculty must have `course = null` and `major = null`.
-- [x] EMC and IS students must have `major = null`.
-- [x] IT students must have an approved major.
-- [x] Add a `PasswordEncoder` bean.
-- [x] Enforce passwords of at least 8 characters with uppercase and lowercase letters, a number, and a symbol;
+| Area | Implemented now |
+| --- | --- |
+| Books | CRUD, search, pagination, sorting, filtering, statistics, DTO validation |
+| Accounts | Student signup, administrator-created faculty, profiles, password change, listing, lookup, deletion |
+| Roles in Java and the current schema | STUDENT, FACULTY, ADMINISTRATOR |
+| Authentication | HTTP Basic using university ID, UserDetailsService, and BCrypt |
+| Authorization | Book reads for all current roles; book writes for FACULTY and ADMINISTRATOR; faculty creation and account deletion for ADMINISTRATOR; other protected routes require authentication |
+| Loans | Not implemented |
+| JWT login and Bearer validation | Not implemented |
+| LIBRARIAN role and target owner/directory rules | Specified, not implemented |
 
-## User domain
+Current account routes do not yet enforce the target owner-only and student-directory restrictions. Keep this distinction visible in documentation and tests until implementation changes.
 
-- [x] Add `UserAPI` under `/app/users` for public signup, paginated list,
-  lookup, profile PATCH/PUT, password change, and account deletion. All routes
-  except signup require HTTP Basic authentication.
-- [x] Add PostgreSQL-backed user persistence tests for normalized creation,
-  stored password hashes, committed updates, and database constraints.
-- [x] Add MVC-slice tests for all user routes, request binding and validation,
-  pagination, response shapes, not-found and conflict responses, and public
-  response privacy.
-- [x] Add focused service tests for partial updates, normalization, validation,
-  unchanged emails, and duplicate-email rejection.
-- [x] Add getters/setters and a no-argument constructor to `ChangePasswordDTO`
-  for validation and future controller binding.
-- [x] Add a transactional `UserService.updatePassword` operation that validates
-  the DTO, verifies the current password, and stores only the encoded hash.
-- [x] Add password-change tests for valid changes, incorrect current passwords,
-  invalid formats, missing users, and encoded-password storage.
+## Recommended implementation order
 
-## Loan domain
+### 1. Implement role and account boundaries
 
-- [ ] Create `app.loan` using feature-oriented packages.
-- [ ] Add the `Loan` entity with `User` and `Book` relationships.
-- [ ] Add `borrowedAt`, `dueAt`, and nullable `returnedAt` fields.
-- [ ] Add `LoanRepository`.
-- [ ] Add an active-loan lookup using `returnedAt IS NULL`.
-- [ ] Add a database rule allowing only one active loan per book.
-- [ ] Add `LoanService`.
-- [ ] In `LoanService.borrowBook`, load the user and book, check availability,
-  assign both with `loan.setUser(user)` and `loan.setBook(book)`, set dates,
-  and save the loan in one transaction.
-- [ ] Add return-book logic by setting `returnedAt`.
-- [ ] Add loan history and overdue queries.
-- [ ] Add loan DTOs and a thin `LoanController`.
-- [ ] Add loan service and controller tests.
+- [ ] Add LIBRARIAN to the Java role enum and database constraint, using the migration rule below.
+- [ ] Keep public signup pinned to STUDENT.
+- [ ] Restrict faculty account creation and student/faculty deletion to LIBRARIAN.
+- [ ] Restrict the student directory and student profile access to ADMINISTRATOR and LIBRARIAN.
+- [ ] Restrict profile and password changes to the account owner.
+- [ ] Preserve the target book permissions: ADMINISTRATOR can add books; do not grant book update/delete; LIBRARIAN has no book-write permissions.
+- [ ] Add authorization tests for allowed and denied requests, including cross-account profile/password attempts.
 
-## Spring Security and authentication
+### 2. Add loans
 
-- [x] Add `LibroUserDetailsService` to load users by university ID, map roles to
-  Spring authorities, and verify credentials with the BCrypt `PasswordEncoder`.
-- [x] Require authentication except for `POST /app/users/signup`; retain CSRF
-  protection for unsafe methods.
-- [x] Add MVC security-flow tests for anonymous signup, anonymous rejection,
-  successful Basic authentication, and incorrect-password rejection. The tests
-  use the real `LibroUserDetailsService` and a mocked `UserRepository`.
-- [ ] Decide whether local HTTP Basic accounts are sufficient or institutional
-  SSO is required before deployment to untrusted clients.
-- [ ] Define role-specific permissions for `STUDENT` and `FACULTY`; currently
-  every authenticated user can access every protected route.
-- [ ] Review CSRF behavior for intended API clients and document the HTTP Basic
-  scheme, public signup exception, and CSRF requirements in OpenAPI.
-- [ ] Remove client control over role assignment during public signup before
-  deployment.
-- [ ] For future loan routes, derive the borrower from the authenticated
-  principal rather than a client-supplied user ID.
+- [ ] Decide the loan period before implementing due dates.
+- [ ] Add the Loan entity, service, controller, DTOs, and persistence migration.
+- [ ] Identify borrowers only from the authenticated principal.
+- [ ] Enforce at most one active loan for each physical Book copy in application logic and PostgreSQL.
+- [ ] Allow a borrower to return only their own active loan.
+- [ ] Preserve loan history and block deletion of an account referenced by loans.
+- [ ] Add service, MVC/security, and PostgreSQL concurrency/invariant coverage.
 
-## Verification and documentation
+### 3. Replace HTTP Basic with local JWT authentication
 
-- [x] Run `mvn test` after user-domain tests are added.
-- [x] Add an opt-in PostgreSQL 18 Testcontainers integration suite for Flyway,
-  JPA schema validation, book queries/projections, user persistence, service dirty
-  checking, and database constraints (`mvn -Pintegration verify`).
-- [x] Move generated OpenAPI route/schema assertions into the Docker-free MVC
-  suite so `mvn test` checks representative operations and password privacy.
-- [x] Add Docker-free MVC tests for the current HTTP Basic security flow.
-- [ ] Run `mvn -Pintegration verify` with Docker available and confirm the
-  PostgreSQL tests pass; the current environment has no Docker daemon.
-- [ ] Verify that V2 has not already been applied to a persistent database; if
-  it has, create a forward-only V3 migration instead of editing V2.
-- [x] Apply [the API Documentation Guideline](../docs/api-documentation-guideline.md)
-  to book and user operation descriptions, request/response DTO schemas, and
-  expected status/error responses.
-- [ ] Manually review Swagger UI against the guideline checklist with the
-  application running. The automated generated-spec assertions pass in
-  `OpenApiMvcTest`; a browser review is still pending.
-- [x] Update `README.md` with the live user API routes.
-- [ ] Document loan routes in `README.md` when those routes are implemented.
-- [ ] Review entity, migration, DTO, and database naming for consistency.
+- [ ] Add public POST /app/auth/login using Spring Security authentication, UserDetailsService, and BCrypt.
+- [ ] Issue short-lived signed access tokens and validate Bearer tokens with Spring Security OAuth2 Resource Server/JWT support.
+- [ ] Configure the signing secret outside source control; use stateless request security and the documented header-only token transport.
+- [ ] Mark signup and login public in the filter chain and OpenAPI. Remove HTTP Basic after the Bearer flow is verified.
+- [ ] Test absent, malformed, expired, wrong-signature, and wrong-issuer tokens, plus valid-token role denials.
 
-## Recommended next slice
+### 4. Keep the public and internal docs aligned
 
-Run the Docker-backed PostgreSQL integration checks and inspect Swagger UI
-  against the project guideline. Before an untrusted deployment, decide whether
-local authentication is acceptable, implement role-specific access and safe
-role assignment, and settle CSRF/OpenAPI documentation. Loan routes remain
-future work and should use the authenticated principal as the borrower.
-Controllers should translate HTTP requests and responses, not contain
-business logic.
+- [ ] Update README status, endpoint summary, and architecture diagrams after behavior lands.
+- [ ] Update AGENTS.md and Current System Engineering Reference with the new current facts and contributor rules.
+- [ ] Update OpenAPI and the API documentation guide only where their contracts or conventions change.
+- [ ] Review the generated OpenAPI document and Swagger UI against runtime behavior.
+
+## Database migration rule
+
+Before changing a migration, establish whether that version has been applied to a persistent database. If it has, add the next forward-only migration. Keep Flyway SQL, JPA mappings, and integration tests aligned. Do not destroy a database volume to resolve migration drift.
+
+## Verification queue
+
+- [ ] Run the PostgreSQL-backed integration profile when Docker is available.
+- [ ] Perform the generated OpenAPI/Swagger UI review with the application running.
+- [ ] Review each security change against the allowed and denied cases in the target specification.
+
+## Source documents
+
+- [Security Roles and JWT Guide](security-roles-and-jwt-guide.md): target behavior and acceptance checks.
+- [Current System Engineering Reference](engineering-reference.md): current repository facts and technical conventions.
+- [API Documentation Guideline](../docs/api-documentation-guideline.md): OpenAPI/controller documentation rules.
+- [Domain Decisions](../docs/domain-decisions.md): physical-copy model and future loan invariant.

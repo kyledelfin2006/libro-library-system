@@ -13,7 +13,8 @@ Keep each fact in the layer that already owns it:
 | Behavior that cannot be inferred from the signature | Concise `@Operation` descriptions and `@Parameter` descriptions |
 | Shared success and error payload shape | `ApiResponse`, `ErrorResponse`, and their documented schemas |
 | Business rules and cross-field behavior | Service implementation; summarize the client-visible rule in the relevant operation description |
-| Full endpoint catalog, workflows, and setup/deployment instructions | README |
+| Generated endpoint catalog and API contract | Springdoc-generated OpenAPI from the current controller, DTO, and security configuration |
+| Project summary, resource overview, local workflows, and deployment context | README |
 
 Do not copy the same prose into controller comments, annotations, README tables, and DTOs. Keep the OpenAPI contract authoritative for endpoint behavior, and let the README explain workflows, local setup, and deployment context.
 

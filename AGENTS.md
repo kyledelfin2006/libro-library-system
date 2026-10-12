@@ -1,652 +1,82 @@
-# AGENTS.md
-
-## Purpose
-
-This file is the working guide for AI coding agents and human contributors to the Libro: Library API System. Read it before changing the project. It documents the repository as it exists, the intended architecture, the contracts between layers, and the checks expected before a contribution is considered complete.
-
-The application is a single-module Spring Boot REST API for managing a library's book collection and user accounts. It exposes book CRUD, search, pagination, sorting, price filtering, aggregation, and health endpoints, plus user creation, listing, lookup, profile updates, password changes, and deletion. PostgreSQL backs persistence. Loan routes are not implemented.
-
-## Project Snapshot
-
-| Concern | Current choice                                                          |
-|---|-------------------------------------------------------------------------|
-| Language | Java 25                                                                 |
-| Framework | Spring Boot 4.1.0                                                       |
-| Build | Maven, producing an executable Spring Boot JAR                          |
-| HTTP layer | Spring MVC                                                              |
-| Persistence | Spring Data JPA and Hibernate                                           |
-| Database | PostgreSQL 18                                                           |
-| Schema management | Flyway SQL migrations                                                   |
-| Validation | Jakarta Bean Validation                                                 |
-| Security | Spring Security HTTP Basic; role-based access for STUDENT, FACULTY, and ADMINISTRATOR; CSRF enabled |
-| Boilerplate reduction | Lombok 1.18.46                                                          |
-| Testing | JUnit 5, Mockito, Jakarta Validator                                     |
-| Coverage | JaCoCo report during Maven `verify`                                     |
-| Containers | Dockerfile plus Docker Compose                                          |
-| API documentation | Springdoc OpenAPI 3; Swagger UI and `/v3/api-docs`                   |
-
-The Maven coordinates are `kyle.com:library-api-system:1.0-SNAPSHOT`. There is no Maven Wrapper in the repository, so local commands require a compatible `mvn` installation unless Maven is added or supplied by the development environment.
-
-## Repository Map
-
-```text
-library-api-system/
-|-- AGENTS.md
-|-- README.md
-|-- pom.xml
-|-- Dockerfile
-|-- docker-compose.yml
-|-- envFileExample
-`-- src/
-    |-- main/
-    |   |-- java/app/
-    |   |   |-- LibraryApplication.java
-    |   |   |-- auth/
-    |   |   |   `-- SecurityConfig.java
-    |   |   |-- book/
-    |   |   |   |-- controller/BookAPI.java
-    |   |   |   |-- dto/
-    |   |   |   |   |-- BookRequestDTO.java
-    |   |   |   |   |-- BookPatchRequestDTO.java
-    |   |   |   |   |-- BookResponseDTO.java
-    |   |   |   |   `-- LibraryStatisticsDTO.java
-    |   |   |   |-- entity/Book.java
-    |   |   |   |-- exceptions/
-    |   |   |   |   |-- BookNotFoundException.java
-    |   |   |   |   `-- BookValidationException.java
-    |   |   |   |-- mapper/BookMapper.java
-    |   |   |   |-- repository/
-    |   |   |   |   |-- BookRepository.java
-    |   |   |   |   `-- projection/
-    |   |   |   |       |-- GenreCount.java
-    |   |   |   |       `-- LibraryAggregate.java
-    |   |   |   `-- service/BookService.java
-    |   |   |-- user/
-    |   |   |   |-- config/PasswordConfig.java
-    |   |   |   |-- controller/UserAPI.java
-    |   |   |   |-- dto/
-    |   |   |   |   |-- ChangePasswordDTO.java
-    |   |   |   |   |-- UserCreateRequestDTO.java
-    |   |   |   |   |-- UserCreateUpdateDTO.java
-    |   |   |   |   |-- UserReplaceRequest.java
-    |   |   |   |   `-- UserResponseDTO.java
-    |   |   |   |-- entity/User.java
-    |   |   |   |-- entity/enums/
-    |   |   |   |   |-- UserCourse.java
-    |   |   |   |   |-- UserITMajor.java
-    |   |   |   |   `-- UserRole.java
-    |   |   |   |-- mapper/UserMapper.java
-    |   |   |   |-- repository/UserRepository.java
-    |   |   |   |-- exception/UserNotFoundException.java
-    |   |   |   |-- service/UserService.java
-    |   |   |-- validation/PasswordPolicy.java
-    |   |   `-- global/
-    |   |       |-- config/OpenApiConfig.java
-    |   |       |-- exceptions/GlobalExceptionHandler.java
-    |   |       `-- responses/
-    |   |           |-- ApiResponse.java
-    |   |           `-- ErrorResponse.java
-    |   `-- resources/
-    |       |-- application.properties
-    |       `-- db/migration/
-    |           |-- V1__create_books_table.sql
-    |           |-- V2__create_users_table.sql
-    `-- test/
-        |-- java/unit/auth/
-        |   `-- SecurityFlowMvcTest.java
-        |-- java/unit/book/
-        |   |-- BookApiMvcTest.java
-        |   |-- BookMapperTest.java
-        |   |-- BookServiceTest.java
-        |   `-- BookTest.java
-        |-- java/unit/user/
-        |   |-- UserApiMvcTest.java
-        |   `-- UserServiceTest.java
-        |-- java/unit/global/
-        |   |-- GlobalExceptionHandlerTest.java
-        |   `-- OpenApiMvcTest.java
-        |-- java/integration/
-        |   |-- PostgresTestConfig.java
-        |   |-- book/BookPersistenceIT.java
-        |   `-- user/UserPersistenceIT.java
-        `-- resources/
-            |-- junit-platform.properties
-            `-- logback-test.xml
-```
-
-Keep production code below the root `app` package. `LibraryApplication` sits at that root so Spring's default component scan discovers controllers, services, repositories, mappers, advice, and configuration beneath it.
-
-## Runtime Architecture
-
-Book and user API operations follow their own controller and service paths, then share the JPA persistence boundary:
-
-```text
-HTTP client
-  -> Spring Security filter chain
-  -> BookAPI or UserAPI controller
-  -> BookService or UserService
-  -> BookRepository or UserRepository
-  -> Hibernate/JPA
-  -> PostgreSQL
-```
-
-HTTP Basic authentication has a separate account-lookup path through the same user repository:
-
-```text
-HTTP Basic credentials
-  -> Spring Security filter chain
-  -> LibroUserDetailsService.loadUserByUsername(universityId)
-  -> UserRepository.findByUniversityId(universityId)
-  -> Hibernate/JPA
-  -> PostgreSQL users table
-```
-
-`UserService` uses `UserRepository` for signup and account operations; `LibroUserDetailsService` uses it to load the stored password hash and role for authentication. Signup is public, while other routes require authentication. Neither controller accesses a repository directly. Response paths generally convert entities to DTOs through the feature mapper. Exceptions escape their originating layer and are converted to JSON by `GlobalExceptionHandler`.
-
-### Application entry point
-
-`app.LibraryApplication` uses `@SpringBootApplication`, which combines configuration, auto-configuration, and component scanning. Do not move it below a feature package unless component scanning is configured explicitly.
-
-### Controller layer
-
-`BookAPI` owns HTTP concerns only:
-
-- Base route: `/app/books`.
-- Parses path variables, query parameters, pagination, and JSON bodies.
-- Applies `@Valid` to complete create and replace payloads.
-- Uses `BookPatchRequestDTO` for PATCH and deliberately does not apply `@Valid`; its optional fields describe the actual partial-update contract.
-- Delegates business rules to `BookService`.
-- Uses `BookMapper` to prevent entities from becoming the public API representation.
-- Chooses HTTP status codes and response envelopes.
-- Documents every operation sufficiently for Swagger UI to act as the interactive API reference, while Springdoc derives paths and schemas from controller signatures and DTOs wherever possible. Follow [API Documentation Guideline](docs/api-documentation-guideline.md): document non-inferable behavior, keep constraints on DTOs, and avoid repeated annotation boilerplate.
-- Uses `@ErrorApiResponse` for expected errors with the shared `ErrorResponse` schema. Keep response status and endpoint-specific meaning beside the operation; the composed annotation centralizes only repeated schema metadata.
-
-Do not add repository access to the controller. New endpoint logic should remain thin and be independently testable in the service.
-
-### Service layer
-
-`BookService` is the business-logic boundary and transaction owner. It coordinates repositories and mapping, validates rules not adequately represented by request annotations, and translates missing data into `BookNotFoundException`.
-
-Write methods are transactional:
-
-- `addBook` maps and explicitly saves a new entity.
-- `patchBook` loads a managed entity and changes only supplied fields.
-- `replaceBook` validates a complete replacement, then maps all fields onto a managed entity.
-- `deleteBookById` executes a modifying JPQL query and checks the affected row count.
-
-Before create, PATCH, and PUT reach the persistence boundary, the service explicitly validates
-the resulting `Book` with Jakarta `Validator`. This makes entity constraints effective for
-internal service callers as well as HTTP callers. Entity constraint violations are translated to
-the standard HTTP 400 validation response by `GlobalExceptionHandler`.
-
-PATCH and PUT business-rule failures use `BookValidationException`. Its dedicated global handler
-uses the shared validation-response builder, keeping book validation distinct from unrelated
-argument errors while preserving the public HTTP 400 response shape.
-
-PATCH and PUT intentionally omit `repository.save(existingBook)`. Hibernate dirty checking flushes changes to managed entities when the transaction commits. Preserve this behavior unless the persistence model changes. Calling these methods outside Spring's managed proxy, or removing `@Transactional`, changes that guarantee.
-
-#### PUT vs PATCH: partial-update design
-
-The controller layer distinguishes full replacement (PUT) from partial updates (PATCH) through validation strategy:
-
-- **PUT (`replaceBook`)**: The controller annotates the request body with `@Valid @RequestBody BookRequestDTO`. This activates all DTO annotations (`@NotBlank`, `@Size`, `@Positive`, `@NotNull`) on every invocation, enforcing a complete, valid payload. The service method (`replaceBook`) additionally performs manual checks as defense-in-depth, protecting callers that bypass the controller's `@Valid` (e.g., scheduled jobs, internal consumers). The mapper's `updateBookFromDto` overwrites every mutable field onto the fetched managed entity.
-
-- **PATCH (`patchBook`)**: The controller accepts `BookPatchRequestDTO` without `@Valid`. Its optional schema fields match the partial-update contract: omitted or `null` values and blank text are ignored; a supplied price must be positive. The service applies field-level conditional logic and validates the resulting managed entity.
-
-This design solves a problem solved by many implementations incorrectly:
-
-- **Applying PUT rules to PATCH**: If `@Valid` were on PATCH, sending `{"price": 15.00}` would fail because `title`, `author`, and `genre` are `null` and violate `@NotBlank`. This breaks partial updates entirely.
-- **Applying PATCH rules to PUT**: If PUT used the same `hasText()` skip logic, a client could PUT `{"title": null, "author": "Orwell", ...}` and the `null` title would be silently ignored, leaving the old title in place — violating the "complete replacement" contract of PUT.
-
-The `hasText()` method (`s != null && !s.trim().isEmpty()`) also correctly handles the edge case where a client sends `"title": ""` or `"title": "   "` — these are treated as "no update" rather than as an attempt to blank the field. This preserves existing data rather than corrupting it with empty strings.
-
-Read methods handle pagination, field-restricted sorting, searches, price ranges, genre distribution, and aggregate statistics. Keep input allowlists in the service; never pass arbitrary client field names directly to JPA sorting or query construction.
-
-`GET /app/books/query` combines optional title, author, genre, and inclusive price bounds in one database-paged query. The service validates price bounds and sort properties before repository access, and adds `id` as a tie-breaker for stable pages. Missing text filters match all books; supplied text is matched as a case-insensitive literal substring. Existing unpaginated list routes keep their current contracts.
-
-### Repository layer
-
-`BookRepository` extends `JpaRepository<Book, Long>`, gaining standard CRUD, pagination, sorting, and count operations. Its custom methods use three Spring Data styles:
-
-- Derived queries, such as `findByTitleContainingIgnoreCase` and `findTopByOrderByPriceDesc`.
-- JPQL aggregate/select queries for ranges, totals, averages, and genre distribution.
-- A modifying JPQL delete returning the affected row count.
-
-`deleteBookById` uses `@Modifying(clearAutomatically = true)` because bulk JPQL bypasses normal entity lifecycle synchronization. If more bulk updates are introduced, account for stale persistence-context state in the same way.
-
-The count-and-total-value aggregate uses the typed `LibraryAggregate` constructor projection under `app.book.repository.projection`; the service maps that internal projection into the public `LibraryStatisticsDTO`. Genre distribution follows the same pattern through the typed `GenreCount` constructor projection, which the service maps into the existing `Map<String, Long>` response. These records are internal persistence projections, not public DTOs. Prefer typed projections for future complex aggregations when they improve safety without adding unnecessary abstraction.
-
-### User-domain status
-
-The user feature currently contains the entity, enums, create/response DTOs, mapper, repository, BCrypt `PasswordEncoder` bean, and `UserService`. `UserService` normalizes university IDs and email addresses, rejects duplicates, validates password complexity, hashes passwords before persistence, and enforces the role/course/major rules. Passwords must be at least eight characters and include uppercase and lowercase letters, a number, and a symbol. The enum and V2 database checks define the allowed academic values; the service enforces their cross-field relationships.
-
-`UserAPI` exposes public student signup at `POST /app/users/signup`, administrator-only faculty creation at `POST /app/users/faculty`, plus paginated listing, lookup, profile PATCH/PUT, password change, and administrator-only student/faculty deletion. Signup ignores the submitted role and creates a student; faculty creation fixes the role to FACULTY in the service. `SecurityConfig` permits book reads to all roles and book writes to FACULTY and ADMINISTRATOR; account creation/deletion rules are administrator-only. V2 defines all roles and cross-field constraints and seeds the bootstrap administrator from a supplied BCrypt hash. `LibroUserDetailsService` loads the stored hash and role for HTTP Basic and maps the role into Spring Security authorities.
-
-### Entity and database model
-
-The current domain decision is that one `Book` entity represents one physical borrowable copy, not a title-level inventory record. Separate physical copies of the same title are separate rows with different generated IDs. A future loan feature must allow at most one active borrower per `Book` row; do not add `availableCopies` or `totalCopies` to `Book` without revisiting this decision.
-
-`Book` maps to `books`:
-
-| Java field | Java type | Database definition | Constraints |
-|---|---|---|---|
-| `id` | `Long` | `BIGSERIAL PRIMARY KEY` | Generated with `IDENTITY` |
-| `title` | `String` | `VARCHAR(100)` | Nonblank, not null |
-| `author` | `String` | `VARCHAR(50)` | Nonblank, not null |
-| `genre` | `String` | `VARCHAR(50)` | Nonblank, not null |
-| `price` | `BigDecimal` | `DECIMAL(10,2)` | Not null, positive at application boundary |
-| `createdAt` | `LocalDateTime` | `TIMESTAMP` | Not null, set on insert, immutable after creation, omitted from response DTOs |
-
-Use `BigDecimal` for all money-related values and comparisons. Do not replace it with `double` or `float`. Use `compareTo` for numerical equality in tests because `BigDecimal.equals` also compares scale.
-
-The V1 migration creates indexes on title, author, genre, and price. PostgreSQL may not fully exploit ordinary B-tree indexes for every case-insensitive contains query (`%term%`), so benchmark before claiming those indexes optimize substring search.
-
-### DTO and mapper boundary
-
-`BookRequestDTO` is the complete inbound contract for create and PUT; it validates required text lengths and positive, non-null prices. `BookPatchRequestDTO` is the partial-update contract; all fields are optional and service logic validates supplied values. Unknown JSON fields are ignored by Jackson.
-
-`BookResponseDTO` is the regular outbound book shape and intentionally omits the internal `createdAt` timestamp. `LibraryStatisticsDTO` is an immutable Java record containing total count, total value, and the most expensive book response.
-
-`BookMapper` centralizes:
-
-- Request DTO to new entity conversion.
-- Existing entity replacement for PUT.
-- Entity to response DTO conversion.
-- Entity-list to response-list conversion.
-
-Do not expose `Book` directly from new endpoints. Entity exposure couples clients to persistence structure and makes future database changes risky. Keep partial-update semantics in the service; `updateBookFromDto` is full replacement behavior.
-
-### Error handling and response contracts
-
-`GlobalExceptionHandler` is a `@RestControllerAdvice` shared by all controllers. It maps validation, malformed input, missing books/routes, unsupported methods, invalid sort properties, database failures, and unexpected exceptions to `ErrorResponse`.
-
-`ErrorResponse` contains:
-
-```json
-{
-  "error": "Validation failed",
-  "details": "Price must be greater than 0",
-  "timestamp": 0,
-  "statusCode": 400,
-  "fieldErrors": {
-    "price": "Price must be greater than 0"
-  }
-}
-```
-
-Validation responses include `fieldErrors`, a map from DTO/entity field names to messages.
-Clients should use this map for field-level rendering instead of parsing the combined
-`details` string. Constraint violations without a property path use `_global`. Other
-error responses return an empty `fieldErrors` map for a consistent JSON shape.
-
-Successful mutation and selected statistic endpoints use generic `ApiResponse<T>` with `success`, `message`, `data`, and `timestamp`. Some read endpoints return DTOs, lists, maps, or Spring `Page` directly. This mixed contract is current behavior; do not silently normalize it in an unrelated change because that would break API clients.
-
-Handler order matters conceptually. `DataIntegrityViolationException` is a subtype of `DataAccessException`; preserve the specific conflict behavior when refactoring exception handling. Never return stack traces, SQL, credentials, or database internals to clients.
-
-### Security
-
-`SecurityConfig` permits `POST /app/users/signup` without authentication. Book reads require any of STUDENT, FACULTY, or ADMINISTRATOR; book writes require FACULTY or ADMINISTRATOR. `POST /app/users/faculty` and `DELETE /app/users/{universityId}` require ADMINISTRATOR. Other routes require authentication. CSRF protection remains enabled. HTTP Basic is a development-stage authentication setup; use HTTPS outside local development.
-
-The current mechanism is local HTTP Basic authentication backed by `LibroUserDetailsService` and BCrypt. Public signup always creates STUDENT. Faculty are created by administrators; administrators are seeded by Flyway V2 from the `LIBRO_ADMIN_PASSWORD_HASH` environment variable, which must contain a BCrypt hash. The seeded login is `0000-0000`. Do not place a raw password in the migration or commit the hash. Before untrusted deployment, decide whether local credentials or institutional SSO are appropriate, review CSRF behavior, and verify credential handling over HTTPS.
-
-Before deploying user routes to an environment with untrusted clients, select the authentication model and apply its endpoint authorization rules. Do not assume `UserDetailsService` is appropriate if the institution's SSO is the chosen identity provider. Loan operations must identify the borrower from the authenticated principal rather than a client-supplied user ID.
-
-## Endpoint Inventory
-
-Book routes use `/app/books`; user routes use `/app/users`.
-
-| Method | Path | Purpose | Response shape |
-|---|---|---|---|
-| GET | `/health` | API and database reachability | `ApiResponse<Map<String, Boolean>>` |
-| GET | `/stats` | Count, total value, most expensive book | `LibraryStatisticsDTO` |
-| GET | `/stats/average-price` | Average collection price | `ApiResponse<BigDecimal>` |
-| GET | `/stats/count` | Number of books | `ApiResponse<Long>` |
-| GET | `/search?type=...&value=...` | Search by author, title, genre, or exact price | List of `BookResponseDTO` |
-| GET | `/budget?maxPrice=...` | Books at or below a maximum price | List of `BookResponseDTO` |
-| GET | `/all?page=...&size=...&sort=...` | Paginated collection | Spring `Page<BookResponseDTO>` |
-| GET | `/query?title=...&author=...&genre=...&minPrice=...&maxPrice=...` | Paginated book query with optional combined filters and sorting | Spring `Page<BookResponseDTO>` |
-| GET | `/sorted?category=...` | Ascending sort by an allowed field | List of `BookResponseDTO` |
-| GET | `/genre` | Count grouped by genre | Map of genre to count |
-| GET | `/price?minPrice=...&maxPrice=...` | Inclusive price range | List of `BookResponseDTO` |
-| GET | `/{id}` | Retrieve one book | `BookResponseDTO` |
-| POST | `/add` | Create a validated book | `ApiResponse<BookResponseDTO>`, HTTP 201 |
-| PATCH | `/{id}` | Partially update supplied fields | `ApiResponse<BookResponseDTO>` |
-| PUT | `/{id}` | Replace all mutable fields | `ApiResponse<BookResponseDTO>` |
-| DELETE | `/{id}` | Delete one book | `ApiResponse<Void>` |
-
-User routes:
-
-| Method | Path | Purpose | Response shape |
-|---|---|---|---|
-| GET | `/app/users` | Paginated user list (default size 12) | Spring `Page<UserResponseDTO>` |
-| GET | `/app/users/{universityId}` | Retrieve one user | `UserResponseDTO` |
-| POST | `/app/users/signup` | Create a user account (public) | `ApiResponse<UserResponseDTO>`, HTTP 201 |
-| POST | `/app/users/faculty` | Create a faculty account (administrator only) | `ApiResponse<UserResponseDTO>`, HTTP 201 |
-| PATCH | `/app/users/{universityId}` | Partially update profile fields | `ApiResponse<UserResponseDTO>` |
-| PUT | `/app/users/{universityId}` | Replace profile fields | `ApiResponse<UserResponseDTO>` |
-| PUT | `/app/users/{universityId}/password` | Change password after current-password verification | `ApiResponse<Void>` |
-| DELETE | `/app/users/{universityId}` | Delete a student or faculty account (administrator only) | `ApiResponse<Void>` |
-
-When adding an endpoint, update this file and `README.md`, document the operation and public DTO schemas following [API Documentation Guideline](docs/api-documentation-guideline.md), provide request/response examples where useful, and add tests at the appropriate layer.
-
-## Dependency Guide
-
-Dependencies are declared in `pom.xml`. The Spring Boot parent manages versions for most Spring ecosystem dependencies.
-
-### `spring-boot-starter-web`
-
-Provides Spring MVC, embedded HTTP server support, JSON serialization through Jackson, controllers, routing annotations, `ResponseEntity`, and web exception types. It implements the entire HTTP adapter around the book use cases.
-
-### `spring-boot-starter-validation`
-
-Provides Jakarta Validation and its implementation. `@Valid` in `BookAPI` activates constraints on complete `BookRequestDTO` bodies; the resulting `MethodArgumentNotValidException` is transformed by global advice. PATCH uses a separate optional DTO and service validation.
-
-### `spring-boot-starter-data-jpa`
-
-Provides Spring Data repositories, JPA, Hibernate, transaction integration, derived-query parsing, JPQL execution, pagination, and sorting. It is responsible for repository implementation generation and dirty checking.
-
-### `spring-boot-starter-security`
-
-Provides the servlet security filter chain. The project defines a `SecurityFilterChain` bean so default generated-password authentication is replaced by permit-all behavior.
-
-### PostgreSQL JDBC driver
-
-Runtime driver used by the datasource to communicate with PostgreSQL. It is not required at compile time, hence runtime scope.
-
-### H2
-
-An in-memory database driver declared at runtime for development/testing. The current default configuration still requires explicit `SPRING_DATASOURCE_*` values and does not define an H2 profile. Therefore, the dependency alone does not make the application or tests automatically run against H2. Add a deliberate test/profile configuration before relying on it.
-
-### Spring Boot Flyway starter and PostgreSQL module
-
-`spring-boot-starter-flyway` supplies the Boot 4 migration auto-configuration. Flyway 13.3.0 discovers versioned scripts in `classpath:db/migration`, records applied versions in `flyway_schema_history`, and migrates the database before JPA validation. The PostgreSQL module supplies database-specific Flyway support.
-
-Never edit a migration that may have been applied to a shared or persistent database. Add the next versioned migration (`V4__description.sql`, and so on). Migration filenames use Flyway's required double underscore between version and description; verify discovery during startup.
-
-### Lombok
-
-Compile-time annotation processing generates DTO/entity accessors, constructors, `toString`, service constructor injection, and SLF4J logger fields through the `@Slf4j` annotation. The compiler plugin explicitly includes the Lombok processor. Contributors need IDE annotation-processing support for accurate editor diagnostics, though Maven remains authoritative.
-
-### `spring-boot-starter-test`
-
-Provides the JUnit 5 test platform, Mockito, Spring testing utilities, AssertJ, and related test infrastructure. `BookServiceTest` instantiates the service with a mocked repository; the MVC tests start a Spring web slice.
-
-### `spring-security-test`
-
-Test-scoped Spring Security MockMvc support used to exercise the real filter chain and provide CSRF tokens in MVC tests. It does not change production security behavior.
-
-### PostgreSQL integration-test dependencies
-
-The opt-in `integration` Maven profile uses Testcontainers PostgreSQL and Spring Boot's `@ServiceConnection` support to test the real PostgreSQL 18 schema. Keep these dependencies test-scoped; ordinary unit tests do not need Docker. Testcontainers module versions are aligned through its imported BOM.
-
-### Maven build plugins
-
-- `spring-boot-maven-plugin` repackages the artifact as an executable fat JAR.
-- `maven-compiler-plugin` compiles Java 25 and runs Lombok's annotation processor.
-- `jacoco-maven-plugin` attaches its agent during tests and writes an HTML/XML coverage report during `verify`.
-
-## Configuration and Environment
-
-`application.properties` requires these environment variables:
-
-| Variable | Purpose | Docker Compose value |
-|---|---|---|
-| `SPRING_DATASOURCE_URL` | JDBC database URL | `jdbc:postgresql://db:5432/${POSTGRES_DB}` |
-| `SPRING_DATASOURCE_USERNAME` | Database role | `${POSTGRES_USER}` |
-| `SPRING_DATASOURCE_PASSWORD` | Database password | `${POSTGRES_PASSWORD}` |
-
-Docker Compose additionally reads `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` from a root `.env` file. `envFileExample` is a template; never commit real credentials. Do not log secrets or place them in source, tests, migrations, README examples, or exception messages.
-
-Important persistence settings:
-
-- `spring.jpa.hibernate.ddl-auto=validate`: Hibernate checks entity/schema compatibility but does not create or alter tables.
-- `spring.flyway.enabled=true`: Flyway owns migration execution.
-- `spring.flyway.locations=classpath:db/migration`: migration discovery is explicit.
-- `spring.sql.init.mode=never`: legacy `schema.sql`/`data.sql` initialization is disabled.
-- `spring.data.web.pageable.max-page-size=100`: limits API-requested pages.
-- MVC missing-handler settings route unknown endpoints into JSON exception handling.
-
-## Database Migration Rules
-
-`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` creates `users` with identity, all roles, course, major, uniqueness, format, and cross-field constraints, then inserts the bootstrap administrator using the configured BCrypt hash. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
-
-For every schema change:
-
-1. Add a new forward-only migration under `src/main/resources/db/migration`.
-2. Keep the JPA entity and migration definitions aligned, including length, nullability, precision, and scale.
-3. Run against a fresh database and an existing database migrated from the previous version.
-4. Start the application with `ddl-auto=validate` to catch drift.
-5. Add integration coverage for nontrivial queries or constraints.
-
-Docker Compose does not mount migrations into `/docker-entrypoint-initdb.d`; Flyway is the single schema authority. There is no automatic baseline for non-empty unmanaged schemas. During pre-release development, recreate the explicitly disposable empty volume after a V1 correction. Once persistent data exists, use a new forward migration instead.
-
-## Build and Run Workflows
-
-### Local build and tests
-
-```powershell
-mvn clean test
-mvn clean verify
-```
-
-`test` runs the test suite. `verify` also generates JaCoCo output under `target/site/jacoco/`. Use `mvn clean package` to produce the JAR expected by the Dockerfile.
-
-Run the PostgreSQL integration suite when Docker is available:
-
-```powershell
-mvn -Pintegration verify
-```
-
-### Docker workflow
-
-The Dockerfile is not a multi-stage build. It copies `target/*.jar`, so package the application before building the image:
-
-```powershell
-Copy-Item envFileExample .env
-mvn clean package
-docker compose up --build
-```
-
-The app is exposed on port 8080 and PostgreSQL on 5432. PostgreSQL has a `pg_isready` health check, and the app depends on the database reaching the healthy state before startup.
-
-Persistent data lives in the `postgres_data` Docker volume. `docker compose down` retains it; `docker compose down -v` deletes it. Never run the latter on behalf of a user unless data destruction is explicitly requested and confirmed.
-
-## Design Patterns and Rationale
-
-### Layered architecture
-
-HTTP, business logic, persistence, and database concerns live in distinct layers. This limits coupling and enables service tests without web or database startup.
-
-### Feature-oriented packages
-
-Book-related code is grouped under `app.book`, while cross-cutting concerns live under `app.global` and security under `app.auth`. New cohesive domains should follow the same feature package style rather than creating repository-wide folders by technical type.
-
-### Repository pattern
-
-The repository abstracts persistence and let's Spring Data generate routine implementations. Service code depends on a narrow data-access interface instead of an `EntityManager` or SQL details.
-
-### DTO pattern
-
-Request and response models isolate external contracts from JPA entities. Validation belongs on inbound DTOs; entity constraints remain a defense-in-depth persistence invariant. **Entity objects must never be instantiated directly from client input, and must never be returned directly to clients.** All controller inputs are request DTOs (e.g., `BookRequestDTO`, `BookPatchRequestDTO`) and all controller outputs are response DTOs (e.g., `BookResponseDTO`, `LibraryStatisticsDTO`). `BookMapper` is the sole entity conversion point.
-
-Reasons:
-1. Decouples the entity model from the client-facing API so the database schema can evolve independently.
-2. Ties the entity model only to the database for data integrity and prevents accidental leakage of database-only fields.
-3. Enables request validation at the boundary via Jakarta Validation on request DTOs.
-4. Allows response customization without changing entities, including aggregation into read-only DTOs like `LibraryStatisticsDTO`.
-
-### Mapper pattern
-
-Mapping is centralized in `BookMapper` rather than duplicated across controllers and services. Keep mapping deterministic and free of database or HTTP behavior.
-
-### Service/facade pattern
-
-`BookService` presents the application operations needed by the controller and coordinates multiple repository calls for statistics and updates.
-
-### Dependency injection
-
-Constructor injection is used throughout. `BookAPI` declares its constructor directly; `BookService` receives a Lombok-generated constructor through `@AllArgsConstructor`. Keep dependencies `final` and avoid field injection.
-
-### Transaction script and unit of work
-
-Each write service method defines a transaction boundary. Hibernate's persistence context acts as a unit of work, tracking managed entity changes and flushing at commit.
-
-### Global exception translation
-
-Central advice maps Java/application exceptions to stable HTTP errors, keeping error construction out of endpoint methods.
-
-## Testing Strategy
-
-Test sources are grouped by scope and feature: security MVC tests live in `src/test/java/unit/auth`, book unit/MVC tests in `src/test/java/unit/book`, user unit tests in `src/test/java/unit/user`, cross-domain unit tests in `src/test/java/unit/global`, and PostgreSQL-backed tests in `src/test/java/integration/book` and `src/test/java/integration/user`. Keep new tests in the matching package so the filesystem and Java package names remain aligned. Use the current run's `target/surefire-reports/` and `target/failsafe-reports/` as the source for test counts; do not maintain totals in this guide.
-
-- `BookApiMvcTest`: Spring Boot 4 MVC-slice coverage for route/status contracts, JSON shapes, invalid request bodies, pagination and query binding, and global exception responses. It uses mocked service/mapper beans and does not start JPA, Flyway, or PostgreSQL.
-
-- `UserApiMvcTest`: MVC-slice coverage for every user route, binding and validation behavior, pagination, response shapes, 404/409 error bodies, and exclusion of password data from public responses. It uses a mocked `UserService` and does not start JPA, Flyway, or PostgreSQL.
-- `SecurityFlowMvcTest`: MVC-slice checks for public signup, unauthenticated rejection, valid and invalid HTTP Basic credentials, and university-ID lookup through the real `LibroUserDetailsService` backed by a mocked repository.
-- `OpenApiMvcTest`: generated `/v3/api-docs` contract checks in an MVC slice, covering representative paths, response codes, write-only password inputs, and public response privacy without Docker.
-
-- `UserServiceTest`: Mockito-based service unit tests for partial-update normalization, validation, password verification and encoding, password-length bounds, unchanged-email handling, duplicate-email rejection, missing-user handling, and dirty-checking expectations.
-
-- `BookServiceTest`: Mockito-based service unit tests for CRUD rules, text normalization, entity-validation enforcement, price-range validation, dirty-checking expectations, search, sorting, pricing, typed statistics projections, genre distribution, and other aggregate behavior.
-- `BookTest`: entity-construction, lifecycle, and direct Jakarta Validator tests for request DTO and entity constraints.
-- `BookMapperTest`: focused tests for entity-to-DTO mapping, null inputs, and list mapping.
-- `GlobalExceptionHandlerTest`: direct unit tests for exception handlers, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
-- `BookPersistenceIT`: PostgreSQL 18 integration tests for Flyway migrations, Hibernate schema validation, repository queries and projections, and committed service updates.
-- `UserPersistenceIT`: PostgreSQL integration tests for normalized creation, stored hashes, committed updates, and uniqueness/format constraints. `PostgresTestConfig` supplies one context-managed PostgreSQL container to both classes. They use the same JUnit resource lock to avoid concurrent database writes. Run them with `mvn -Pintegration verify`; Docker-backed verification is still pending.
-
-The unit/MVC suite execution setup is deliberately small and optimized:
-
-- `src/test/resources/junit-platform.properties` enables concurrent execution between test classes but keeps methods within each class on the same thread.
-- The PostgreSQL integration classes share a Spring context and a JUnit resource lock. Use rollback for query fixtures and targeted cleanup for committed write tests; avoid database cleanup in read-only checks.
-- `BookServiceTest` uses `@TestInstance(PER_CLASS)` so its repository mock and `BookService` are constructed once. `@BeforeEach` resets the repository mock and rebuilds mutable book fixtures, preserving test isolation. The stateless `BookMapper` is real rather than mocked.
-- `BookTest` shares one thread-safe Jakarta `Validator` and closes its `ValidatorFactory` in `@AfterAll` instead of rebuilding a factory per validation test.
-- `GlobalExceptionHandlerTest` shares its stateless handler and constructs real Spring exceptions where practical, avoiding extra mock creation.
-- `src/test/resources/logback-test.xml` disables logs only in tests. Expected exception-handler tests must not flood test output with stack traces.
-
-These choices keep the feedback loop small without deleting, merging, or weakening tests. Build times are environment-dependent; first-time Maven dependency downloads, Mockito/Byte Buddy agent startup, and machine resources may change the total.
-
-The exception-handler tests verify direct Java method behavior without loading Spring MVC. The generated OpenAPI contract and HTTP Basic security flow run in the normal Docker-free suite. Security tests mock `UserRepository`, so they do not verify the university-ID query against PostgreSQL. The PostgreSQL profile provides real-database coverage when Docker is available; a passing unit/MVC suite alone does not prove persistence behavior.
-
-Choose test scope based on the change:
-
-| Change | Minimum useful verification |
-|---|---|
-| Pure service rule | JUnit/Mockito service unit test |
-| DTO constraint | Validator unit test and invalid boundary cases |
-| Mapper behavior | Focused mapper unit test |
-| Controller contract | MVC test for route, status, body, and validation |
-| Generated OpenAPI contract | Focused MVC slice test for routes, response codes, and sensitive schema fields |
-| Repository query | JPA integration test, preferably PostgreSQL-backed for database-specific behavior |
-| Migration | Fresh and upgrade-path PostgreSQL startup test |
-| Security rule | Authenticated/unauthenticated MVC or integration tests |
-
-Name tests as behavior statements, keep monetary assertions scale-safe, and verify observable outcomes rather than internal calls unless the call itself is the contract. Do not weaken an assertion merely to make a changed implementation pass.
-Keep plain unit tests free of Spring startup and keep full-context or container tests for behavior their smaller neighbors cannot prove. Avoid timing assertions without a measured baseline, and serialize integration classes that share a database.
-
-Before handoff, run at least:
-
-```powershell
-mvn test
-```
-
-For dependency, persistence, build, or release changes, run:
-
-```powershell
-mvn clean verify
-```
-
-If tests cannot run because Java 25, Maven, Docker, PostgreSQL, or network access is unavailable, state exactly what was not verified.
-
-## Contribution Workflow
-
-1. Read the affected controller, service, repository, DTO/entity, tests, configuration, and migration before editing.
-2. Check `git status` and preserve unrelated user changes.
-3. Define whether the change alters the HTTP contract, business rules, persistence model, security posture, or deployment workflow.
-4. Implement in the owning layer and avoid incidental refactors.
-5. Add or update tests that fail without the intended behavior.
-6. Run formatting/compiler/tests appropriate to the change.
-7. Update `README.md` and this guide when commands, endpoints, architecture, dependencies, or contributor expectations change.
-8. Summarize changed behavior, verification performed, and remaining risks.
-
-Keep commits focused. Do not mix schema changes, API-breaking response changes, security changes, and broad formatting in one contribution unless they are inseparable.
-
-## Coding Conventions
-
-- Use Java 25 features only when they improve clarity and remain compatible with the configured toolchain.
-- Prefer constructor injection and immutable dependencies.
-- Keep controllers thin and services responsible for business rules.
-- Return DTOs, not entities, at API boundaries. Entity objects must never be instantiated from client input or returned directly to clients; always use request and response DTOs with `BookMapper` as the conversion point.
-- Use `BigDecimal` for money and define rounding explicitly if a calculation can produce additional scale.
-- Trim and normalize user input deliberately; do not silently change semantics in only one endpoint.
-- Validate both structure (`@Valid`) and cross-field/business rules (service layer).
-- Use parameterized JPQL or derived queries. Never concatenate untrusted values into queries.
-- Restrict client-controlled sort fields with an allowlist.
-- Use SLF4J parameterized logging through Lombok's `@Slf4j`; do not use `System.out`.
-- Avoid logging complete request bodies if they may later contain sensitive data.
-- Keep public exceptions meaningful but free of internal implementation details.
-- Add concise Javadoc where a method's contract, transaction behavior, or query shape is not obvious.
-- Do not add abstractions for hypothetical future domains; extract when duplication or a clear boundary exists.
-
-## API Compatibility Rules
-
-Treat these as breaking changes unless explicitly requested:
-
-- Renaming or removing routes, query parameters, or JSON fields.
-- Changing response envelope shape or HTTP status codes.
-- Tightening validation in a way that rejects previously accepted requests.
-- Changing PATCH null/blank semantics.
-- Altering pagination defaults or maximum size.
-- Changing price precision, scale, or inclusive range behavior.
-- Replacing permit-all security with required authentication.
-
-When a breaking change is intended, document migration guidance and update all examples and tests in the same contribution.
-
-## Known Limitations and Risks
-
-- HTTP Basic authentication protects routes except public signup; book and account routes enforce the configured role rules.
-- CSRF protection remains enabled.
-- H2 is declared but has no dedicated application profile or integration-test setup.
-- The Docker image requires a prebuilt JAR and does not build source itself.
-- V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
-- Signup always creates a student; faculty creation and student/faculty deletion require an administrator.
-- There is no loan feature. User routes have MVC contract, PostgreSQL integration, and HTTP Basic security-flow coverage; the security MVC tests mock the user repository.
-- Docker-backed JPA/migration checks are implemented but require a working Docker daemon to verify. A fresh-to-existing migration upgrade path still needs tests.
-- Success response shapes are inconsistent across endpoints.
-- `timestamp` fields are epoch milliseconds rather than ISO-8601 values.
-- The book health endpoint runs a lightweight database ping but is not integrated with Spring Boot Actuator or container health checks.
-- Ordinary indexes may not accelerate case-insensitive substring searches as expected.
-- The database enforces `NOT NULL` for price but not a positive-value check; application validation is the current positive-price guard.
-
-Address these in focused, tested contributions. Do not bundle opportunistic fixes into unrelated work.
-
-## Guidance for AI Agents
-
-Before changing code:
-
-- Inspect the repository rather than relying on README snippets or prior assumptions.
-- Read complete affected files, including tests and configuration.
-- Search for every call site before renaming a method, route, field, or type.
-- Check for uncommitted work and never discard changes you did not create.
-- State assumptions only when repository evidence cannot resolve them.
-
-While changing code:
-
-- Make the smallest coherent change that fully solves the request.
-- Preserve public behavior unless the request authorizes a contract change.
-- Do not fabricate dependencies, endpoints, migrations, commands, or test results.
-- Do not edit generated output under `target/`.
-- Do not modify an existing applied migration to evolve the schema.
-- Never insert credentials or use destructive database/volume commands without explicit authorization.
-- Keep documentation synchronized with implementation.
-
-Before reporting completion:
-
-- Review the diff for accidental changes and stale comments.
-- Compile and run relevant tests where the environment permits.
-- Confirm new migrations and JPA mappings agree.
-- Confirm error cases as well as the happy path.
-- Report commands actually run and any verification gaps honestly.
-
-## Definition of Done
-
-A contribution is complete when the requested behavior is implemented in the correct layer, public contracts are deliberate, validation and error handling are coherent, persistence changes have forward migrations, relevant tests pass, documentation reflects the result, unrelated work is preserved, and remaining limitations are clearly disclosed.
+# Agent and Contributor Guide
+
+This file is the repository's internal entry point for AI agents and human contributors. Read it before changing code or documentation. The README is the recruiter-facing project overview; it is not the authority for implementation details.
+
+## Start here
+
+1. Read this file for contributor rules and the source-of-truth map.
+2. Read [Current System Engineering Reference](internal-docs/engineering-reference.md) for the repository map, current layer contracts, API inventory, configuration, and test strategy.
+3. Read the relevant focused document before editing:
+   - [Role and JWT target specification](internal-docs/security-roles-and-jwt-guide.md) for the planned role policy, JWT design, and future loan rules.
+   - [Development roadmap](internal-docs/TODO.md) for outstanding work.
+   - [API documentation guideline](docs/api-documentation-guideline.md) for controller/OpenAPI documentation.
+   - [Domain decisions](docs/domain-decisions.md) for the physical-copy model and loan constraints.
+
+## Sources of truth
+
+Keep facts in the artifact that owns them. If prose disagrees with running code, migrations, or tests, investigate and correct the stale prose instead of treating it as implemented behavior.
+
+| Question | Source of truth |
+| --- | --- |
+| What an endpoint currently does | Controller mappings, DTOs, service behavior, generated OpenAPI, and API tests |
+| What access is currently enforced | SecurityConfig, any method/service authorization checks, and security tests |
+| What roles and columns the database accepts | Latest applied Flyway migrations; JPA mappings must match |
+| Current entity and relationship model | JPA entities plus [Domain Decisions](docs/domain-decisions.md) |
+| API documentation conventions | [API Documentation Guideline](docs/api-documentation-guideline.md) |
+| Planned role policy, JWT design, and loan behavior | [Role and JWT target specification](internal-docs/security-roles-and-jwt-guide.md); it is a target, not live implementation |
+| Remaining work | [Development roadmap](internal-docs/TODO.md) |
+| Recruiter-facing project description | [README](README.md) and the public-facing documents it links to |
+
+## Current implementation facts
+
+- The project is a single-module Java 25 / Spring Boot 4.1 REST API using Spring MVC, Spring Data JPA, Hibernate, PostgreSQL, Flyway, and Maven.
+- The live authentication mechanism is HTTP Basic, backed by LibroUserDetailsService and BCrypt. Signup at POST /app/users/signup is public. JWT login and Bearer validation are not implemented.
+- The live UserRole values are STUDENT, FACULTY, and ADMINISTRATOR. LIBRARIAN is part of the target spec only.
+- Current book reads allow all three live roles. Book create/update/delete allow FACULTY and ADMINISTRATOR. Faculty creation and user deletion currently require ADMINISTRATOR.
+- Other user routes require authentication, but the current implementation does not enforce the target owner-only and student-directory boundaries. Do not describe those target restrictions as live behavior.
+- Loans are not implemented. Each Book row represents one physical copy.
+- Flyway owns schema changes; Hibernate uses ddl-auto=validate.
+
+These are a snapshot, not a substitute for checking the code when a task changes the relevant area.
+
+## Do
+
+- Keep HTTP handling in controllers, business rules and transactions in services, persistence behind repositories, and entity/DTO mapping explicit.
+- Use request and response DTOs at API boundaries. Never accept a JPA entity from a client or return one directly.
+- Keep secrets and real personal data out of source, migrations, docs, tests, logs, and examples. The bootstrap administrator migration accepts only a BCrypt hash through LIBRO_ADMIN_PASSWORD_HASH.
+- Add forward-only Flyway migrations for schema changes once a migration may have been applied to a persistent database. Keep SQL and JPA mappings aligned.
+- Preserve the physical-book-copy domain decision and enforce loan ownership from the authenticated principal when loan work begins.
+- Update the README, this guide, the engineering reference, OpenAPI, and the roadmap only where their owned facts changed.
+- Add focused tests for behavior changes at the appropriate service, MVC/security, or PostgreSQL persistence boundary.
+
+## Don't
+
+- Don't implement a future item merely because it appears in the JWT/loan specification; follow the user's requested scope.
+- Don't claim JWT, Bearer authentication, librarian permissions, or loan routes are live until code and tests enforce them.
+- Don't let public signup choose a privileged role.
+- Don't add repository access or domain workflows to controllers.
+- Don't pass arbitrary client sort properties through to persistence.
+- Don't edit an already-applied migration or destroy a database volume to make a migration pass.
+- Don't expose password hashes, stack traces, SQL, database internals, or credentials in API responses.
+
+## Security and migration notes
+
+- Current security and the target policy differ. Check SecurityConfig, controllers/services, and tests before changing access behavior; use the target specification as the intended design only when implementing that scope.
+- The current filter chain keeps CSRF enabled. Do not change CSRF or credential transport as incidental cleanup.
+- Flyway is the only schema authority. For each schema change, check the fresh-database and previous-version migration paths, then start with Hibernate schema validation enabled.
+- Never run docker compose down -v unless the user explicitly requests destruction of that database data.
+
+## Contribution workflow
+
+1. Trace the existing request path and read the relevant source-of-truth docs.
+2. Make the smallest cohesive change at the correct layer.
+3. Update contract documentation and tests for behavior that changed.
+4. Run the appropriate Maven checks described in [Current System Engineering Reference](internal-docs/engineering-reference.md), and report exactly which checks ran.
+
+## Definition of done
+
+- The requested behavior is implemented at its owning layer.
+- Tests cover the changed contract and relevant failure/security cases.
+- OpenAPI and recruiter-facing docs do not claim behavior that is absent from code.
+- Flyway, JPA mappings, and persistence tests agree for schema changes.
+- No secret or sensitive user data is included in the diff.
