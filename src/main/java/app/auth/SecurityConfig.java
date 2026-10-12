@@ -15,18 +15,28 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/app/users/signup").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/app/users/faculty").hasRole("ADMINISTRATOR")
-                        .requestMatchers(HttpMethod.DELETE, "/app/users/**").hasRole("ADMINISTRATOR")
+                        .requestMatchers(HttpMethod.POST, "/app/users/faculty").hasRole("LIBRARIAN")
+
+                        .requestMatchers(HttpMethod.GET, "/app/users").hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
+                        .requestMatchers(HttpMethod.GET, "/app/users/**")
+                        .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
+                        .requestMatchers(HttpMethod.PATCH, "/app/users/**")
+                        .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
+                        .requestMatchers(HttpMethod.PUT, "/app/users/**")
+                        .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
+                        .requestMatchers(HttpMethod.DELETE, "/app/users/**")
+                        .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
+
                         .requestMatchers(HttpMethod.GET, "/app/books/**")
-                        .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR")
-                        .requestMatchers(HttpMethod.POST, "/app/books/**")
-                        .hasAnyRole("FACULTY", "ADMINISTRATOR")
+                        .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
+                        .requestMatchers(HttpMethod.POST, "/app/books/**").hasRole("ADMINISTRATOR")
                         .requestMatchers(HttpMethod.PUT, "/app/books/**")
-                        .hasAnyRole("FACULTY", "ADMINISTRATOR")
+                        .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
                         .requestMatchers(HttpMethod.PATCH, "/app/books/**")
-                        .hasAnyRole("FACULTY", "ADMINISTRATOR")
+                        .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
                         .requestMatchers(HttpMethod.DELETE, "/app/books/**")
-                        .hasAnyRole("FACULTY", "ADMINISTRATOR")
+                        .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
+
                         .anyRequest().authenticated()
                 )
                 .httpBasic(basic -> {});
