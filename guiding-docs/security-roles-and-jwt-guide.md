@@ -5,8 +5,8 @@ This guide defines the target authorization policy and a staged implementation p
 ## Current state
 
 - Libro currently uses HTTP Basic authentication backed by `LibroUserDetailsService` and BCrypt.
-- `UserRole` currently contains `STUDENT`, `FACULTY`, and `ADMINISTRATOR`; `LIBRARIAN` still needs to be added.
-- User profile and directory routes currently need ownership and role restrictions.
+- `UserRole` contains `STUDENT`, `FACULTY`, `ADMINISTRATOR`, and `LIBRARIAN`; Flyway V3 adds the librarian value to the accepted database role constraint.
+- The role matrix and account boundaries below are implemented while HTTP Basic remains active. JWT and loans are still planned.
 - There is no loan entity or loan API yet. A `Book` row represents one physical copy, and the loan domain must prevent more than one active loan for that copy.
 
 ## Role policy
@@ -22,7 +22,7 @@ All four roles can use student capabilities. The additional powers are deliberat
 | Add books | No | No | Yes | No |
 | View student directory/profiles | No | No | Yes | Yes |
 | Create faculty accounts | No | No | No | Yes |
-| Delete student or faculty accounts | No | No | No | Yes |
+| Delete student or faculty accounts | No | No | Yes | Yes |
 | Update or delete books | No | No | Yes | Yes |
 | Manage another user's profile/password | No | No | Yes | Yes |
 
@@ -88,7 +88,7 @@ Spring Security documents Resource Server support for JWT Bearer tokens and the 
 
 ## Implementation sequence
 
-1. **Roles and access rules:** add `LIBRARIAN` to `UserRole` and the database role constraint; keep course/major fields null for non-students. Pin public signup to `STUDENT`, enforce the directory and ownership boundaries, and configure the role matrix above. Since no database has been deployed, V2 can be updated before first use; after any deployment, add a forward-only migration instead.
+1. **Roles and access rules:** implemented in `UserRole`, `SecurityConfig`, `UserService`, and Flyway V3. Public signup remains pinned to `STUDENT`; directory and ownership boundaries are enforced while Basic authentication remains active.
 2. **Loans:** add the entity, repository, V3 migration, partial unique index, DTOs, service, and controller. Resolve the loan-period policy first. Keep user deletion blocked while loan history references the account.
 3. **JWT:** add the Spring Boot OAuth2 Resource Server starter, JWT encoder/decoder configuration, secret/issuer settings, login DTO/controller/service, Bearer authorization, stateless session policy, and OpenAPI scheme. Remove HTTP Basic after the Bearer flow is working.
 4. **Documentation:** update `AGENTS.md`, README endpoint/security inventories, and OpenAPI annotations when the implementation lands. Keep this guide as the detailed policy reference.

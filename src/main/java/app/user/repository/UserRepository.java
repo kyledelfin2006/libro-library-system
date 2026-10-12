@@ -4,6 +4,8 @@ import app.user.entity.User;
 import app.user.entity.enums.UserCourse;
 import app.user.entity.enums.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,6 +25,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     // finds users by role
     List<User> findByUserRole(UserRole userRole);
+
+    // Returns a pageable subset of users with one role, used for the student directory.
+    Page<User> findByUserRole(UserRole userRole, Pageable pageable);
 
     // finds users by course
     List<User> findByUserCourse(UserCourse userCourse);

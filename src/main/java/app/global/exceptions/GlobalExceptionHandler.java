@@ -12,6 +12,7 @@ import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -37,6 +38,18 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    /**
+     * Converts a service-layer authorization denial into a client-safe 403 response.
+     *
+     * @param ex the authorization failure
+     * @return HTTP 403 without exposing account or security internals
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex) {
+        ErrorResponse error = new ErrorResponse("Forbidden", "You are not allowed to access this account", 403);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
 
     /**
      * Builds the backwards-compatible validation response used when no field map is available.

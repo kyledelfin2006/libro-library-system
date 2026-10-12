@@ -16,12 +16,11 @@ import lombok.Setter;
 @Schema(description = "Password-change request. Both values must be 8–72 characters and include uppercase and lowercase letters, a number, and a symbol.")
 public class ChangePasswordDTO {
 
-    @NotBlank(message = "Password is required.")
     @Pattern(
             regexp = PasswordPolicy.PASSWORD_REGEX,
             message = PasswordPolicy.PASSWORD_REQUIREMENTS_MESSAGE
     )
-    @Schema(description = "Current password, verified against the stored hash.", accessMode = Schema.AccessMode.WRITE_ONLY)
+    @Schema(description = "Required when changing your own password; omitted when an administrator or librarian resets a student or faculty password.", accessMode = Schema.AccessMode.WRITE_ONLY)
     private String currentPassword;
 
     @NotBlank(message = "Password is required.")

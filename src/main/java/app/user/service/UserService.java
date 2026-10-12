@@ -19,9 +19,12 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
 import java.util.Locale;
 import java.util.Set;
 
@@ -64,11 +67,24 @@ public class UserService {
         return createUserWithRole(request, UserRole.STUDENT);
     }
 
+    /**
+     * Creates a faculty account; the controller's librarian-only route guard controls access.
+     *
+     * @param request faculty account data; the requested role is ignored
+     * @return the created faculty profile without password data
+     */
     @Transactional
     public UserResponseDTO createFaculty(UserCreateRequestDTO request) {
         return createUserWithRole(request, UserRole.FACULTY);
     }
 
+    /**
+     * Validates, normalizes, hashes, and stores an account with the service-selected role.
+     *
+     * @param request account details supplied by the caller
+     * @param role role selected by this service method, never trusted from the request body
+     * @return the saved public profile without password data
+     */
     private UserResponseDTO createUserWithRole(UserCreateRequestDTO request, UserRole role) {
         if (request == null) {
             throw new IllegalArgumentException("User request cannot be null");
@@ -118,40 +134,47 @@ public class UserService {
     }
 
     /**
-     * Replaces the editable profile fields for an existing user.
+     * Replaces the editable profile fields of the target account.
      *
-     * <p>This operation replaces first name, last name, middle initial, and
-     * email. The university ID, password, role, course, and major are not
-     * changed by this profile operation. Those fields can be handled by a
-     * separate administrative use case when role-based authorization is added.
-     * Hibernate dirty checking persists the managed entity at transaction
-     * commit.</p>
+     * <p>The owner may replace their own profile. Administrators and librarians
+     * may also manage student and faculty profiles, but not another administrator
+     * or librarian profile.
+     * This method changes only first name, last name, middle initial, and email.
+     * The managed entity is persisted by Hibernate dirty checking at commit.</p>
      *
-     * @param universityId the fixed university ID identifying the user
-     * @param request the complete replacement profile
-     * @return the updated user without password data
-     * @throws IllegalArgumentException if the request, profile fields, or email uniqueness is invalid
-     * @throws UserNotFoundException if no user matches the university ID
+     * @param callerId university ID of the authenticated caller
+     * @param targetId university ID identifying the account to update
+     * @param request complete replacement profile fields
+     * @param authorities roles granted to the authenticated caller
+     * @return the updated public profile without password data
+     * @throws AccessDeniedException if the caller cannot manage the target account
+     * @throws IllegalArgumentException if the request or profile values are invalid
+     * @throws UserNotFoundException if the target account does not exist
      */
     @Transactional
     public UserResponseDTO replaceUserProfile(
-            String universityId,
-            UserReplaceRequest request
+            String callerId,
+            String targetId,
+            UserReplaceRequest request,
+            Collection<? extends GrantedAuthority> authorities
     ) {
-        // A full profile replacement requires a request body.
+        // Reject a missing body before reading any of its fields.
         if (request == null) {
             throw new IllegalArgumentException("User profile cannot be null");
         }
 
-        // Normalize and validate the lookup ID before querying the repository.
-        String normalizedUniversityId =
-                normalizeAndValidateUniversityId(universityId);
+        // Normalize both IDs so the owner comparison uses the same format as storage.
+        String normalizedCallerId = normalizeAndValidateUniversityId(callerId);
+        String normalizedTargetId = normalizeAndValidateUniversityId(targetId);
 
-        // Load the managed entity so Hibernate can track field changes.
-        User user = userRepository.findByUniversityId(normalizedUniversityId)
+        // Load the target account whose profile is being replaced.
+        User user = userRepository.findByUniversityId(normalizedTargetId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        // Require all profile fields and enforce their DTO constraints.
+        // Check ownership or staff permission before exposing or changing profile data.
+        requireAccountAccess(normalizedCallerId, normalizedTargetId, user, authorities);
+
+        // Require every field for this full replacement and enforce DTO constraints.
         validateRequest(request);
 
         // Trim names and normalize the email before storing them.
@@ -183,38 +206,45 @@ public class UserService {
     }
 
     /**
-     * Applies a validated partial update to an existing user.
+     * Applies a validated partial profile update to the target account.
      *
-     * <p>{@code null} fields mean that the caller omitted the field and the
-     * current entity value is preserved. Supplied values are trimmed,
-     * normalized, validated, and applied to the managed entity. Hibernate
-     * dirty checking persists the changes when the transaction commits.</p>
+     * <p>The owner may update their own profile. Administrators and librarians
+     * may also manage student and faculty profiles. {@code null} fields remain unchanged;
+     * supplied values are normalized and validated before assignment.</p>
      *
-     * @param universityId the university ID of the user being updated
-     * @param request the partial update request
-     * @return the updated user without password data
+     * @param callerId university ID of the authenticated caller
+     * @param targetId university ID identifying the account to update
+     * @param request fields supplied for the partial update
+     * @param authorities roles granted to the authenticated caller
+     * @return the updated public profile without password data
+     * @throws AccessDeniedException if the caller cannot manage the target account
      * @throws IllegalArgumentException if the request or a supplied value is invalid
-     * @throws UserNotFoundException if no user matches the university ID
+     * @throws UserNotFoundException if the target account does not exist
      */
     @Transactional
     public UserResponseDTO updateUser(
-            String universityId,
-            UserCreateUpdateDTO request
+            String callerId,
+            String targetId,
+            UserCreateUpdateDTO request,
+            Collection<? extends GrantedAuthority> authorities
     ) {
-        // Reject null input before reading request fields.
+        // Reject a missing request before reading any supplied fields.
         if (request == null) {
             throw new IllegalArgumentException("User update request cannot be null");
         }
 
-        // Normalize and validate the lookup ID before querying the repository.
-        String normalizedUniversityId =
-                normalizeAndValidateUniversityId(universityId);
+        // Normalize both IDs so authorization compares canonical university IDs.
+        String normalizedCallerId = normalizeAndValidateUniversityId(callerId);
+        String normalizedTargetId = normalizeAndValidateUniversityId(targetId);
 
-        // Load the managed entity so Hibernate can track field changes.
-        User user = userRepository.findByUniversityId(normalizedUniversityId)
+        // Load the account named by the target ID in the route.
+        User user = userRepository.findByUniversityId(normalizedTargetId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        // Normalize supplied values without mutating the input DTO.
+        // Prevent a caller from changing another account without owner or staff permission.
+        requireAccountAccess(normalizedCallerId, normalizedTargetId, user, authorities);
+
+        // Normalize supplied values without changing the request object.
         UserCreateUpdateDTO normalizedRequest = new UserCreateUpdateDTO(
                 trimNullable(request.getFirstName()),
                 trimNullable(request.getLastName()),
@@ -267,43 +297,56 @@ public class UserService {
     }
 
     /**
-     * Changes a user's password after validating the request and verifying the
-     * current password against the stored BCrypt hash.
+     * Changes the password for the target account.
      *
-     * <p>The supplied passwords are never logged, returned, or stored directly.
-     * The new password replaces the existing hash on the managed entity, and
-     * Hibernate dirty checking persists the change when the transaction commits.</p>
+     * <p>Owners must provide their current password. Administrators and
+     * librarians may reset a student or faculty password without knowing the target user's
+     * current password. Passwords are validated and only the encoded new hash
+     * is stored; transaction commit persists the managed entity.</p>
      *
-     * @param universityId the university ID of the user changing the password
-     * @param request the current and new password request
-     * @throws IllegalArgumentException if the request is null or the current password is incorrect
-     * @throws UserNotFoundException if no user matches the university ID
-     * @throws ConstraintViolationException if the password format is invalid
+     * @param callerId university ID of the authenticated caller
+     * @param targetId university ID identifying the account whose password changes
+     * @param request current password for an owner change and the new password
+     * @param authorities roles granted to the authenticated caller
+     * @throws AccessDeniedException if the caller cannot manage the target account
+     * @throws IllegalArgumentException if the request is missing or the current password is incorrect
+     * @throws UserNotFoundException if the target account does not exist
+     * @throws ConstraintViolationException if the new password violates policy
      */
     @Transactional
-    public void updatePassword(String universityId, ChangePasswordDTO request) {
-        // Reject a missing request before reading password fields.
+    public void updatePassword(
+            String callerId,
+            String targetId,
+            ChangePasswordDTO request,
+            Collection<? extends GrantedAuthority> authorities
+    ) {
+        // Reject a missing body before reading either password.
         if (request == null) {
             throw new IllegalArgumentException("Password update request cannot be null");
         }
 
-        // Validate password complexity constraints before accessing persistence.
-        validateRequest(request);
+        // Normalize caller and target IDs before checking ownership.
+        String normalizedCallerId = normalizeAndValidateUniversityId(callerId);
+        String normalizedTargetId = normalizeAndValidateUniversityId(targetId);
 
-        // Normalize and validate the lookup ID before querying the repository.
-        String normalizedUniversityId =
-                normalizeAndValidateUniversityId(universityId);
-
-        // Load the managed entity whose password hash will be replaced.
-        User user = userRepository.findByUniversityId(normalizedUniversityId)
+        // Load the account whose password hash may be replaced.
+        User user = userRepository.findByUniversityId(normalizedTargetId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        // Compare the raw current password with the stored encoded hash.
-        if (!passwordEncoder.matches(
-                request.getCurrentPassword(),
-                user.getPasswordHash()
-        )) {
-            throw new IllegalArgumentException("Current password is incorrect");
+        // Check authorization before processing the supplied password values.
+        requireAccountAccess(normalizedCallerId, normalizedTargetId, user, authorities);
+
+        // Always validate the new password; the current password is optional for staff resets.
+        validateRequest(request);
+
+        // Require a current password when the caller is changing their own password.
+        if (normalizedCallerId.equals(normalizedTargetId)) {
+            validateRequiredValue(request.getCurrentPassword(), "Current password");
+
+            // Verify the owner's current password against the stored BCrypt hash.
+            if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
+                throw new IllegalArgumentException("Current password is incorrect");
+            }
         }
 
         // Encode the new password before assigning it to the entity.
@@ -396,66 +439,99 @@ public class UserService {
     }
 
     /**
-     * Returns a page of users converted to safe response DTOs.
+     * Returns a page of student profiles for an administrator or librarian.
      *
      * @param pageable page number, page size, and optional sorting rules
-     * @return a page containing user response DTOs
-     * @throws IllegalArgumentException if pageable is null
+     * @param callerId university ID of the authenticated caller
+     * @param authorities roles granted to the authenticated caller
+     * @return a page containing student response DTOs only
+     * @throws AccessDeniedException if the caller is not an administrator or librarian
+     * @throws IllegalArgumentException if pageable is null or contains an unsupported sort field
      */
-    public Page<UserResponseDTO> getAllUsers(Pageable pageable) {
-        // Guard service callers that bypass controller parameter binding.
+    public Page<UserResponseDTO> getAllUsers(
+            Pageable pageable,
+            String callerId,
+            Collection<? extends GrantedAuthority> authorities
+    ) {
+        // Enforce the directory boundary even if a service caller bypasses SecurityConfig.
+        requireStaff(callerId, authorities);
+
+        // Guard service callers that bypass Spring MVC pagination binding.
         if (pageable == null) {
             throw new IllegalArgumentException("Pageable cannot be null");
         }
 
+        // Restrict sort properties so client input cannot select arbitrary entity fields.
         if (pageable.getSort().stream().anyMatch(order -> !SORTABLE_USER_FIELDS.contains(order.getProperty()))) {
             throw new IllegalArgumentException("Unsupported user sort field. Allowed fields: universityId, firstName, lastName, middleInitial, email, userRole, userCourse, major");
         }
 
-        // Keep page metadata while mapping entities to public response DTOs.
-        return userRepository.findAll(pageable)
+        // Query only student records and map them into safe public response DTOs.
+        return userRepository.findByUserRole(UserRole.STUDENT, pageable)
                 .map(userMapper::toResponseDTO);
     }
 
     /**
-     * Finds a user by the public university ID.
+     * Finds a user profile after checking owner or staff access.
      *
-     * @param universityId the university ID to search for
+     * @param callerId university ID of the authenticated caller
+     * @param targetId university ID identifying the requested account
+     * @param authorities roles granted to the authenticated caller
      * @return the matching user without password data
+     * @throws AccessDeniedException if the caller cannot view the target account
      * @throws UserNotFoundException if no matching user exists
      * @throws IllegalArgumentException if the university ID format is invalid
      */
-    public UserResponseDTO getUserByUniversityId(String universityId) {
-        // Normalize the lookup key before querying.
-        String normalizedUniversityId = normalizeAndValidateUniversityId(universityId);
+    public UserResponseDTO getUserByUniversityId(
+            String callerId,
+            String targetId,
+            Collection<? extends GrantedAuthority> authorities
+    ) {
+        // Normalize the caller and target identifiers before comparing or querying.
+        String normalizedCallerId = normalizeAndValidateUniversityId(callerId);
+        String normalizedTargetId = normalizeAndValidateUniversityId(targetId);
 
-        // Translate an absent record into a user-domain 404 exception.
-        User user = userRepository.findByUniversityId(normalizedUniversityId)
-                .orElseThrow(() -> new UserNotFoundException(normalizedUniversityId));
+        // Load the requested profile using the target ID from the route.
+        User user = userRepository.findByUniversityId(normalizedTargetId)
+                .orElseThrow(() -> new UserNotFoundException(normalizedTargetId));
+
+        // A non-owner may read only student profiles, even when the caller is staff.
+        requireProfileReadAccess(normalizedCallerId, normalizedTargetId, user, authorities);
 
         // Keep the persistence entity inside the service boundary.
         return userMapper.toResponseDTO(user);
     }
 
     /**
-     * Deletes a user identified by the public university ID.
+     * Deletes a student or faculty account for an administrator or librarian.
      *
-     * @param universityId the university ID of the user to delete
+     * @param callerId university ID of the authenticated caller
+     * @param targetId university ID identifying the account to delete
+     * @param authorities roles granted to the authenticated caller
      * @throws UserNotFoundException if no matching user exists
+     * @throws AccessDeniedException if the caller is not staff or the target is protected
      * @throws IllegalArgumentException if the university ID format is invalid
      */
     @Transactional
-    public void deleteUserByUniversityId(String universityId) {
-        // Validate the key before logging or querying with it.
-        String normalizedUniversityId = normalizeAndValidateUniversityId(universityId);
-        log.debug("Attempting to delete user with university ID: {}", normalizedUniversityId);
+    public void deleteUserByUniversityId(
+            String callerId,
+            String targetId,
+            Collection<? extends GrantedAuthority> authorities
+    ) {
+        // Require an administrator or librarian before looking up a deletion target.
+        requireStaff(callerId, authorities);
 
-        // Check existence first so a missing user reports a clear not-found error.
-        User user = userRepository.findByUniversityId(normalizedUniversityId)
-                .orElseThrow(() -> new UserNotFoundException(normalizedUniversityId));
+        // Normalize the target ID before querying or including it in diagnostic logs.
+        String normalizedTargetId = normalizeAndValidateUniversityId(targetId);
+        log.debug("Attempting to delete user with university ID: {}", normalizedTargetId);
 
-        if (user.getUserRole() == UserRole.ADMINISTRATOR) {
-            throw new IllegalArgumentException("Administrator accounts cannot be deleted through this endpoint");
+        // Load the account so its role can be checked before deletion.
+        User user = userRepository.findByUniversityId(normalizedTargetId)
+                .orElseThrow(() -> new UserNotFoundException(normalizedTargetId));
+
+        // Never allow this endpoint to delete administrator or librarian accounts.
+        if (user.getUserRole() != UserRole.STUDENT && user.getUserRole() != UserRole.FACULTY) {
+            throw new AccessDeniedException("Access denied");
         }
 
         // Delete the managed entity within this transaction.
@@ -489,7 +565,110 @@ public class UserService {
         return normalizedUniversityId;
     }
 
+    /**
+     * Confirms that the caller is the owner or authorized staff for the target.
+     *
+     * <p>Every profile update and password operation calls this after loading its target.
+     * Owners may manage their own account. Administrators and librarians may
+     * manage student and faculty accounts, but not another administrator or librarian.</p>
+     *
+     * @param callerId normalized university ID of the authenticated caller
+     * @param targetId normalized university ID requested by the caller
+     * @param target loaded target user whose role determines staff boundaries
+     * @param authorities authorities granted to the authenticated caller
+     * @throws AccessDeniedException if no ownership or staff rule permits access
+     */
+    private void requireAccountAccess(
+            String callerId,
+            String targetId,
+            User target,
+            Collection<? extends GrantedAuthority> authorities
+    ) {
+        // The account owner can manage their own profile and password regardless of role.
+        if (callerId.equals(targetId)) {
+            return;
+        }
 
+        // Staff may manage student and faculty accounts, but not other staff accounts.
+        if ((target.getUserRole() == UserRole.STUDENT || target.getUserRole() == UserRole.FACULTY)
+                && isStaff(authorities)) {
+            return;
+        }
+
+        // Reject cross-account requests that do not meet the rules above.
+        throw new AccessDeniedException("Access denied");
+    }
+
+    /**
+     * Confirms that the caller may read the requested public profile.
+     *
+     * <p>Every role may read its own profile. Administrators and librarians may
+     * also read student profiles, but may not browse faculty or staff profiles.</p>
+     *
+     * @param callerId normalized university ID of the authenticated caller
+     * @param targetId normalized university ID requested by the caller
+     * @param target loaded account whose role defines directory visibility
+     * @param authorities authorities granted to the authenticated caller
+     * @throws AccessDeniedException if the caller cannot read the target profile
+     */
+    private void requireProfileReadAccess(
+            String callerId,
+            String targetId,
+            User target,
+            Collection<? extends GrantedAuthority> authorities
+    ) {
+        // The owner can always read their own profile.
+        if (callerId.equals(targetId)) {
+            return;
+        }
+
+        // Only staff can read another user's profile, and the directory contains students only.
+        if (target.getUserRole() == UserRole.STUDENT && isStaff(authorities)) {
+            return;
+        }
+
+        // Deny cross-account reads outside the student-directory boundary.
+        throw new AccessDeniedException("Access denied");
+    }
+
+    /**
+     * Requires the caller to hold the administrator or librarian authority.
+     *
+     * @param callerId university ID of the authenticated caller, for diagnostic context
+     * @param authorities authorities granted to the authenticated caller
+     * @throws AccessDeniedException if the caller does not hold either staff role
+     */
+    private void requireStaff(
+            String callerId,
+            Collection<? extends GrantedAuthority> authorities
+    ) {
+        // Reject a missing or malformed authenticated identity before checking its role.
+        normalizeAndValidateUniversityId(callerId);
+
+        // Require one of the two staff authorities for directory and deletion operations.
+        if (!isStaff(authorities)) {
+            throw new AccessDeniedException("Access denied");
+        }
+    }
+
+    /**
+     * Checks whether the supplied authorities include a staff role.
+     *
+     * @param authorities roles granted to the authenticated caller
+     * @return {@code true} for administrators or librarians, otherwise {@code false}
+     */
+    private boolean isStaff(Collection<? extends GrantedAuthority> authorities) {
+        // Treat a missing authority collection as no privileges.
+        if (authorities == null) {
+            return false;
+        }
+
+        // Compare exact Spring Security authority names rather than role substrings.
+        return authorities.stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(authority -> "ROLE_ADMINISTRATOR".equals(authority)
+                        || "ROLE_LIBRARIAN".equals(authority));
+    }
 
     /**
      * Enforces the relationship between role, course, and IT major.

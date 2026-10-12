@@ -26,6 +26,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -33,6 +34,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -54,6 +56,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc(addFilters = false)
 @Import({GlobalExceptionHandler.class, UserApiMvcTest.MockBeans.class})
 @ContextConfiguration(classes = LibraryApplication.class)
+@WithMockUser(username = USER_ID, roles = "STUDENT")
 class UserApiMvcTest {
 
     private static final String USER_ID = "2025-4321";
@@ -135,7 +138,7 @@ class UserApiMvcTest {
 
     @Test
     void listUsers_returnsPageAndUsesDocumentedDefaultPagination() throws Exception {
-        when(service.getAllUsers(any(Pageable.class))).thenReturn(
+        when(service.getAllUsers(any(Pageable.class), anyString(), anyCollection())).thenReturn(
                 new PageImpl<>(List.of(user()), PageRequest.of(0, 12), 1));
 
         mockMvc.perform(get("/app/users"))
@@ -146,7 +149,7 @@ class UserApiMvcTest {
                 .andExpect(jsonPath("$.totalElements").value(1));
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(service).getAllUsers(pageable.capture());
+        verify(service).getAllUsers(pageable.capture(), eq(USER_ID), anyCollection());
         assertEquals(0, pageable.getValue().getPageNumber());
         assertEquals(12, pageable.getValue().getPageSize());
         assertEquals("universityId", pageable.getValue().getSort().iterator().next().getProperty());
@@ -154,7 +157,7 @@ class UserApiMvcTest {
 
     @Test
     void listUsers_bindsPageSizeAndSort() throws Exception {
-        when(service.getAllUsers(any(Pageable.class))).thenReturn(
+        when(service.getAllUsers(any(Pageable.class), anyString(), anyCollection())).thenReturn(
                 new PageImpl<>(List.of(user()), PageRequest.of(1, 2), 3));
 
         mockMvc.perform(get("/app/users")
@@ -167,7 +170,7 @@ class UserApiMvcTest {
                 .andExpect(jsonPath("$.totalElements").value(3));
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(service).getAllUsers(pageable.capture());
+        verify(service).getAllUsers(pageable.capture(), eq(USER_ID), anyCollection());
         assertEquals("lastName", pageable.getValue().getSort().iterator().next().getProperty());
         assertEquals(org.springframework.data.domain.Sort.Direction.DESC,
                 pageable.getValue().getSort().iterator().next().getDirection());
@@ -175,7 +178,7 @@ class UserApiMvcTest {
 
     @Test
     void getUser_returnsDirectPublicProfileDto() throws Exception {
-        when(service.getUserByUniversityId(USER_ID)).thenReturn(user());
+        when(service.getUserByUniversityId(eq(USER_ID), eq(USER_ID), anyCollection())).thenReturn(user());
 
         mockMvc.perform(get("/app/users/{universityId}", USER_ID))
                 .andExpect(status().isOk())
@@ -187,7 +190,7 @@ class UserApiMvcTest {
 
     @Test
     void getUser_whenMissingReturnsNotFoundContract() throws Exception {
-        when(service.getUserByUniversityId(USER_ID))
+        when(service.getUserByUniversityId(eq(USER_ID), eq(USER_ID), anyCollection()))
                 .thenThrow(new UserNotFoundException("Couldn't find user of ID: " + USER_ID));
 
         mockMvc.perform(get("/app/users/{universityId}", USER_ID))
@@ -199,7 +202,7 @@ class UserApiMvcTest {
 
     @Test
     void patchUser_returnsSuccessEnvelopeAndForwardsPartialBody() throws Exception {
-        when(service.updateUser(eq(USER_ID), any(UserCreateUpdateDTO.class))).thenReturn(user());
+        when(service.updateUser(eq(USER_ID), eq(USER_ID), any(UserCreateUpdateDTO.class), anyCollection())).thenReturn(user());
 
         mockMvc.perform(patch("/app/users/{universityId}", USER_ID)
                         .contentType(APPLICATION_JSON)
@@ -210,14 +213,14 @@ class UserApiMvcTest {
                 .andExpect(jsonPath("$.data.universityId").value(USER_ID));
 
         ArgumentCaptor<UserCreateUpdateDTO> request = ArgumentCaptor.forClass(UserCreateUpdateDTO.class);
-        verify(service).updateUser(eq(USER_ID), request.capture());
+        verify(service).updateUser(eq(USER_ID), eq(USER_ID), request.capture(), anyCollection());
         assertEquals("Alexandra", request.getValue().getFirstName());
         assertEquals("alexandra@example.edu", request.getValue().getEmail());
     }
 
     @Test
     void replaceUser_returnsSuccessEnvelopeAndRequiresCompleteProfileFields() throws Exception {
-        when(service.replaceUserProfile(eq(USER_ID), any(UserReplaceRequest.class))).thenReturn(user());
+        when(service.replaceUserProfile(eq(USER_ID), eq(USER_ID), any(UserReplaceRequest.class), anyCollection())).thenReturn(user());
 
         mockMvc.perform(put("/app/users/{universityId}", USER_ID)
                         .contentType(APPLICATION_JSON)
@@ -227,7 +230,7 @@ class UserApiMvcTest {
                 .andExpect(jsonPath("$.message").value("User profile replaced successfully"))
                 .andExpect(jsonPath("$.data.universityId").value(USER_ID));
 
-        verify(service).replaceUserProfile(eq(USER_ID), any(UserReplaceRequest.class));
+        verify(service).replaceUserProfile(eq(USER_ID), eq(USER_ID), any(UserReplaceRequest.class), anyCollection());
     }
 
     @Test
@@ -241,7 +244,7 @@ class UserApiMvcTest {
                 .andExpect(jsonPath("$.fieldErrors.lastName").exists())
                 .andExpect(jsonPath("$.fieldErrors.email").exists());
 
-        verify(service, never()).replaceUserProfile(any(), any());
+        verify(service, never()).replaceUserProfile(any(), any(), any(), anyCollection());
     }
 
     @Test
@@ -255,7 +258,7 @@ class UserApiMvcTest {
                 .andExpect(jsonPath("$.data").doesNotExist());
 
         ArgumentCaptor<ChangePasswordDTO> request = ArgumentCaptor.forClass(ChangePasswordDTO.class);
-        verify(service).updatePassword(eq(USER_ID), request.capture());
+        verify(service).updatePassword(eq(USER_ID), eq(USER_ID), request.capture(), anyCollection());
         assertEquals("OldPass1!", request.getValue().getCurrentPassword());
         assertEquals("NewPass2!", request.getValue().getNewPassword());
     }
@@ -270,7 +273,7 @@ class UserApiMvcTest {
                 .andExpect(jsonPath("$.fieldErrors.currentPassword").exists())
                 .andExpect(jsonPath("$.fieldErrors.newPassword").exists());
 
-        verify(service, never()).updatePassword(any(), any());
+        verify(service, never()).updatePassword(any(), any(), any(), anyCollection());
     }
 
     @Test
@@ -281,7 +284,7 @@ class UserApiMvcTest {
                 .andExpect(jsonPath("$.message").value("User deleted successfully"))
                 .andExpect(jsonPath("$.data").doesNotExist());
 
-        verify(service).deleteUserByUniversityId(USER_ID);
+        verify(service).deleteUserByUniversityId(eq(USER_ID), eq(USER_ID), anyCollection());
     }
 
     private String createRequest() {

@@ -55,7 +55,7 @@ public class UserCreateRequestDTO {
     @Schema(example = "alex.rivera@example.edu")
     private String email;
 
-    @Schema(description = "Ignored by account-creation endpoints; signup creates a student and administrator faculty creation creates a faculty account.")
+    @Schema(description = "Ignored by account-creation endpoints; signup creates a student and librarian faculty creation creates a faculty account.")
     private UserRole userRole;
 
     @Schema(description = "Required for students. Allowed values are IT, EMC, and IS.")

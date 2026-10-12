@@ -7,26 +7,26 @@ This is the working implementation roadmap. It is not the public project overvie
 | Area | Implemented now |
 | --- | --- |
 | Books | CRUD, search, pagination, sorting, filtering, statistics, DTO validation |
-| Accounts | Student signup, administrator-created faculty, profiles, password change, listing, lookup, deletion |
-| Roles in Java and the current schema | STUDENT, FACULTY, ADMINISTRATOR |
+| Accounts | Student signup, librarian-created faculty, student directory, owner/staff profile and password management, restricted deletion |
+| Roles in Java and the current schema | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN (Flyway V3) |
 | Authentication | HTTP Basic using university ID, UserDetailsService, and BCrypt |
-| Authorization | Book reads for all current roles; book writes for FACULTY and ADMINISTRATOR; faculty creation and account deletion for ADMINISTRATOR; other protected routes require authentication |
+| Authorization | Book reads for all roles; ADMINISTRATOR creates books; ADMINISTRATOR/LIBRARIAN update or delete books; librarian faculty creation; service-level account ownership and target-role checks |
 | Loans | Not implemented |
 | JWT login and Bearer validation | Not implemented |
-| LIBRARIAN role and target owner/directory rules | Specified, not implemented |
+| LIBRARIAN role and target owner/directory rules | Implemented with HTTP Basic |
 
-Current account routes do not yet enforce the target owner and administrator/librarian account-management boundaries or student-directory restrictions. Keep this distinction visible in documentation and tests until implementation changes.
+Account profile and password operations enforce owner access, with administrator/librarian access to student and faculty accounts. Staff cannot manage another administrator or librarian account. Profile reads and the paginated directory expose students to staff only.
 
 ## Recommended implementation order
 
-### 1. Implement role and account boundaries
+### 1. Role and account boundaries (implemented)
 
-- [ ] Add LIBRARIAN to the Java role enum and database constraint, using the migration rule below.
-- [ ] Keep public signup pinned to STUDENT.
-- [ ] Restrict faculty account creation and student/faculty deletion to LIBRARIAN.
-- [ ] Restrict the student directory and student profile access to ADMINISTRATOR and LIBRARIAN.
-- [ ] Restrict profile and password changes to the account owner.
-- [ ] Implement the target book permissions: ADMINISTRATOR can add, update, and delete books; LIBRARIAN can update and delete books but cannot add them.
+- [x] Add LIBRARIAN to the Java role enum and database constraint using Flyway V3.
+- [x] Keep public signup pinned to STUDENT.
+- [x] Restrict faculty creation to LIBRARIAN and student/faculty deletion to ADMINISTRATOR and LIBRARIAN.
+- [x] Restrict the student directory and cross-account student profile reads to ADMINISTRATOR and LIBRARIAN.
+- [x] Restrict profile and password changes to the owner, except staff may manage student/faculty accounts.
+- [x] Implement book permissions: ADMINISTRATOR can add, update, and delete books; LIBRARIAN can update and delete books.
 - [ ] Add authorization tests for allowed and denied requests, including cross-account profile/password attempts.
 
 ### 2. Add loans

@@ -31,9 +31,10 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 
 - The project is a single-module Java 25 / Spring Boot 4.1 REST API using Spring MVC, Spring Data JPA, Hibernate, PostgreSQL, Flyway, and Maven.
 - The live authentication mechanism is HTTP Basic, backed by LibroUserDetailsService and BCrypt. Signup at POST /app/users/signup is public. JWT login and Bearer validation are not implemented.
-- The live UserRole values are STUDENT, FACULTY, and ADMINISTRATOR. LIBRARIAN is part of the target spec only.
-- Current book reads allow all three live roles. Book create/update/delete allow FACULTY and ADMINISTRATOR. Faculty creation and user deletion currently require ADMINISTRATOR.
-- Other user routes require authentication, but the current implementation does not enforce the target owner-only and student-directory boundaries. Do not describe those target restrictions as live behavior.
+- The live UserRole values are STUDENT, FACULTY, ADMINISTRATOR, and LIBRARIAN.
+- Book reads allow all four roles. Book creation requires ADMINISTRATOR; update and deletion allow ADMINISTRATOR and LIBRARIAN.
+- Faculty creation requires LIBRARIAN. Administrators and librarians can list and read student profiles, manage student/faculty profiles and passwords, and delete student/faculty accounts. Owners can read and manage their own profile and password; staff cannot manage another administrator or librarian account.
+- User account ownership and target-role rules are enforced in UserService as well as by route authorization. HTTP Basic and CSRF remain enabled.
 - Loans are not implemented. Each Book row represents one physical copy.
 - Flyway owns schema changes; Hibernate uses ddl-auto=validate.
 
@@ -52,7 +53,7 @@ These are a snapshot, not a substitute for checking the code when a task changes
 ## Don't
 
 - Don't implement a future item merely because it appears in the JWT/loan specification; follow the user's requested scope.
-- Don't claim JWT, Bearer authentication, librarian permissions, or loan routes are live until code and tests enforce them.
+- Don't claim JWT, Bearer authentication, or loan routes are live until code and tests enforce them.
 - Don't let public signup choose a privileged role.
 - Don't add repository access or domain workflows to controllers.
 - Don't pass arbitrary client sort properties through to persistence.

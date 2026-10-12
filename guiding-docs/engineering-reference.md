@@ -20,7 +20,7 @@ The application is a single-module Spring Boot REST API for managing a library's
 | Database | PostgreSQL 18                                                           |
 | Schema management | Flyway SQL migrations                                                   |
 | Validation | Jakarta Bean Validation                                                 |
-| Security | Spring Security HTTP Basic; role-based access for STUDENT, FACULTY, and ADMINISTRATOR; CSRF enabled |
+| Security | Spring Security HTTP Basic; role-based access for STUDENT, FACULTY, ADMINISTRATOR, and LIBRARIAN; CSRF enabled |
 | Boilerplate reduction | Lombok 1.18.46                                                          |
 | Testing | JUnit 5, Mockito, Jakarta Validator                                     |
 | Coverage | JaCoCo report during Maven `verify`                                     |
@@ -222,7 +222,7 @@ The count-and-total-value aggregate uses the typed `LibraryAggregate` constructo
 
 The user feature currently contains the entity, enums, create/response DTOs, mapper, repository, BCrypt `PasswordEncoder` bean, and `UserService`. `UserService` normalizes university IDs and email addresses, rejects duplicates, validates password complexity, hashes passwords before persistence, and enforces the role/course/major rules. Passwords must be at least eight characters and include uppercase and lowercase letters, a number, and a symbol. The enum and V2 database checks define the allowed academic values; the service enforces their cross-field relationships.
 
-`UserAPI` exposes public student signup at `POST /app/users/signup`, administrator-only faculty creation at `POST /app/users/faculty`, plus paginated listing, lookup, profile PATCH/PUT, password change, and administrator-only student/faculty deletion. Signup ignores the submitted role and creates a student; faculty creation fixes the role to FACULTY in the service. `SecurityConfig` permits book reads to all roles and book writes to FACULTY and ADMINISTRATOR; account creation/deletion rules are administrator-only. V2 defines all roles and cross-field constraints and seeds the bootstrap administrator from a supplied BCrypt hash. `LibroUserDetailsService` loads the stored hash and role for HTTP Basic and maps the role into Spring Security authorities.
+`UserAPI` exposes public student signup at `POST /app/users/signup`, librarian-only faculty creation at `POST /app/users/faculty`, a staff-only student directory, owner/staff-scoped profile and password operations, and staff deletion of student/faculty accounts. Signup ignores the submitted role and creates a student; faculty creation fixes the role to FACULTY in the service. `SecurityConfig` allows book reads to all roles, book creation to ADMINISTRATOR, and book updates/deletion to ADMINISTRATOR and LIBRARIAN. `UserService` checks ownership and target role for account routes. V2 defines the original users table; V3 adds LIBRARIAN and extends the role and academic-field constraints. V2 seeds the bootstrap administrator from a supplied BCrypt hash. `LibroUserDetailsService` loads the stored hash and role for HTTP Basic and maps the role into Spring Security authorities.
 
 ### Entity and database model
 
@@ -287,11 +287,11 @@ Handler order matters conceptually. `DataIntegrityViolationException` is a subty
 
 ### Security
 
-`SecurityConfig` permits `POST /app/users/signup` without authentication. Book reads require any of STUDENT, FACULTY, or ADMINISTRATOR; book writes require FACULTY or ADMINISTRATOR. `POST /app/users/faculty` and `DELETE /app/users/{universityId}` require ADMINISTRATOR. Other routes require authentication. CSRF protection remains enabled. HTTP Basic is a development-stage authentication setup; use HTTPS outside local development.
+`SecurityConfig` permits `POST /app/users/signup` without authentication. Book reads require any live role; book creation requires ADMINISTRATOR; book updates and deletion allow ADMINISTRATOR or LIBRARIAN. `POST /app/users/faculty` requires LIBRARIAN. The student directory requires ADMINISTRATOR or LIBRARIAN, while profile and password routes permit all roles through the filter chain and rely on `UserService` to enforce owner access or staff access to student/faculty accounts. Staff may delete student/faculty accounts only. CSRF protection remains enabled. HTTP Basic is a development-stage authentication setup; use HTTPS outside local development.
 
 The current mechanism is local HTTP Basic authentication backed by `LibroUserDetailsService` and BCrypt. Public signup always creates STUDENT. Faculty are created by administrators; administrators are seeded by Flyway V2 from the `LIBRO_ADMIN_PASSWORD_HASH` environment variable, which must contain a BCrypt hash. The seeded login is `0000-0000`. Do not place a raw password in the migration or commit the hash. Before untrusted deployment, decide whether local credentials or institutional SSO are appropriate, review CSRF behavior, and verify credential handling over HTTPS.
 
-The current filter chain does not restrict user listing, lookup, profile updates, or password changes to the account owner or a specific role. The target boundaries are documented in `security-roles-and-jwt-guide.md`; they remain unimplemented until code and security tests enforce them.
+`UserService` checks the authenticated university ID against the target account for profile reads, updates, and password operations. Owners may manage their own account. Administrators and librarians may read student profiles and manage student/faculty profiles and passwords, but cannot manage another administrator or librarian. The directory returns students only, and staff deletion is limited to student/faculty accounts.
 
 Before deploying user routes to an environment with untrusted clients, select the authentication model and apply its endpoint authorization rules. Do not assume `UserDetailsService` is appropriate if the institution's SSO is the chosen identity provider. Loan operations must identify the borrower from the authenticated principal rather than a client-supplied user ID.
 
@@ -322,14 +322,14 @@ User routes:
 
 | Method | Path | Purpose | Response shape |
 |---|---|---|---|
-| GET | `/app/users` | Paginated user list (default size 12) | Spring `Page<UserResponseDTO>` |
-| GET | `/app/users/{universityId}` | Retrieve one user | `UserResponseDTO` |
+| GET | `/app/users` | Paginated student directory (administrator/librarian only; default size 12) | Spring `Page<UserResponseDTO>` |
+| GET | `/app/users/{universityId}` | Retrieve own profile or a student profile (administrator/librarian) | `UserResponseDTO` |
 | POST | `/app/users/signup` | Create a user account (public) | `ApiResponse<UserResponseDTO>`, HTTP 201 |
-| POST | `/app/users/faculty` | Create a faculty account (administrator only) | `ApiResponse<UserResponseDTO>`, HTTP 201 |
-| PATCH | `/app/users/{universityId}` | Partially update profile fields | `ApiResponse<UserResponseDTO>` |
-| PUT | `/app/users/{universityId}` | Replace profile fields | `ApiResponse<UserResponseDTO>` |
-| PUT | `/app/users/{universityId}/password` | Change password after current-password verification | `ApiResponse<Void>` |
-| DELETE | `/app/users/{universityId}` | Delete a student or faculty account (administrator only) | `ApiResponse<Void>` |
+| POST | `/app/users/faculty` | Create a faculty account (librarian only) | `ApiResponse<UserResponseDTO>`, HTTP 201 |
+| PATCH | `/app/users/{universityId}` | Update own or student/faculty profile (staff may manage student/faculty) | `ApiResponse<UserResponseDTO>` |
+| PUT | `/app/users/{universityId}` | Replace own or student/faculty profile (staff may manage student/faculty) | `ApiResponse<UserResponseDTO>` |
+| PUT | `/app/users/{universityId}/password` | Change own password or staff-reset a student/faculty password | `ApiResponse<Void>` |
+| DELETE | `/app/users/{universityId}` | Delete a student/faculty account (administrator/librarian only) | `ApiResponse<Void>` |
 
 When adding an endpoint, update this file and `README.md`, document the operation and public DTO schemas following [API Documentation Guideline](../docs/api-documentation-guideline.md), provide request/response examples where useful, and add tests at the appropriate layer.
 
@@ -607,12 +607,12 @@ When a breaking change is intended, document migration guidance and update all e
 
 ## Known Limitations and Risks
 
-- HTTP Basic authentication protects routes except public signup. Current role checks cover book access, faculty creation, and user deletion; other user routes require authentication without owner scoping.
+- HTTP Basic authentication protects routes except public signup. User profiles and passwords are owner-scoped with staff management for student/faculty accounts; the student directory and cross-account profile reads are staff-only.
 - CSRF protection remains enabled.
 - H2 is declared but has no dedicated application profile or integration-test setup.
 - The Docker image requires a prebuilt JAR and does not build source itself.
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
-- Signup always creates a student; faculty creation and student/faculty deletion require an administrator.
+- Signup always creates a student; librarians create faculty; administrators and librarians delete student/faculty accounts.
 - There is no loan feature. User routes have MVC contract, PostgreSQL integration, and HTTP Basic security-flow coverage; the security MVC tests mock the user repository.
 - Docker-backed JPA/migration checks are implemented but require a working Docker daemon to verify. A fresh-to-existing migration upgrade path still needs tests.
 - Success response shapes are inconsistent across endpoints.

@@ -148,10 +148,13 @@ Most account routes currently require authentication without checking that the c
 | Current rule | Allowed access |
 | --- | --- |
 | Public signup | POST /app/users/signup |
-| Read books | STUDENT, FACULTY, ADMINISTRATOR |
-| Create, update, or delete books | FACULTY, ADMINISTRATOR |
-| Create faculty or delete a user account | ADMINISTRATOR |
-| Other protected routes | Any authenticated account |
+| Read books | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN |
+| Create books | ADMINISTRATOR |
+| Update or delete books | ADMINISTRATOR, LIBRARIAN |
+| Create faculty accounts | LIBRARIAN |
+| List/read student profiles | ADMINISTRATOR, LIBRARIAN |
+| Update student/faculty profiles and passwords | Owner, ADMINISTRATOR, LIBRARIAN |
+| Delete student/faculty accounts | ADMINISTRATOR, LIBRARIAN |
 
 ### Layered Design
 
@@ -503,20 +506,20 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 | `GET` | `/app/books/stats/average-price` | Returns the average price of all books | `GET /app/books/stats/average-price` | `{"success":true,"message":"Average Price of Collection: ","data":20.50,"timestamp":172...}` |
 | `GET` | `/app/books/stats/count` | Returns the total number of books | `GET /app/books/stats/count` | `{"success":true,"message":"Book Collection Count","data":6,"timestamp":172...}` |
 
-| `GET` | `/app/users` | Lists users with pagination | `GET /app/users?page=0&size=12` | Spring `Page<UserResponseDTO>` |
-| `GET` | `/app/users/{universityId}` | Gets one user by university ID | `GET /app/users/2025-4321` | `UserResponseDTO` |
+| `GET` | `/app/users` | Lists students for administrators/librarians | `GET /app/users?page=0&size=12` | Spring `Page<UserResponseDTO>` |
+| `GET` | `/app/users/{universityId}` | Gets own profile or a student profile (staff) | `GET /app/users/2025-4321` | `UserResponseDTO` |
 | `POST` | `/app/users/signup` | Creates a user account | `POST /app/users/signup` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
-| `POST` | `/app/users/faculty` | Administrator creates a faculty account | `POST /app/users/faculty` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
+| `POST` | `/app/users/faculty` | Librarian creates a faculty account | `POST /app/users/faculty` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 | `PATCH` | `/app/users/{universityId}` | Updates supplied profile fields | `PATCH /app/users/2025-4321` with `UserCreateUpdateDTO` | `ApiResponse<UserResponseDTO>` |
 | `PUT` | `/app/users/{universityId}` | Replaces profile fields | `PUT /app/users/2025-4321` with `UserReplaceRequest` | `ApiResponse<UserResponseDTO>` |
-| `PUT` | `/app/users/{universityId}/password` | Changes password after current-password verification | `PUT /app/users/2025-4321/password` with `ChangePasswordDTO` | `ApiResponse<Void>` |
-| `DELETE` | `/app/users/{universityId}` | Administrator deletes a student or faculty account | `DELETE /app/users/2025-4321` | `ApiResponse<Void>` |
+| `PUT` | `/app/users/{universityId}/password` | Changes own password or resets student/faculty password as staff | `PUT /app/users/2025-4321/password` with `ChangePasswordDTO` | `ApiResponse<Void>` |
+| `DELETE` | `/app/users/{universityId}` | Administrator or librarian deletes a student or faculty account | `DELETE /app/users/2025-4321` | `ApiResponse<Void>` |
 
 `/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minPrice` and `maxPrice` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `price`; invalid ranges, decimals, or sort fields return HTTP 400. Existing list routes retain their response shapes.
 
 ### User API
 
-User routes are available under `/app/users` for signup, paginated listing, lookup by university ID, profile PATCH/PUT, password changes, and deletion. Signup is public and always creates a student, regardless of a supplied role value. Only administrators can create faculty accounts or delete student/faculty accounts. Students can read and search books; faculty and administrators can also add, update, and delete books. HTTP Basic authentication uses a university ID and password. Flyway V2 seeds one bootstrap administrator as `0000-0000`; set `LIBRO_ADMIN_PASSWORD_HASH` to a BCrypt hash before startup and protect that configuration. The seeded account uses `admin@library.local`. Loan routes are not implemented.
+User routes are available under `/app/users` for signup, a staff-only student directory, lookup by university ID, profile PATCH/PUT, password changes, and restricted deletion. Signup is public and always creates a student, regardless of a supplied role value. Librarians create faculty accounts. Owners manage their own profiles and passwords; administrators and librarians may manage student/faculty accounts, but not another administrator or librarian account. Staff can read student profiles only. Administrators create books; administrators and librarians may update or delete them. HTTP Basic authentication uses a university ID and password. Flyway V2 seeds one bootstrap administrator as `0000-0000`; V3 adds the librarian role. Set `LIBRO_ADMIN_PASSWORD_HASH` to a BCrypt hash before startup and protect that configuration. The seeded account uses `admin@library.local`. Loan routes are not implemented.
 
 ## Setup & Installation
 

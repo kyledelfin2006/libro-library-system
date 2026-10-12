@@ -20,12 +20,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
 import java.util.Optional;
+import java.util.Collection;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -96,7 +100,7 @@ class UserServiceTest {
                 " NEW@Example.COM "
         );
 
-        UserResponseDTO result = userService.updateUser(" 2025-4321 ", request);
+        UserResponseDTO result = updateUser(" 2025-4321 ", request);
 
         assertEquals("2025-4321", result.getUniversityId());
         assertEquals("New First", result.getFirstName());
@@ -111,12 +115,12 @@ class UserServiceTest {
     @Test
     void getAllUsers_withAllowedSortField_shouldReturnPage() {
         Pageable pageable = PageRequest.of(0, 12, Sort.by("firstName"));
-        when(repository.findAll(pageable)).thenReturn(Page.empty());
+        when(repository.findByUserRole(UserRole.STUDENT, pageable)).thenReturn(Page.empty());
 
-        Page<UserResponseDTO> result = userService.getAllUsers(pageable);
+        Page<UserResponseDTO> result = getAllUsers(pageable);
 
         assertTrue(result.isEmpty());
-        verify(repository).findAll(pageable);
+        verify(repository).findByUserRole(UserRole.STUDENT, pageable);
     }
 
     /** Verifies unsupported persistence properties are rejected before querying. */
@@ -124,7 +128,7 @@ class UserServiceTest {
     void getAllUsers_withUnsupportedSortField_shouldReject() {
         Pageable pageable = PageRequest.of(0, 12, Sort.by("password"));
 
-        assertThrows(IllegalArgumentException.class, () -> userService.getAllUsers(pageable));
+        assertThrows(IllegalArgumentException.class, () -> getAllUsers(pageable));
 
         verifyNoInteractions(repository);
     }
@@ -132,7 +136,7 @@ class UserServiceTest {
     /** Verifies omitted fields remain unchanged during a partial update. */
     @Test
     void updateUser_shouldPreserveOmittedFields() {
-        UserResponseDTO result = userService.updateUser(
+        UserResponseDTO result = updateUser(
                 "2025-4321",
                 new UserCreateUpdateDTO("New First", null, null, null)
         );
@@ -149,7 +153,7 @@ class UserServiceTest {
     void updateUser_whenRequestIsNull_shouldReject() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> userService.updateUser("2025-4321", null)
+                () -> updateUser("2025-4321", null)
         );
 
         verifyNoInteractions(repository);
@@ -162,7 +166,7 @@ class UserServiceTest {
 
         assertThrows(
                 ConstraintViolationException.class,
-                () -> userService.updateUser(
+                () -> updateUser(
                         "2025-4321",
                         new UserCreateUpdateDTO(tooLongName, null, null, null)
                 )
@@ -176,7 +180,7 @@ class UserServiceTest {
     void updateUser_whenNameIsBlank_shouldReject() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> userService.updateUser(
+                () -> updateUser(
                         "2025-4321",
                         new UserCreateUpdateDTO("   ", null, null, null)
                 )
@@ -186,7 +190,7 @@ class UserServiceTest {
     /** Verifies retaining the current email does not trigger a duplicate check. */
     @Test
     void updateUser_whenEmailIsUnchanged_shouldAllowIt() {
-        UserResponseDTO result = userService.updateUser(
+        UserResponseDTO result = updateUser(
                 "2025-4321",
                 new UserCreateUpdateDTO(null, null, null, " OLD@EXAMPLE.COM ")
         );
@@ -203,7 +207,7 @@ class UserServiceTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> userService.updateUser(
+                () -> updateUser(
                         "2025-4321",
                         new UserCreateUpdateDTO(null, null, null, "other@example.com")
                 )
@@ -219,7 +223,7 @@ class UserServiceTest {
         when(passwordEncoder.matches("Current1!", "old-hash")).thenReturn(true);
         when(passwordEncoder.encode("NewPassword2@")).thenReturn("new-hash");
 
-        userService.updatePassword(
+        updatePassword(
                 "2025-4321",
                 new ChangePasswordDTO("Current1!", "NewPassword2@")
         );
@@ -238,7 +242,7 @@ class UserServiceTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> userService.updatePassword(
+                () -> updatePassword(
                         "2025-4321",
                         new ChangePasswordDTO("Current1!", "NewPassword2@")
                 )
@@ -262,7 +266,7 @@ class UserServiceTest {
         for (String invalidPassword : invalidPasswords) {
             assertThrows(
                     ConstraintViolationException.class,
-                    () -> userService.updatePassword(
+                    () -> updatePassword(
                             "2025-4321",
                             new ChangePasswordDTO("Current1!", invalidPassword)
                     ),
@@ -282,7 +286,7 @@ class UserServiceTest {
 
         assertThrows(
                 UserNotFoundException.class,
-                () -> userService.updatePassword(
+                () -> updatePassword(
                         "2025-9999",
                         new ChangePasswordDTO("Current1!", "NewPassword2@")
                 )
@@ -297,7 +301,7 @@ class UserServiceTest {
     void updatePassword_whenRequestIsNull_shouldReject() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> userService.updatePassword("2025-4321", null)
+                () -> updatePassword("2025-4321", null)
         );
 
         verifyNoInteractions(repository);
@@ -325,6 +329,26 @@ class UserServiceTest {
 
         verifyNoInteractions(repository);
         verifyNoInteractions(passwordEncoder);
+    }
+
+    /** Adapts profile-update tests to the authenticated-owner service contract. */
+    private UserResponseDTO updateUser(String targetId, UserCreateUpdateDTO request) {
+        return userService.updateUser(targetId, targetId, request, authorities("STUDENT"));
+    }
+
+    /** Adapts password tests to the authenticated-owner service contract. */
+    private void updatePassword(String targetId, ChangePasswordDTO request) {
+        userService.updatePassword(targetId, targetId, request, authorities("STUDENT"));
+    }
+
+    /** Exercises the student directory as an authorized administrator. */
+    private Page<UserResponseDTO> getAllUsers(Pageable pageable) {
+        return userService.getAllUsers(pageable, "2025-4321", authorities("ADMINISTRATOR"));
+    }
+
+    /** Builds one Spring Security role authority for a service call. */
+    private Collection<? extends GrantedAuthority> authorities(String role) {
+        return List.of(new SimpleGrantedAuthority("ROLE_" + role));
     }
 
     /** Verifies overly long passwords are rejected before BCrypt processing. */

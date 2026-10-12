@@ -20,7 +20,12 @@ import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Collection;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -56,10 +61,10 @@ class UserPersistenceIT {
             assertFalse(stored.getPasswordHash().equals("CurrentPass1!"));
             assertTrue(passwordEncoder.matches("CurrentPass1!", stored.getPasswordHash()));
 
-            userService.updateUser("2025-4321", new UserCreateUpdateDTO(
-                    " Alexandra ", null, null, " New.Email@Example.edu "));
-            userService.updatePassword("2025-4321", new ChangePasswordDTO(
-                    "CurrentPass1!", "NewPassword2@"));
+            userService.updateUser("2025-4321", "2025-4321", new UserCreateUpdateDTO(
+                    " Alexandra ", null, null, " New.Email@Example.edu "), studentAuthority());
+            userService.updatePassword("2025-4321", "2025-4321", new ChangePasswordDTO(
+                    "CurrentPass1!", "NewPassword2@"), studentAuthority());
 
             User updated = userRepository.findByUniversityId("2025-4321").orElseThrow();
             assertEquals("Alexandra", updated.getFirstName());
@@ -70,6 +75,11 @@ class UserPersistenceIT {
         } finally {
             userRepository.deleteAllInBatch();
         }
+    }
+
+    /** Represents the owner role supplied by the authenticated HTTP Basic principal. */
+    private Collection<? extends GrantedAuthority> studentAuthority() {
+        return List.of(new SimpleGrantedAuthority("ROLE_STUDENT"));
     }
 
     @Test
