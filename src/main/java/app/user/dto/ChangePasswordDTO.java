@@ -13,7 +13,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "Password-change request. Both values must be 8–72 characters and include uppercase and lowercase letters, a number, and a symbol.")
+@Schema(description = "Password-change request. The new password must be 8–72 characters and include uppercase and lowercase letters, a number, and a symbol. The current password is required for self-service changes and may be omitted for authorized staff resets.")
 public class ChangePasswordDTO {
 
     @Pattern(
