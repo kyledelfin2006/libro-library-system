@@ -24,9 +24,9 @@ public class LibroUserDetailsService implements UserDetailsService{
 
 
         return org.springframework.security.core.userdetails.User
-                .withUsername(user.getUniversityId())
-                .password(user.getPasswordHash())
-                .roles(user.getUserRole().name())
+                .withUsername(user.getUniversityId()) // Assigns user with uni ID
+                .password(user.getPasswordHash()) // Assigns PW with hashed version
+                .roles(user.getUserRole().name()) // Assigns Role with name
                 .build();
 
     }
