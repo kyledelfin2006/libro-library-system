@@ -26,7 +26,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -34,6 +36,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -56,10 +59,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc(addFilters = false)
 @Import({GlobalExceptionHandler.class, UserApiMvcTest.MockBeans.class})
 @ContextConfiguration(classes = LibraryApplication.class)
-@WithMockUser(username = USER_ID, roles = "STUDENT")
 class UserApiMvcTest {
 
     private static final String USER_ID = "2025-4321";
+    // Filters are disabled in this controller slice, so attach the principal to
+    // the mock request explicitly for Authentication method parameters.
+    private static final Authentication CALLER = new UsernamePasswordAuthenticationToken(
+            USER_ID, "", List.of(new SimpleGrantedAuthority("ROLE_STUDENT")));
 
     @Autowired
     private MockMvc mockMvc;
@@ -137,11 +143,31 @@ class UserApiMvcTest {
     }
 
     @Test
+    void createAdministrator_returnsCreatedLibraryAssistantProfile() throws Exception {
+        UserResponseDTO assistant = new UserResponseDTO("2025-8888", "Library", "Assistant", null,
+                "assistant@example.edu", UserRole.ADMINISTRATOR, null, null);
+        when(service.createAdministrator(any(UserCreateRequestDTO.class), anyCollection())).thenReturn(assistant);
+
+        mockMvc.perform(post("/app/users/administrators")
+                        .principal(CALLER)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {"universityId":"2025-8888","password":"ValidPass1!",
+                                 "firstName":"Library","lastName":"Assistant",
+                                 "email":"assistant@example.edu","userRole":"LIBRARIAN"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.userRole").value("ADMINISTRATOR"));
+
+        verify(service).createAdministrator(any(UserCreateRequestDTO.class), anyCollection());
+    }
+
+    @Test
     void listUsers_returnsPageAndUsesDocumentedDefaultPagination() throws Exception {
         when(service.getAllUsers(any(Pageable.class), anyString(), anyCollection())).thenReturn(
                 new PageImpl<>(List.of(user()), PageRequest.of(0, 12), 1));
 
-        mockMvc.perform(get("/app/users"))
+        mockMvc.perform(get("/app/users").principal(CALLER))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].universityId").value(USER_ID))
                 .andExpect(jsonPath("$.number").value(0))
@@ -161,6 +187,7 @@ class UserApiMvcTest {
                 new PageImpl<>(List.of(user()), PageRequest.of(1, 2), 3));
 
         mockMvc.perform(get("/app/users")
+                        .principal(CALLER)
                         .queryParam("page", "1")
                         .queryParam("size", "2")
                         .queryParam("sort", "lastName,desc"))
@@ -180,7 +207,7 @@ class UserApiMvcTest {
     void getUser_returnsDirectPublicProfileDto() throws Exception {
         when(service.getUserByUniversityId(eq(USER_ID), eq(USER_ID), anyCollection())).thenReturn(user());
 
-        mockMvc.perform(get("/app/users/{universityId}", USER_ID))
+        mockMvc.perform(get("/app/users/{universityId}", USER_ID).principal(CALLER))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.universityId").value(USER_ID))
                 .andExpect(jsonPath("$.firstName").value("Alex"))
@@ -193,7 +220,7 @@ class UserApiMvcTest {
         when(service.getUserByUniversityId(eq(USER_ID), eq(USER_ID), anyCollection()))
                 .thenThrow(new UserNotFoundException("Couldn't find user of ID: " + USER_ID));
 
-        mockMvc.perform(get("/app/users/{universityId}", USER_ID))
+        mockMvc.perform(get("/app/users/{universityId}", USER_ID).principal(CALLER))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("User not found"))
                 .andExpect(jsonPath("$.details").value("Couldn't find user of ID: " + USER_ID))
@@ -205,6 +232,7 @@ class UserApiMvcTest {
         when(service.updateUser(eq(USER_ID), eq(USER_ID), any(UserCreateUpdateDTO.class), anyCollection())).thenReturn(user());
 
         mockMvc.perform(patch("/app/users/{universityId}", USER_ID)
+                        .principal(CALLER)
                         .contentType(APPLICATION_JSON)
                         .content("{\"firstName\":\"Alexandra\",\"email\":\"alexandra@example.edu\"}"))
                 .andExpect(status().isOk())
@@ -223,6 +251,7 @@ class UserApiMvcTest {
         when(service.replaceUserProfile(eq(USER_ID), eq(USER_ID), any(UserReplaceRequest.class), anyCollection())).thenReturn(user());
 
         mockMvc.perform(put("/app/users/{universityId}", USER_ID)
+                        .principal(CALLER)
                         .contentType(APPLICATION_JSON)
                         .content("{\"firstName\":\"Alex\",\"lastName\":\"Rivera\",\"middleInitial\":\"M\",\"email\":\"alex@example.edu\"}"))
                 .andExpect(status().isOk())
@@ -250,6 +279,7 @@ class UserApiMvcTest {
     @Test
     void changePassword_returnsEmptySuccessEnvelopeAndForwardsRequest() throws Exception {
         mockMvc.perform(put("/app/users/{universityId}/password", USER_ID)
+                        .principal(CALLER)
                         .contentType(APPLICATION_JSON)
                         .content("{\"currentPassword\":\"OldPass1!\",\"newPassword\":\"NewPass2!\"}"))
                 .andExpect(status().isOk())
@@ -278,7 +308,7 @@ class UserApiMvcTest {
 
     @Test
     void deleteUser_returnsSuccessEnvelope() throws Exception {
-        mockMvc.perform(delete("/app/users/{universityId}", USER_ID))
+        mockMvc.perform(delete("/app/users/{universityId}", USER_ID).principal(CALLER))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("User deleted successfully"))

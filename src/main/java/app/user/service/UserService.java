@@ -20,12 +20,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -69,15 +69,37 @@ public class UserService {
     }
 
     /**
-     * Creates a faculty account; the controller's librarian-only route guard controls access.
+     * Creates a school faculty account. Only the librarian may create faculty accounts.
      *
      * @param request faculty account data; the requested role is ignored
+     * @param authorities roles granted to the authenticated caller
      * @return the created faculty profile without password data
+     * @throws AccessDeniedException if the caller is not a librarian
      */
-    @PreAuthorize("hasRole('LIBRARIAN')")
     @Transactional
-    public UserResponseDTO createFaculty(UserCreateRequestDTO request) {
+    public UserResponseDTO createFaculty(
+            UserCreateRequestDTO request,
+            Collection<? extends GrantedAuthority> authorities
+    ) {
+        requireLibrarian(authorities);
         return createUserWithRole(request, UserRole.FACULTY);
+    }
+
+    /**
+     * Creates a library assistant account. Only the librarian may create administrators.
+     *
+     * @param request library assistant account data; the requested role is ignored
+     * @param authorities roles granted to the authenticated caller
+     * @return the created public profile without password data
+     * @throws AccessDeniedException if the caller is not a librarian
+     */
+    @Transactional
+    public UserResponseDTO createAdministrator(
+            UserCreateRequestDTO request,
+            Collection<? extends GrantedAuthority> authorities
+    ) {
+        requireLibrarian(authorities);
+        return createUserWithRole(request, UserRole.ADMINISTRATOR);
     }
 
     /**
@@ -121,7 +143,7 @@ public class UserService {
         String encodedPasswordHash = passwordEncoder.encode(request.getPassword());
         User user = userMapper.toEntity(request, encodedPasswordHash);
         user.setUserRole(role);
-        if (role == UserRole.FACULTY) {
+        if (role != UserRole.STUDENT) {
             user.setUserCourse(null);
             user.setMajor(null);
         }
@@ -138,9 +160,9 @@ public class UserService {
     /**
      * Replaces the editable profile fields of the target account.
      *
-     * <p>The owner may replace their own profile. Administrators and librarians
-     * may also manage student and faculty profiles, but not another administrator
-     * or librarian profile.
+     * <p>The owner may replace their own profile. Administrators may manage student
+     * and faculty profiles; librarians may also manage administrator profiles.
+     * Neither role may manage another librarian profile.
      * This method changes only first name, last name, middle initial, and email.
      * The managed entity is persisted by Hibernate dirty checking at commit.</p>
      *
@@ -210,8 +232,9 @@ public class UserService {
     /**
      * Applies a validated partial profile update to the target account.
      *
-     * <p>The owner may update their own profile. Administrators and librarians
-     * may also manage student and faculty profiles. {@code null} fields remain unchanged;
+     * <p>The owner may update their own profile. Administrators may manage student
+     * and faculty profiles; librarians may also manage administrator profiles.
+     * {@code null} fields remain unchanged;
      * supplied values are normalized and validated before assignment.</p>
      *
      * @param callerId university ID of the authenticated caller
@@ -301,9 +324,9 @@ public class UserService {
     /**
      * Changes the password for the target account.
      *
-     * <p>Owners must provide their current password. Administrators and
-     * librarians may reset a student or faculty password without knowing the target user's
-     * current password. Passwords are validated and only the encoded new hash
+     * <p>Owners must provide their current password. Administrators and librarians
+     * may reset student/faculty passwords; librarians may also reset administrator
+     * passwords. Passwords are validated and only the encoded new hash
      * is stored; transaction commit persists the managed entity.</p>
      *
      * @param callerId university ID of the authenticated caller
@@ -327,6 +350,10 @@ public class UserService {
             throw new IllegalArgumentException("Password update request cannot be null");
         }
 
+        // Reject malformed passwords before querying the account. This also protects
+        // direct service callers that bypass controller DTO validation.
+        validateRequest(request);
+
         // Normalize caller and target IDs before checking ownership.
         String normalizedCallerId = normalizeAndValidateUniversityId(callerId);
         String normalizedTargetId = normalizeAndValidateUniversityId(targetId);
@@ -337,9 +364,6 @@ public class UserService {
 
         // Check authorization before processing the supplied password values.
         requireAccountAccess(normalizedCallerId, normalizedTargetId, user, authorities);
-
-        // Always validate the new password; the current password is optional for staff resets.
-        validateRequest(request);
 
         // Require a current password when the caller is changing their own password.
         if (normalizedCallerId.equals(normalizedTargetId)) {
@@ -441,12 +465,12 @@ public class UserService {
     }
 
     /**
-     * Returns a page of student profiles for an administrator or librarian.
+     * Returns the role-filtered account directory for an administrator or librarian.
      *
      * @param pageable page number, page size, and optional sorting rules
      * @param callerId university ID of the authenticated caller
      * @param authorities roles granted to the authenticated caller
-     * @return a page containing student response DTOs only
+     * @return the caller's permitted page of public account profiles
      * @throws AccessDeniedException if the caller is not an administrator or librarian
      * @throws IllegalArgumentException if pageable is null or contains an unsupported sort field
      */
@@ -468,8 +492,11 @@ public class UserService {
             throw new IllegalArgumentException("Unsupported user sort field. Allowed fields: universityId, firstName, lastName, middleInitial, email, userRole, userCourse, major");
         }
 
-        // Query only student records and map them into safe public response DTOs.
-        return userRepository.findByUserRole(UserRole.STUDENT, pageable)
+        // Library assistants see students/faculty; the librarian also sees assistants.
+        List<UserRole> visibleRoles = isLibrarian(authorities)
+                ? List.of(UserRole.STUDENT, UserRole.FACULTY, UserRole.ADMINISTRATOR)
+                : List.of(UserRole.STUDENT, UserRole.FACULTY);
+        return userRepository.findByUserRoleIn(visibleRoles, pageable)
                 .map(userMapper::toResponseDTO);
     }
 
@@ -497,21 +524,21 @@ public class UserService {
         User user = userRepository.findByUniversityId(normalizedTargetId)
                 .orElseThrow(() -> new UserNotFoundException(normalizedTargetId));
 
-        // A non-owner may read only student profiles, even when the caller is staff.
-        requireProfileReadAccess(normalizedCallerId, normalizedTargetId, user, authorities);
+        // Check the caller's role and the target account's role before returning the profile.
+        requireAccountAccess(normalizedCallerId, normalizedTargetId, user, authorities);
 
         // Keep the persistence entity inside the service boundary.
         return userMapper.toResponseDTO(user);
     }
 
     /**
-     * Deletes a student or faculty account for an administrator or librarian.
+     * Deletes the caller's student/faculty account or another account permitted by role.
      *
      * @param callerId university ID of the authenticated caller
      * @param targetId university ID identifying the account to delete
      * @param authorities roles granted to the authenticated caller
      * @throws UserNotFoundException if no matching user exists
-     * @throws AccessDeniedException if the caller is not staff or the target is protected
+     * @throws AccessDeniedException if neither ownership nor a staff rule permits deletion
      * @throws IllegalArgumentException if the university ID format is invalid
      */
     @Transactional
@@ -520,10 +547,8 @@ public class UserService {
             String targetId,
             Collection<? extends GrantedAuthority> authorities
     ) {
-        // Require an administrator or librarian before looking up a deletion target.
-        requireStaff(callerId, authorities);
-
-        // Normalize the target ID before querying or including it in diagnostic logs.
+        // Normalize both IDs before querying or deciding whether the caller owns the target.
+        String normalizedCallerId = normalizeAndValidateUniversityId(callerId);
         String normalizedTargetId = normalizeAndValidateUniversityId(targetId);
         log.debug("Attempting to delete user with university ID: {}", normalizedTargetId);
 
@@ -531,8 +556,13 @@ public class UserService {
         User user = userRepository.findByUniversityId(normalizedTargetId)
                 .orElseThrow(() -> new UserNotFoundException(normalizedTargetId));
 
-        // Never allow this endpoint to delete administrator or librarian accounts.
-        if (user.getUserRole() != UserRole.STUDENT && user.getUserRole() != UserRole.FACULTY) {
+        // Students and faculty may delete their own account.
+        boolean ownerCanDelete = normalizedCallerId.equals(normalizedTargetId)
+                && (user.getUserRole() == UserRole.STUDENT || user.getUserRole() == UserRole.FACULTY);
+
+        // Administrators may delete students/faculty; librarians may also delete assistants.
+        boolean staffCanDelete = canStaffManage(user.getUserRole(), authorities);
+        if (!ownerCanDelete && !staffCanDelete) {
             throw new AccessDeniedException("Access denied");
         }
 
@@ -548,7 +578,7 @@ public class UserService {
      * @throws IllegalArgumentException if the ID is blank or malformed
      */
     private String normalizeAndValidateUniversityId(String universityId) {
-        // could either be normalized email or null
+        // Trim before checking the ID format used by persistence and ownership checks.
         String normalizedUniversityId = universityId == null
                 ? null
                 : universityId.trim();
@@ -570,9 +600,10 @@ public class UserService {
     /**
      * Confirms that the caller is the owner or authorized staff for the target.
      *
-     * <p>Every profile update and password operation calls this after loading its target.
-     * Owners may manage their own account. Administrators and librarians may
-     * manage student and faculty accounts, but not another administrator or librarian.</p>
+     * <p>Profile reads, updates, and password operations call this after loading the target.
+     * Owners may manage their own account. Administrators may manage student and faculty
+     * accounts; librarians may also manage administrator accounts. Neither staff role may
+     * manage another librarian's account.</p>
      *
      * @param callerId normalized university ID of the authenticated caller
      * @param targetId normalized university ID requested by the caller
@@ -591,9 +622,7 @@ public class UserService {
             return;
         }
 
-        // Staff may manage student and faculty accounts, but not other staff accounts.
-        if ((target.getUserRole() == UserRole.STUDENT || target.getUserRole() == UserRole.FACULTY)
-                && isStaff(authorities)) {
+        if (canStaffManage(target.getUserRole(), authorities)) {
             return;
         }
 
@@ -602,41 +631,32 @@ public class UserService {
     }
 
     /**
-     * Confirms that the caller may read the requested public profile.
-     *
-     * <p>Every role may read its own profile. Administrators and librarians may
-     * also read student profiles, but may not browse faculty or staff profiles.</p>
-     *
-     * @param callerId normalized university ID of the authenticated caller
-     * @param targetId normalized university ID requested by the caller
-     * @param target loaded account whose role defines directory visibility
-     * @param authorities authorities granted to the authenticated caller
-     * @throws AccessDeniedException if the caller cannot read the target profile
+     * Applies the same staff target-role boundary to profile access and deletion.
+     * Ownership is checked by callers because staff accounts may manage their own
+     * profile/password but cannot delete themselves.
      */
-    private void requireProfileReadAccess(
-            String callerId,
-            String targetId,
-            User target,
+    private boolean canStaffManage(
+            UserRole targetRole,
             Collection<? extends GrantedAuthority> authorities
     ) {
-        // The owner can always read their own profile.
-        if (callerId.equals(targetId)) {
-            return;
-        }
+        return switch (targetRole) {
+            case STUDENT, FACULTY -> isStaff(authorities);
+            case ADMINISTRATOR -> isLibrarian(authorities);
+            case LIBRARIAN -> false;
+        };
+    }
 
-        // Only staff can read another user's profile, and the directory contains students only.
-        if (target.getUserRole() == UserRole.STUDENT && isStaff(authorities)) {
-            return;
+    /** Rejects account creation by anyone other than the authenticated librarian. */
+    private void requireLibrarian(Collection<? extends GrantedAuthority> authorities) {
+        if (!isLibrarian(authorities)) {
+            throw new AccessDeniedException("Access denied");
         }
-
-        // Deny cross-account reads outside the student-directory boundary.
-        throw new AccessDeniedException("Access denied");
     }
 
     /**
-     * Requires the caller to hold the administrator or librarian authority.
+     * Requires the caller to hold the library assistant or librarian authority.
      *
-     * @param callerId university ID of the authenticated caller, for diagnostic context
+     * @param callerId university ID of the authenticated caller, validated before listing
      * @param authorities authorities granted to the authenticated caller
      * @throws AccessDeniedException if the caller does not hold either staff role
      */
@@ -647,7 +667,7 @@ public class UserService {
         // Reject a missing or malformed authenticated identity before checking its role.
         normalizeAndValidateUniversityId(callerId);
 
-        // Require one of the two staff authorities for directory and deletion operations.
+        // Require one of the two staff authorities for the account directory.
         if (!isStaff(authorities)) {
             throw new AccessDeniedException("Access denied");
         }
@@ -666,10 +686,27 @@ public class UserService {
         }
 
         // Compare exact Spring Security authority names rather than role substrings.
-        return authorities.stream()
+        return isAdministrator(authorities) || isLibrarian(authorities);
+    }
+
+    /** Checks whether the caller has the library-assistant authority. */
+    private boolean isAdministrator(Collection<? extends GrantedAuthority> authorities) {
+        return hasAuthority(authorities, "ROLE_ADMINISTRATOR");
+    }
+
+    /** Checks whether the caller has the library librarian authority. */
+    private boolean isLibrarian(Collection<? extends GrantedAuthority> authorities) {
+        return hasAuthority(authorities, "ROLE_LIBRARIAN");
+    }
+
+    /** Compares exact Spring authorities; absent authorities grant no access. */
+    private boolean hasAuthority(
+            Collection<? extends GrantedAuthority> authorities,
+            String expectedAuthority
+    ) {
+        return authorities != null && authorities.stream()
                 .map(GrantedAuthority::getAuthority)
-                .anyMatch(authority -> "ROLE_ADMINISTRATOR".equals(authority)
-                        || "ROLE_LIBRARIAN".equals(authority));
+                .anyMatch(expectedAuthority::equals);
     }
 
     /**
@@ -681,11 +718,11 @@ public class UserService {
     private void validateAcademicRules(UserCreateRequestDTO request, UserRole role) {
         UserCourse course = request.getUserCourse();
 
-        if (role == UserRole.FACULTY) {
-            // Faculty users cannot be assigned student academic details.
+        if (role != UserRole.STUDENT) {
+            // Faculty and library staff do not have student course or major values.
             if (course != null || request.getMajor() != null) {
                 throw new IllegalArgumentException(
-                        "Faculty members cannot have a course or a major"
+                        "Non-student accounts cannot have a course or a major"
                 );
             }
             return;

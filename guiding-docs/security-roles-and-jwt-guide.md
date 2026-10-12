@@ -6,37 +6,36 @@ This guide defines the target authorization policy and a staged implementation p
 
 - Libro currently uses HTTP Basic authentication backed by `LibroUserDetailsService` and BCrypt.
 - `UserRole` contains `STUDENT`, `FACULTY`, `ADMINISTRATOR`, and `LIBRARIAN`; Flyway V3 adds the librarian value to the accepted database role constraint.
-- The role matrix and account boundaries below are implemented while HTTP Basic remains active. JWT and loans are still planned.
+- Role and account boundaries below are implemented while HTTP Basic remains active. No librarian is seeded; first-account provisioning is deferred. JWT and loans are still planned.
 - There is no loan entity or loan API yet. A `Book` row represents one physical copy, and the loan domain must prevent more than one active loan for that copy.
 
 ## Role policy
 
-All four roles can use student capabilities. The additional powers are deliberately narrow:
+Role names describe library access levels, not school job titles:
 
-| Capability | STUDENT | FACULTY | ADMINISTRATOR | LIBRARIAN |
-|---|:---:|:---:|:---:|:---:|
-| View and search books | Yes | Yes | Yes | Yes |
-| Borrow and return books | Yes | Yes | Yes | Yes |
-| View own loan history | Yes | Yes | Yes | Yes |
-| View and update own profile/password | Yes | Yes | Yes | Yes |
-| Add books | No | No | Yes | No |
-| View student directory/profiles | No | No | Yes | Yes |
-| Create faculty accounts | No | No | No | Yes |
-| Delete student or faculty accounts | No | No | Yes | Yes |
-| Update or delete books | No | No | Yes | Yes |
-| Manage another user's profile/password | No | No | Yes | Yes |
+- `LIBRARIAN` is the librarian of the library and has the highest library-management authority.
+- `ADMINISTRATOR` means a library assistant, such as fellow faculty, student assistants, or volunteers. It does not mean a system administrator.
+- `FACULTY` means school faculty using the library as patrons.
+- `STUDENT` means students using the library as patrons.
 
-`FACULTY` has the same end-user permissions as `STUDENT`. `ADMINISTRATOR` and `LIBRARIAN` inherit those permissions in addition to the capabilities shown above. Both administrators and librarians may update or delete books and manage other users' profiles and passwords, subject to the account boundaries below.
+| Role | Can do | Cannot do | Future loan permissions (not implemented) |
+|---|---|---|---|
+| `STUDENT` | View/search books; manage and delete their own account; create a student account through public signup | View/manage other users; add, update, or delete books; create privileged accounts | Borrow/return books and view own loan history |
+| `FACULTY` | Same patron permissions as students; manage and delete their own account | Self-register as faculty; view/manage other users; add, update, or delete books | Same as students |
+| `ADMINISTRATOR` (library assistant) | View, edit, and reset student/faculty accounts; delete student/faculty accounts; add, update, and delete books; manage own profile/password | Create accounts; manage/delete administrator or librarian accounts; delete own account | Borrow/return and view own history; view student/faculty loan histories |
+| `LIBRARIAN` | Create faculty and administrator accounts; view, edit, reset, and delete student/faculty/administrator accounts; add, update, and delete books; manage own profile/password | Manage/delete another librarian account; delete own account | Borrow/return and view own history; view student, faculty, and administrator loan histories |
+
+`FACULTY` has the same patron permissions as `STUDENT`. Administrators inherit the patron book permissions. The librarian can manage the library collection and user groups listed above. Neither staff role can change another librarian's account. Account roles are selected by the service, never by a submitted request role.
 
 Account boundaries:
 
-- Public signup always creates `STUDENT`; a submitted role must never grant privileges.
-- Only `LIBRARIAN` may create a faculty account through `POST /app/users/faculty`.
-- `GET /app/users` lists students only and is available to administrators and librarians.
-- `GET /app/users/{universityId}` is available to that account's owner. Administrators and librarians may additionally read a student profile, but may not use this rule to read faculty or staff profiles.
-- Profile PATCH/PUT and password change are available to the owner, administrators, and librarians. Administrator and librarian access is for managing another user's account; neither role may use it to change another administrator's or librarian's profile/password.
-- `DELETE /app/users/{universityId}` is available to administrators and librarians and may target only students or faculty. It must never delete administrators or librarians.
-- To preserve loan history and its foreign-key references, account deletion must return HTTP 409 while any loan record references that user.
+- Public `POST /app/users/signup` always creates `STUDENT`; a submitted role must never grant privileges.
+- Only `LIBRARIAN` may create a school faculty account through `POST /app/users/faculty` or a library assistant through `POST /app/users/administrators`.
+- `GET /app/users` lists student and faculty accounts for administrators; the librarian can also list administrator accounts.
+- `GET /app/users/{universityId}` is available to the owner. Administrators may additionally read student/faculty profiles. Librarians may additionally read student/faculty/administrator profiles, but no staff role may read another librarian's profile.
+- Profile PATCH/PUT and password change are available to the owner, administrators, and librarians. Administrators may manage student/faculty accounts; librarians may also manage administrator accounts. Neither staff role may manage another librarian's profile/password.
+- `DELETE /app/users/{universityId}` allows students/faculty to delete themselves, administrators to delete students/faculty, and librarians to delete students/faculty/administrators. Administrator and librarian accounts cannot delete themselves; librarian accounts cannot be deleted through this route.
+- To preserve future loan history and its foreign-key references, account deletion must return HTTP 409 while any loan record references that user.
 
 Use Spring authorities named `ROLE_STUDENT`, `ROLE_FACULTY`, `ROLE_ADMINISTRATOR`, and `ROLE_LIBRARIAN`. Keep authorization rules in the security layer and ownership checks in the service layer, where the authenticated university ID is passed explicitly. Do not trust a user ID in a request body to identify the caller.
 
@@ -89,15 +88,15 @@ Spring Security documents Resource Server support for JWT Bearer tokens and the 
 ## Implementation sequence
 
 1. **Roles and access rules:** implemented in `UserRole`, `SecurityConfig`, `UserService`, and Flyway V3. Public signup remains pinned to `STUDENT`; directory and ownership boundaries are enforced while Basic authentication remains active.
-2. **Loans:** add the entity, repository, V3 migration, partial unique index, DTOs, service, and controller. Resolve the loan-period policy first. Keep user deletion blocked while loan history references the account.
+2. **Loans:** add the entity, repository, next forward-only migration, partial unique index, DTOs, service, and controller. Resolve the loan-period policy first. Keep user deletion blocked while loan history references the account.
 3. **JWT:** add the Spring Boot OAuth2 Resource Server starter, JWT encoder/decoder configuration, secret/issuer settings, login DTO/controller/service, Bearer authorization, stateless session policy, and OpenAPI scheme. Remove HTTP Basic after the Bearer flow is working.
 4. **Documentation:** update `AGENTS.md`, README endpoint/security inventories, and OpenAPI annotations when the implementation lands. Keep this guide as the detailed policy reference.
 
 ## Acceptance checks
 
 - Anonymous requests can reach only signup and login. Missing, malformed, expired, wrong-signature, and wrong-issuer tokens receive HTTP 401; a valid token without the required role receives HTTP 403.
-- Each role can perform exactly the operations in the role matrix. Students/faculty cannot list or read other accounts, update another user's profile/password, create faculty, or delete accounts. Administrators and librarians can manage student/faculty profiles and passwords, but not those of other administrators or librarians.
-- Signup with `FACULTY`, `ADMINISTRATOR`, or `LIBRARIAN` in the payload still creates a student. Only librarians create faculty; administrators and librarians may delete student/faculty accounts, but neither can delete administrator/librarian accounts.
+- Each role can perform exactly the operations in the role matrix. Students/faculty cannot list or read other accounts, update another user's profile/password, or create privileged accounts. Administrators manage student/faculty accounts; librarians may also manage library assistant accounts. Neither staff role may manage another librarian account.
+- Signup with `FACULTY`, `ADMINISTRATOR`, or `LIBRARIAN` in the payload still creates a student. Only librarians create faculty and library assistant accounts. Students/faculty may delete themselves, administrators may delete student/faculty accounts, and librarians may also delete library assistant accounts; staff cannot delete their own account.
 - Login uses the stored BCrypt hash and does not reveal whether the university ID exists.
 - Token claims contain the correct subject and role, use the configured issuer and 15-minute expiry, and contain no credential/profile secrets.
 - A loan always uses the authenticated caller as borrower. A borrower cannot return another user's loan. Two concurrent borrow attempts cannot create two active loans for one book copy.

@@ -100,7 +100,7 @@ flowchart LR
         User -.-> Shared
     end
     ORM -->|JDBC| DB[("PostgreSQL 18")]
-    Flyway["Flyway migrations<br/>V1 books · V2 users"] -->|startup schema changes| DB
+    Flyway["Flyway migrations<br/>V1 books · V2 users · V3 librarian role"] -->|startup schema changes| DB
     Compose["Docker Compose<br/>starts app after database is healthy"] -.-> App
     Compose -.-> DB
 
@@ -143,18 +143,21 @@ sequenceDiagram
     end
 ```
 
-Most account routes currently require authentication without checking that the caller owns the account. The user list is also not restricted to a student-only directory. These are known gaps; the internal security guide describes the planned policy, not current behavior.
+Account access is checked against the authenticated user's university ID and role. `ADMINISTRATOR` is the library-assistant role, and `LIBRARIAN` is the library's librarian. Loans remain future work.
 
 | Current rule | Allowed access |
 | --- | --- |
 | Public signup | POST /app/users/signup |
 | Read books | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN |
-| Create books | ADMINISTRATOR |
-| Update or delete books | ADMINISTRATOR, LIBRARIAN |
-| Create faculty accounts | LIBRARIAN |
-| List/read student profiles | ADMINISTRATOR, LIBRARIAN |
+| Add, update, or delete books | ADMINISTRATOR, LIBRARIAN |
+| Create school faculty and library assistant accounts | LIBRARIAN |
+| List/read student and faculty profiles | ADMINISTRATOR, LIBRARIAN |
+| List/read library assistant profiles | LIBRARIAN |
 | Update student/faculty profiles and passwords | Owner, ADMINISTRATOR, LIBRARIAN |
+| Update library assistant profiles and passwords | Owner, LIBRARIAN |
+| Delete own student/faculty account | Owner |
 | Delete student/faculty accounts | ADMINISTRATOR, LIBRARIAN |
+| Delete library assistant accounts | LIBRARIAN |
 
 ### Layered Design
 
@@ -284,6 +287,7 @@ src/main/resources/
     migration/
       V1__create_books_table.sql
       V2__create_users_table.sql
+      V3__add_librarian_role.sql
 
 src/test/java/
   unit/
@@ -506,20 +510,21 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 | `GET` | `/app/books/stats/average-price` | Returns the average price of all books | `GET /app/books/stats/average-price` | `{"success":true,"message":"Average Price of Collection: ","data":20.50,"timestamp":172...}` |
 | `GET` | `/app/books/stats/count` | Returns the total number of books | `GET /app/books/stats/count` | `{"success":true,"message":"Book Collection Count","data":6,"timestamp":172...}` |
 
-| `GET` | `/app/users` | Lists students for administrators/librarians | `GET /app/users?page=0&size=12` | Spring `Page<UserResponseDTO>` |
-| `GET` | `/app/users/{universityId}` | Gets own profile or a student profile (staff) | `GET /app/users/2025-4321` | `UserResponseDTO` |
+| `GET` | `/app/users` | Lists student/faculty accounts for administrators; librarians also see library assistants | `GET /app/users?page=0&size=12` | Spring `Page<UserResponseDTO>` |
+| `GET` | `/app/users/{universityId}` | Gets own profile or a profile visible to the caller's staff role | `GET /app/users/2025-4321` | `UserResponseDTO` |
 | `POST` | `/app/users/signup` | Creates a user account | `POST /app/users/signup` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 | `POST` | `/app/users/faculty` | Librarian creates a faculty account | `POST /app/users/faculty` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 | `PATCH` | `/app/users/{universityId}` | Updates supplied profile fields | `PATCH /app/users/2025-4321` with `UserCreateUpdateDTO` | `ApiResponse<UserResponseDTO>` |
 | `PUT` | `/app/users/{universityId}` | Replaces profile fields | `PUT /app/users/2025-4321` with `UserReplaceRequest` | `ApiResponse<UserResponseDTO>` |
-| `PUT` | `/app/users/{universityId}/password` | Changes own password or resets student/faculty password as staff | `PUT /app/users/2025-4321/password` with `ChangePasswordDTO` | `ApiResponse<Void>` |
-| `DELETE` | `/app/users/{universityId}` | Administrator or librarian deletes a student or faculty account | `DELETE /app/users/2025-4321` | `ApiResponse<Void>` |
+| `PUT` | `/app/users/{universityId}/password` | Changes own password or resets a permitted account's password as staff | `PUT /app/users/2025-4321/password` with `ChangePasswordDTO` | `ApiResponse<Void>` |
+| `DELETE` | `/app/users/{universityId}` | Owner deletes a student/faculty account; administrator deletes student/faculty; librarian also deletes library assistants | `DELETE /app/users/2025-4321` | `ApiResponse<Void>` |
+| `POST` | `/app/users/administrators` | Librarian creates a library assistant account | `POST /app/users/administrators` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 
 `/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minPrice` and `maxPrice` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `price`; invalid ranges, decimals, or sort fields return HTTP 400. Existing list routes retain their response shapes.
 
 ### User API
 
-User routes are available under `/app/users` for signup, a staff-only student directory, lookup by university ID, profile PATCH/PUT, password changes, and restricted deletion. Signup is public and always creates a student, regardless of a supplied role value. Librarians create faculty accounts. Owners manage their own profiles and passwords; administrators and librarians may manage student/faculty accounts, but not another administrator or librarian account. Staff can read student profiles only. Administrators create books; administrators and librarians may update or delete them. HTTP Basic authentication uses a university ID and password. Flyway V2 seeds one bootstrap administrator as `0000-0000`; V3 adds the librarian role. Set `LIBRO_ADMIN_PASSWORD_HASH` to a BCrypt hash before startup and protect that configuration. The seeded account uses `admin@library.local`. Loan routes are not implemented.
+User routes are available under `/app/users` for signup, staff directories, profile lookup and updates, password changes, account creation, and role-scoped deletion. STUDENT means a student patron; FACULTY means school faculty using the library as patrons; ADMINISTRATOR means a library assistant (for example, fellow faculty, student assistants, or volunteers); LIBRARIAN means the library's librarian. Signup is public and always creates a student. Only the librarian creates faculty and library assistant accounts. Students and faculty can delete their own accounts; library assistants can manage/delete student and faculty accounts; librarians can also manage/delete library assistant accounts. Neither staff role manages another librarian account. All roles can read books; administrators and librarians can add, update, and delete books. See [the role permissions table](guiding-docs/security-roles-and-jwt-guide.md#role-policy) for allowed, denied, and future loan permissions. HTTP Basic authentication uses a university ID and password. Flyway V2 historically seeds the bootstrap administrator as `0000-0000`; V3 adds LIBRARIAN to the schema. The application does not seed a librarian. Set `LIBRO_ADMIN_PASSWORD_HASH` to a BCrypt hash before startup and protect it. Loan routes and history are not implemented.
 
 ## Setup & Installation
 
@@ -538,7 +543,7 @@ Docker is the preferred way to run the project because it brings up both Postgre
     POSTGRES_PASSWORD=change_me
     LIBRO_ADMIN_PASSWORD_HASH=<BCrypt hash for a password you choose>
     ```
-    Replace the hash placeholder before starting the app. Flyway V2 seeds the administrator as university ID `0000-0000`; only the BCrypt hash is stored in the database. Keep `.env` private.
+    Replace the hash placeholder before starting the app. Flyway V2 seeds the administrator as university ID `0000-0000`; no librarian is seeded. Only BCrypt hashes are stored in the database. Keep `.env` private. Librarian-only routes require an existing librarian account; initial librarian provisioning is deferred.
 2. Build the application jar:
     ```bash
     mvn clean package

@@ -39,7 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/app/users")
-@Tag(name = "Users", description = "Student signup is public. Librarians create faculty accounts. Administrators and librarians manage the student directory and delete student or faculty accounts; users manage their own accounts.")
+@Tag(name = "Users", description = "Students and school faculty use patron accounts. Administrators are library assistants; librarians manage faculty and library assistant accounts.")
 public class UserAPI {
 
     private final UserService service;
@@ -78,9 +78,26 @@ public class UserAPI {
     @ErrorApiResponse(responseCode = "400", description = "Request validation failed or university ID/email is already registered")
     @ErrorApiResponse(responseCode = "403", description = "Only librarians may create faculty accounts")
     public ResponseEntity<ApiResponse<UserResponseDTO>> createFaculty(
-            @Valid @RequestBody UserCreateRequestDTO request) {
+            @Valid @RequestBody UserCreateRequestDTO request,
+            Authentication authentication) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new ApiResponse<>(true, "Faculty account created successfully", service.createFaculty(request)));
+                .body(new ApiResponse<>(true, "Faculty account created successfully",
+                        service.createFaculty(request, authentication.getAuthorities())));
+    }
+
+    /** Creates a library assistant account. */
+    @PostMapping("/administrators")
+    @Operation(summary = "Create a library assistant account",
+            description = "Only the library librarian may create a library assistant account. The submitted role is ignored and the account is always ADMINISTRATOR.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Library assistant account created")
+    @ErrorApiResponse(responseCode = "400", description = "Request validation failed or university ID/email is already registered")
+    @ErrorApiResponse(responseCode = "403", description = "Only the librarian may create library assistant accounts")
+    public ResponseEntity<ApiResponse<UserResponseDTO>> createAdministrator(
+            @Valid @RequestBody UserCreateRequestDTO request,
+            Authentication authentication) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new ApiResponse<>(true, "Library assistant account created successfully",
+                        service.createAdministrator(request, authentication.getAuthorities())));
     }
 
     /**
@@ -90,10 +107,10 @@ public class UserAPI {
      * @return the requested page of public profiles
      */
     @GetMapping
-    @Operation(summary = "List students with pagination",
-            description = "Administrators and librarians may list student profiles only. Page numbering starts at zero. The default is page 0, size 12, sorted by universityId ascending; the maximum page size is 100. Sort with sort=property,direction using universityId, firstName, lastName, middleInitial, email, userRole, userCourse, or major. Unsupported sort properties return 400.")
+    @Operation(summary = "List accounts with pagination",
+            description = "Library assistants may list student and school faculty profiles. The librarian may also list library assistant profiles. Page numbering starts at zero. The default is page 0, size 12, sorted by universityId ascending; the maximum page size is 100. Sort with sort=property,direction using universityId, firstName, lastName, middleInitial, email, userRole, userCourse, or major. Unsupported sort properties return 400.")
     @ErrorApiResponse(responseCode = "400", description = "Invalid pagination or sort parameter")
-    @ErrorApiResponse(responseCode = "403", description = "Only administrators and librarians may list students")
+    @ErrorApiResponse(responseCode = "403", description = "Only library assistants and the librarian may list accounts")
     public ResponseEntity<Page<UserResponseDTO>> getAllUsers(
             @ParameterObject @PageableDefault(size = 12, sort = "universityId") Pageable pageable,
             Authentication authentication) {
@@ -110,7 +127,7 @@ public class UserAPI {
      */
     @GetMapping("/{universityId}")
     @Operation(summary = "Get a user by university ID",
-            description = "Users may view their own profile. Administrators and librarians may also view student profiles. Passwords and password hashes are never included.")
+            description = "Users may view their own profile. Library assistants and the librarian may also view student and school faculty profiles; only the librarian may view library assistant profiles. Passwords and password hashes are never included.")
     @ErrorApiResponse(responseCode = "400", description = "University ID must use the ####-#### format")
     @ErrorApiResponse(responseCode = "404", description = "User not found")
     @ErrorApiResponse(responseCode = "403", description = "Only the account owner or authorized staff may view this profile")
@@ -132,7 +149,7 @@ public class UserAPI {
      */
     @PatchMapping("/{universityId}")
     @Operation(summary = "Update supplied profile fields",
-            description = "Users may update their own profile; administrators and librarians may also update student or faculty profiles. Updates only supplied fields; null or omitted fields are unchanged. Supplied names and email cannot be blank. A blank middle initial is treated as omitted. Values are trimmed and email is stored lowercase.")
+            description = "Users may update their own profile; library assistants and the librarian may also update student or school faculty profiles, while only the librarian may update library assistant profiles. Updates only supplied fields; null or omitted fields are unchanged. Supplied names and email cannot be blank. A blank middle initial is treated as omitted. Values are trimmed and email is stored lowercase.")
     @ErrorApiResponse(responseCode = "400", description = "Invalid profile field, university ID, or email is already registered")
     @ErrorApiResponse(responseCode = "404", description = "User not found")
     @ErrorApiResponse(responseCode = "409", description = "A database uniqueness constraint was concurrently violated")
@@ -157,7 +174,7 @@ public class UserAPI {
      */
     @PutMapping("/{universityId}")
     @Operation(summary = "Replace a user's profile",
-            description = "Users may replace their own profile; administrators and librarians may also replace student or faculty profiles. Replaces first name, last name, middle initial, and email. First name, last name, and email are required; university ID, role, course, major, and password are not changed. Names are trimmed and email is stored lowercase.")
+            description = "Users may replace their own profile; library assistants and the librarian may also replace student and school faculty profiles, while only the librarian may replace library assistant profiles. Replaces first name, last name, middle initial, and email. First name, last name, and email are required; university ID, role, course, major, and password are not changed. Names are trimmed and email is stored lowercase.")
     @ErrorApiResponse(responseCode = "400", description = "Request validation failed, university ID is invalid, or email is already registered")
     @ErrorApiResponse(responseCode = "404", description = "User not found")
     @ErrorApiResponse(responseCode = "409", description = "A database uniqueness constraint was concurrently violated")
@@ -182,7 +199,7 @@ public class UserAPI {
      */
     @PutMapping("/{universityId}/password")
     @Operation(summary = "Change a user's password",
-            description = "Users must provide their current password to change their own password. Administrators and librarians may reset student or faculty passwords without the target user's current password. The new password must meet the 8–72 character complexity policy; password values are never returned.")
+            description = "Users must provide their current password to change their own password. Library assistants and the librarian may reset student and school faculty passwords without the target user's current password; only the librarian may reset a library assistant's password. The new password must meet the 8–72 character complexity policy; password values are never returned.")
     @ErrorApiResponse(responseCode = "400", description = "Password format is invalid or the current password does not match")
     @ErrorApiResponse(responseCode = "404", description = "User not found")
     @ErrorApiResponse(responseCode = "403", description = "Only the account owner or authorized staff may change this password")
@@ -205,10 +222,10 @@ public class UserAPI {
      */
     @DeleteMapping("/{universityId}")
     @Operation(summary = "Delete a user account",
-            description = "Administrators and librarians may permanently delete student or faculty accounts. Administrator and librarian accounts are protected.")
+            description = "Students and school faculty may delete their own accounts. Library assistants may delete student and faculty accounts; the librarian may also delete library assistant accounts. Librarian accounts are protected.")
     @ErrorApiResponse(responseCode = "400", description = "University ID must use the ####-#### format")
     @ErrorApiResponse(responseCode = "404", description = "User not found")
-    @ErrorApiResponse(responseCode = "403", description = "Only administrators and librarians may delete student or faculty accounts")
+    @ErrorApiResponse(responseCode = "403", description = "The caller cannot delete the requested account")
     public ResponseEntity<ApiResponse<Void>> deleteUser(
             @Parameter(description = "University identifier in ####-#### format.", example = "2025-4321")
             @PathVariable String universityId,

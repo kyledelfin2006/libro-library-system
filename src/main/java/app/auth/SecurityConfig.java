@@ -16,6 +16,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/app/users/signup").permitAll()
                         .requestMatchers(HttpMethod.POST, "/app/users/faculty").hasRole("LIBRARIAN")
+                        .requestMatchers(HttpMethod.POST, "/app/users/administrators").hasRole("LIBRARIAN")
 
                         .requestMatchers(HttpMethod.GET, "/app/users").hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
                         .requestMatchers(HttpMethod.GET, "/app/users/**")
@@ -25,11 +26,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/app/users/**")
                         .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
                         .requestMatchers(HttpMethod.DELETE, "/app/users/**")
-                        .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
+                        .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
 
                         .requestMatchers(HttpMethod.GET, "/app/books/**")
                         .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
-                        .requestMatchers(HttpMethod.POST, "/app/books/**").hasRole("ADMINISTRATOR")
+                        .requestMatchers(HttpMethod.POST, "/app/books/**")
+                        .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
                         .requestMatchers(HttpMethod.PUT, "/app/books/**")
                         .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
                         .requestMatchers(HttpMethod.PATCH, "/app/books/**")

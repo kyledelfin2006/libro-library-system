@@ -88,9 +88,10 @@ public class BookAPI {
 
     @PostMapping("/add")
     @Operation(summary = "Add a book",
-            description = "Creates a physical book-copy record. Duplicate titles are allowed; each copy receives its own generated ID.")
+            description = "Library assistants and the librarian may add books. Creates a physical book-copy record; duplicate titles are allowed and each copy receives its own generated ID.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Book created")
     @ErrorApiResponse(responseCode = "400", description = "Request validation failed")
+    @ErrorApiResponse(responseCode = "403", description = "Only library assistants and the librarian may add books")
     public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(
             @Valid @RequestBody BookRequestDTO input) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -107,9 +108,10 @@ public class BookAPI {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Delete a book")
+    @Operation(summary = "Delete a book", description = "Only library assistants and the librarian may delete books.")
     @ErrorApiResponse(responseCode = "400", description = "Book ID must be a number")
     @ErrorApiResponse(responseCode = "404", description = "Book not found")
+    @ErrorApiResponse(responseCode = "403", description = "Only library assistants and the librarian may delete books")
     public ResponseEntity<ApiResponse<Void>> deleteBook(@PathVariable Long id) {
         service.deleteBookById(id);
         return ResponseEntity.ok(new ApiResponse<>(true, "Book deleted successfully"));
@@ -193,9 +195,10 @@ public class BookAPI {
 
     @PatchMapping("/{id}")
     @Operation(summary = "Partially update a book",
-            description = "Updates only supplied fields. Omitted or blank text fields remain unchanged; a supplied price must be greater than zero. Text values are trimmed before storage.")
+            description = "Library assistants and the librarian may update books. Updates only supplied fields. Omitted or blank text fields remain unchanged; a supplied price must be greater than zero. Text values are trimmed before storage.")
     @ErrorApiResponse(responseCode = "400", description = "Invalid book ID or supplied field")
     @ErrorApiResponse(responseCode = "404", description = "Book not found")
+    @ErrorApiResponse(responseCode = "403", description = "Only library assistants and the librarian may update books")
     public ResponseEntity<ApiResponse<BookResponseDTO>> patchBook(
             @PathVariable Long id,
             @RequestBody BookPatchRequestDTO updates) {
@@ -205,9 +208,10 @@ public class BookAPI {
 
     @PutMapping("/{id}")
     @Operation(summary = "Replace a book",
-            description = "Replaces every mutable book field. Title, author, genre, and a positive price are required; text values are trimmed before storage.")
+            description = "Library assistants and the librarian may update books. Replaces every mutable book field. Title, author, genre, and a positive price are required; text values are trimmed before storage.")
     @ErrorApiResponse(responseCode = "400", description = "Invalid book ID or request validation failed")
     @ErrorApiResponse(responseCode = "404", description = "Book not found")
+    @ErrorApiResponse(responseCode = "403", description = "Only library assistants and the librarian may update books")
     public ResponseEntity<ApiResponse<BookResponseDTO>> replaceBook(
             @PathVariable Long id,
             @Valid @RequestBody BookRequestDTO updates) {

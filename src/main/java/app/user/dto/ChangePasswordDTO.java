@@ -20,7 +20,7 @@ public class ChangePasswordDTO {
             regexp = PasswordPolicy.PASSWORD_REGEX,
             message = PasswordPolicy.PASSWORD_REQUIREMENTS_MESSAGE
     )
-    @Schema(description = "Required when changing your own password; omitted when an administrator or librarian resets a student or faculty password.", accessMode = Schema.AccessMode.WRITE_ONLY)
+    @Schema(description = "Required for your own password change; may be omitted when authorized staff reset another account's password.", accessMode = Schema.AccessMode.WRITE_ONLY)
     private String currentPassword;
 
     @NotBlank(message = "Password is required.")

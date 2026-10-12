@@ -20,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.data.domain.Page;
@@ -85,6 +86,7 @@ class UserServiceTest {
         existingUser.setLastName("Old Last");
         existingUser.setMiddleInitial("A");
         existingUser.setEmail("old@example.com");
+        existingUser.setUserRole(UserRole.STUDENT);
 
         when(repository.findByUniversityId("2025-4321"))
                 .thenReturn(Optional.of(existingUser));
@@ -115,12 +117,13 @@ class UserServiceTest {
     @Test
     void getAllUsers_withAllowedSortField_shouldReturnPage() {
         Pageable pageable = PageRequest.of(0, 12, Sort.by("firstName"));
-        when(repository.findByUserRole(UserRole.STUDENT, pageable)).thenReturn(Page.empty());
+        when(repository.findByUserRoleIn(List.of(UserRole.STUDENT, UserRole.FACULTY), pageable))
+                .thenReturn(Page.empty());
 
         Page<UserResponseDTO> result = getAllUsers(pageable);
 
         assertTrue(result.isEmpty());
-        verify(repository).findByUserRole(UserRole.STUDENT, pageable);
+        verify(repository).findByUserRoleIn(List.of(UserRole.STUDENT, UserRole.FACULTY), pageable);
     }
 
     /** Verifies unsupported persistence properties are rejected before querying. */
@@ -130,6 +133,166 @@ class UserServiceTest {
 
         assertThrows(IllegalArgumentException.class, () -> getAllUsers(pageable));
 
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void getAllUsers_librarianCanSeeLibraryAssistantAccounts() {
+        Pageable pageable = PageRequest.of(0, 12);
+        List<UserRole> visibleRoles = List.of(
+                UserRole.STUDENT, UserRole.FACULTY, UserRole.ADMINISTRATOR);
+        when(repository.findByUserRoleIn(visibleRoles, pageable)).thenReturn(Page.empty());
+
+        userService.getAllUsers(pageable, "2025-9999", authorities("LIBRARIAN"));
+
+        verify(repository).findByUserRoleIn(visibleRoles, pageable);
+    }
+
+    @Test
+    void getUserByUniversityId_administratorCanReadFacultyProfile() {
+        existingUser.setUserRole(UserRole.FACULTY);
+
+        UserResponseDTO result = userService.getUserByUniversityId(
+                "2025-9999", "2025-4321", authorities("ADMINISTRATOR"));
+
+        assertEquals("2025-4321", result.getUniversityId());
+    }
+
+    @Test
+    void getUserByUniversityId_librarianCanReadLibraryAssistantButAdministratorCannot() {
+        existingUser.setUserRole(UserRole.ADMINISTRATOR);
+
+        assertThrows(AccessDeniedException.class, () -> userService.getUserByUniversityId(
+                "2025-9999", "2025-4321", authorities("ADMINISTRATOR")));
+
+        UserResponseDTO result = userService.getUserByUniversityId(
+                "2025-9999", "2025-4321", authorities("LIBRARIAN"));
+        assertEquals("2025-4321", result.getUniversityId());
+    }
+
+    @Test
+    void updateUser_librarianCanManageLibraryAssistantButAdministratorCannot() {
+        existingUser.setUserRole(UserRole.ADMINISTRATOR);
+        UserCreateUpdateDTO request = new UserCreateUpdateDTO("Updated", null, null, null);
+
+        assertThrows(AccessDeniedException.class, () -> userService.updateUser(
+                "2025-9999", "2025-4321", request, authorities("ADMINISTRATOR")));
+
+        UserResponseDTO result = userService.updateUser(
+                "2025-9999", "2025-4321", request, authorities("LIBRARIAN"));
+
+        assertEquals("Updated", result.getFirstName());
+    }
+
+    @Test
+    void deleteUser_studentCanDeleteOwnAccount() {
+        userService.deleteUserByUniversityId("2025-4321", "2025-4321", authorities("STUDENT"));
+
+        verify(repository).delete(existingUser);
+    }
+
+    @Test
+    void deleteUser_librarianCanDeleteLibraryAssistantButAdministratorCannot() {
+        existingUser.setUserRole(UserRole.ADMINISTRATOR);
+
+        assertThrows(AccessDeniedException.class, () -> userService.deleteUserByUniversityId(
+                "2025-9999", "2025-4321", authorities("ADMINISTRATOR")));
+
+        userService.deleteUserByUniversityId("2025-9998", "2025-4321", authorities("LIBRARIAN"));
+
+        verify(repository).delete(existingUser);
+    }
+
+    @Test
+    void deleteUser_librarianCannotDeleteOwnAccount() {
+        existingUser.setUserRole(UserRole.LIBRARIAN);
+
+        assertThrows(AccessDeniedException.class, () -> userService.deleteUserByUniversityId(
+                "2025-4321", "2025-4321", authorities("LIBRARIAN")));
+
+        verify(repository, never()).delete(any(User.class));
+    }
+
+    @Test
+    void deleteUser_administratorCannotDeleteOwnAccount() {
+        existingUser.setUserRole(UserRole.ADMINISTRATOR);
+
+        assertThrows(AccessDeniedException.class, () -> userService.deleteUserByUniversityId(
+                "2025-4321", "2025-4321", authorities("ADMINISTRATOR")));
+
+        verify(repository, never()).delete(any(User.class));
+    }
+
+    @Test
+    void updatePassword_librarianCanResetAssistantButAdministratorCannot() {
+        existingUser.setUserRole(UserRole.ADMINISTRATOR);
+        existingUser.setPasswordHash("old-hash");
+        when(passwordEncoder.encode("NewPassword2@")).thenReturn("new-hash");
+        ChangePasswordDTO request = new ChangePasswordDTO(null, "NewPassword2@");
+
+        assertThrows(AccessDeniedException.class, () -> userService.updatePassword(
+                "2025-9999", "2025-4321", request, authorities("ADMINISTRATOR")));
+
+        userService.updatePassword("2025-9999", "2025-4321", request, authorities("LIBRARIAN"));
+
+        assertEquals("new-hash", existingUser.getPasswordHash());
+    }
+
+    @Test
+    void createAdministrator_usesFixedRoleAndNoAcademicFields() {
+        UserCreateRequestDTO request = new UserCreateRequestDTO(
+                "2025-8888", "ValidPass1!", "Library", "Assistant", null,
+                "assistant@example.edu", UserRole.LIBRARIAN, null, null);
+        when(repository.existsByUniversityId("2025-8888")).thenReturn(false);
+        when(repository.existsByEmailIgnoreCase("assistant@example.edu")).thenReturn(false);
+        when(passwordEncoder.encode("ValidPass1!")).thenReturn("encoded-password");
+        when(repository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UserResponseDTO result = userService.createAdministrator(request, authorities("LIBRARIAN"));
+
+        assertEquals(UserRole.ADMINISTRATOR, result.getUserRole());
+        assertNull(result.getUserCourse());
+        assertNull(result.getMajor());
+    }
+
+    @Test
+    void publicSignup_ignoresRequestedPrivilegedRole() {
+        UserCreateRequestDTO request = new UserCreateRequestDTO(
+                "2025-8888", "ValidPass1!", "Student", "Patron", null,
+                "student@example.edu", UserRole.LIBRARIAN, UserCourse.IT, UserITMajor.SE);
+        when(passwordEncoder.encode("ValidPass1!")).thenReturn("encoded-password");
+        when(repository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UserResponseDTO result = userService.createUser(request);
+
+        assertEquals(UserRole.STUDENT, result.getUserRole());
+    }
+
+    @Test
+    void createFaculty_usesFixedRoleForLibrarian() {
+        UserCreateRequestDTO request = new UserCreateRequestDTO(
+                "2025-8888", "ValidPass1!", "School", "Faculty", null,
+                "faculty@example.edu", UserRole.ADMINISTRATOR, null, null);
+        when(passwordEncoder.encode("ValidPass1!")).thenReturn("encoded-password");
+        when(repository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UserResponseDTO result = userService.createFaculty(request, authorities("LIBRARIAN"));
+
+        assertEquals(UserRole.FACULTY, result.getUserRole());
+        assertNull(result.getUserCourse());
+        assertNull(result.getMajor());
+    }
+
+    @Test
+    void staffAccountCreation_requiresLibrarianAuthority() {
+        UserCreateRequestDTO request = new UserCreateRequestDTO(
+                "2025-8888", "ValidPass1!", "Library", "Assistant", null,
+                "assistant@example.edu", UserRole.LIBRARIAN, null, null);
+
+        assertThrows(AccessDeniedException.class,
+                () -> userService.createFaculty(request, authorities("ADMINISTRATOR")));
+        assertThrows(AccessDeniedException.class,
+                () -> userService.createAdministrator(request, authorities("ADMINISTRATOR")));
         verifyNoInteractions(repository);
     }
 

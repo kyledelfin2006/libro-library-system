@@ -73,7 +73,7 @@ class UserPersistenceIT {
             assertTrue(passwordEncoder.matches("NewPassword2@", updated.getPasswordHash()));
             assertFalse(passwordEncoder.matches("CurrentPass1!", updated.getPasswordHash()));
         } finally {
-            userRepository.deleteAllInBatch();
+            userRepository.findByUniversityId("2025-4321").ifPresent(userRepository::delete);
         }
     }
 

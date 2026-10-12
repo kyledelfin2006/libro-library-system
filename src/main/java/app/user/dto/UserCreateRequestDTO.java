@@ -16,7 +16,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-@Schema(description = "User account creation request. Students require a course and IT students require a major; faculty must leave course and major null.")
+@Schema(description = "Account creation request. Students require a course and IT students require a major; faculty and library staff must leave course and major null.")
 public class UserCreateRequestDTO {
 
     @NotBlank(message = "University ID is required")
@@ -55,7 +55,7 @@ public class UserCreateRequestDTO {
     @Schema(example = "alex.rivera@example.edu")
     private String email;
 
-    @Schema(description = "Ignored by account-creation endpoints; signup creates a student and librarian faculty creation creates a faculty account.")
+    @Schema(description = "Ignored by account-creation endpoints; each route assigns its fixed role. Only the librarian can create faculty or library assistant accounts.")
     private UserRole userRole;
 
     @Schema(description = "Required for students. Allowed values are IT, EMC, and IS.")

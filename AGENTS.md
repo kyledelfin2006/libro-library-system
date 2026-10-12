@@ -32,10 +32,12 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 - The project is a single-module Java 25 / Spring Boot 4.1 REST API using Spring MVC, Spring Data JPA, Hibernate, PostgreSQL, Flyway, and Maven.
 - The live authentication mechanism is HTTP Basic, backed by LibroUserDetailsService and BCrypt. Signup at POST /app/users/signup is public. JWT login and Bearer validation are not implemented.
 - The live UserRole values are STUDENT, FACULTY, ADMINISTRATOR, and LIBRARIAN.
-- Book reads allow all four roles. Book creation requires ADMINISTRATOR; update and deletion allow ADMINISTRATOR and LIBRARIAN.
-- Faculty creation requires LIBRARIAN. Administrators and librarians can list and read student profiles, manage student/faculty profiles and passwords, and delete student/faculty accounts. Owners can read and manage their own profile and password; staff cannot manage another administrator or librarian account.
+- STUDENT means a student patron; FACULTY means school faculty using the library as patrons; ADMINISTRATOR means a library assistant (such as fellow faculty, student assistants, or volunteers), not a system administrator; LIBRARIAN means the library's librarian.
+- Book reads allow all four roles. Book creation, update, and deletion allow ADMINISTRATOR and LIBRARIAN.
+- Librarians create faculty and administrator/library-assistant accounts. Administrators can list/read/manage student and faculty accounts and delete those accounts; librarians may also manage/delete administrator accounts. Students and faculty can delete their own accounts. Staff cannot manage another librarian account; administrator and librarian accounts cannot delete themselves.
 - User account ownership and target-role rules are enforced in UserService as well as by route authorization. HTTP Basic and CSRF remain enabled.
-- Loans are not implemented. Each Book row represents one physical copy.
+- No librarian account is seeded; librarian-only routes require an existing librarian account. The historical V2 administrator bootstrap remains in place.
+- Loans and loan history are not implemented. Each Book row represents one physical copy; documented loan permissions remain future policy.
 - Flyway owns schema changes; Hibernate uses ddl-auto=validate.
 
 These are a snapshot, not a substitute for checking the code when a task changes the relevant area.
@@ -44,7 +46,7 @@ These are a snapshot, not a substitute for checking the code when a task changes
 
 - Keep HTTP handling in controllers, business rules and transactions in services, persistence behind repositories, and entity/DTO mapping explicit.
 - Use request and response DTOs at API boundaries. Never accept a JPA entity from a client or return one directly.
-- Keep secrets and real personal data out of source, migrations, docs, tests, logs, and examples. The bootstrap administrator migration accepts only a BCrypt hash through LIBRO_ADMIN_PASSWORD_HASH.
+- Keep secrets and real personal data out of source, migrations, docs, tests, logs, and examples. The historical administrator bootstrap migration accepts only a BCrypt hash through LIBRO_ADMIN_PASSWORD_HASH. No librarian account is seeded.
 - Add forward-only Flyway migrations for schema changes once a migration may have been applied to a persistent database. Keep SQL and JPA mappings aligned.
 - Preserve the physical-book-copy domain decision and enforce loan ownership from the authenticated principal when loan work begins.
 - Update the README, this guide, the engineering reference, OpenAPI, and the roadmap only where their owned facts changed.

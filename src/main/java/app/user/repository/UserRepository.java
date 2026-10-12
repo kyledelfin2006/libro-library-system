@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -26,8 +27,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // finds users by role
     List<User> findByUserRole(UserRole userRole);
 
-    // Returns a pageable subset of users with one role, used for the student directory.
+    // Returns a pageable subset of users with one role.
     Page<User> findByUserRole(UserRole userRole, Pageable pageable);
+
+    // Returns a paged directory limited to the account roles visible to staff.
+    Page<User> findByUserRoleIn(Collection<UserRole> userRoles, Pageable pageable);
 
     // finds users by course
     List<User> findByUserCourse(UserCourse userCourse);

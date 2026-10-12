@@ -7,15 +7,15 @@ This is the working implementation roadmap. It is not the public project overvie
 | Area | Implemented now |
 | --- | --- |
 | Books | CRUD, search, pagination, sorting, filtering, statistics, DTO validation |
-| Accounts | Student signup, librarian-created faculty, student directory, owner/staff profile and password management, restricted deletion |
+| Accounts | Student signup; librarian-created faculty/library assistants; role-scoped directory, profile/password management, and deletion |
 | Roles in Java and the current schema | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN (Flyway V3) |
 | Authentication | HTTP Basic using university ID, UserDetailsService, and BCrypt |
-| Authorization | Book reads for all roles; ADMINISTRATOR creates books; ADMINISTRATOR/LIBRARIAN update or delete books; librarian faculty creation; service-level account ownership and target-role checks |
+| Authorization | Book reads for all roles; ADMINISTRATOR/LIBRARIAN book CRUD; librarian creates faculty/library assistants; role-scoped service account checks |
 | Loans | Not implemented |
 | JWT login and Bearer validation | Not implemented |
 | LIBRARIAN role and target owner/directory rules | Implemented with HTTP Basic |
 
-Account profile and password operations enforce owner access, with administrator/librarian access to student and faculty accounts. Staff cannot manage another administrator or librarian account. Profile reads and the paginated directory expose students to staff only.
+See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md). Administrator means library assistant, not system administrator. The paginated directory and profile/password operations follow role and target-account boundaries; students/faculty may delete their own accounts. Loans remain unimplemented.
 
 ## Recommended implementation order
 
@@ -23,11 +23,13 @@ Account profile and password operations enforce owner access, with administrator
 
 - [x] Add LIBRARIAN to the Java role enum and database constraint using Flyway V3.
 - [x] Keep public signup pinned to STUDENT.
-- [x] Restrict faculty creation to LIBRARIAN and student/faculty deletion to ADMINISTRATOR and LIBRARIAN.
-- [x] Restrict the student directory and cross-account student profile reads to ADMINISTRATOR and LIBRARIAN.
-- [x] Restrict profile and password changes to the owner, except staff may manage student/faculty accounts.
-- [x] Implement book permissions: ADMINISTRATOR can add, update, and delete books; LIBRARIAN can update and delete books.
-- [ ] Add authorization tests for allowed and denied requests, including cross-account profile/password attempts.
+- [x] Restrict faculty and library-assistant creation to LIBRARIAN; pin public signup to STUDENT.
+- [x] Limit administrators to student/faculty account management; allow librarians to manage administrator accounts too; protect librarian accounts from peer management.
+- [x] Allow students/faculty to delete their own accounts and staff to delete only their permitted target roles.
+- [x] Restrict the paginated directory and cross-account profile reads by caller and target roles.
+- [x] Allow ADMINISTRATOR and LIBRARIAN to add, update, and delete books.
+- [x] Add authorization tests for allowed and denied requests, including cross-account profile/password attempts.
+- [ ] Define a controlled first-librarian provisioning workflow before using librarian-only account routes; no librarian seed is installed.
 
 ### 2. Add loans
 
@@ -49,9 +51,9 @@ Account profile and password operations enforce owner access, with administrator
 
 ### 4. Keep the public and internal docs aligned
 
-- [ ] Update README status, endpoint summary, and architecture diagrams after behavior lands.
-- [ ] Update AGENTS.md and Current System Engineering Reference with the new current facts and contributor rules.
-- [ ] Update OpenAPI and the API documentation guide only where their contracts or conventions change.
+- [x] Update README status, endpoint summary, and historical administrator bootstrap configuration.
+- [x] Update AGENTS.md and Current System Engineering Reference with the new current facts and contributor rules.
+- [x] Update OpenAPI operation descriptions to match role boundaries.
 - [ ] Review the generated OpenAPI document and Swagger UI against runtime behavior.
 
 ## Database migration rule

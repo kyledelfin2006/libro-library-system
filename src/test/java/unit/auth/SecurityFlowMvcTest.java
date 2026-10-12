@@ -47,6 +47,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -185,11 +186,118 @@ class SecurityFlowMvcTest {
         verifyNoInteractions(bookMapper);
     }
 
+    @Test
+    void librarianCanCreateLibraryAssistant() throws Exception {
+        when(userRepository.findByUniversityId(UNIVERSITY_ID))
+                .thenReturn(Optional.of(libroUser(UserRole.LIBRARIAN)));
+        when(userService.createAdministrator(any(), any())).thenReturn(new UserResponseDTO(
+                "2025-9999", "Library", "Assistant", null,
+                "assistant@example.edu", UserRole.ADMINISTRATOR, null, null));
+
+        mockMvc.perform(post("/app/users/administrators")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthorization(PASSWORD))
+                        .with(csrf())
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {"universityId":"2025-9999","password":"GoodPassword1!",
+                                 "firstName":"Library","lastName":"Assistant",
+                                 "email":"assistant@example.edu","userRole":"LIBRARIAN"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.userRole").value("ADMINISTRATOR"));
+
+        verify(userService).createAdministrator(any(), any());
+    }
+
+    @Test
+    void administratorCannotCreateLibraryAssistant() throws Exception {
+        when(userRepository.findByUniversityId(UNIVERSITY_ID))
+                .thenReturn(Optional.of(libroUser(UserRole.ADMINISTRATOR)));
+
+        mockMvc.perform(post("/app/users/administrators")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthorization(PASSWORD))
+                        .with(csrf())
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    void librarianCanAddBooks() throws Exception {
+        when(userRepository.findByUniversityId(UNIVERSITY_ID))
+                .thenReturn(Optional.of(libroUser(UserRole.LIBRARIAN)));
+        when(bookService.addBook(any())).thenReturn(book());
+        when(bookMapper.toResponseDTO(any(Book.class))).thenReturn(bookResponse());
+
+        mockMvc.perform(post("/app/books/add")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthorization(PASSWORD))
+                        .with(csrf())
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"title\":\"1984\",\"author\":\"George Orwell\",\"genre\":\"Dystopian\",\"price\":19.99}"))
+                .andExpect(status().isCreated());
+
+        verify(bookService).addBook(any());
+    }
+
+    @Test
+    void administratorCanAddBooks() throws Exception {
+        when(userRepository.findByUniversityId(UNIVERSITY_ID))
+                .thenReturn(Optional.of(libroUser(UserRole.ADMINISTRATOR)));
+        when(bookService.addBook(any())).thenReturn(book());
+        when(bookMapper.toResponseDTO(any(Book.class))).thenReturn(bookResponse());
+
+        mockMvc.perform(post("/app/books/add")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthorization(PASSWORD))
+                        .with(csrf())
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"title\":\"1984\",\"author\":\"George Orwell\",\"genre\":\"Dystopian\",\"price\":19.99}"))
+                .andExpect(status().isCreated());
+
+        verify(bookService).addBook(any());
+    }
+
+    @Test
+    void studentCannotAddBooks() throws Exception {
+        when(userRepository.findByUniversityId(UNIVERSITY_ID))
+                .thenReturn(Optional.of(libroUser(UserRole.STUDENT)));
+
+        mockMvc.perform(post("/app/books/add")
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthorization(PASSWORD))
+                        .with(csrf())
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"title\":\"1984\",\"author\":\"George Orwell\",\"genre\":\"Dystopian\",\"price\":19.99}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(bookService, bookMapper);
+    }
+
+    @Test
+    void facultyCanReachOwnAccountDeletionRoute() throws Exception {
+        when(userRepository.findByUniversityId(UNIVERSITY_ID))
+                .thenReturn(Optional.of(libroUser(UserRole.FACULTY)));
+
+        mockMvc.perform(delete("/app/users/{universityId}", UNIVERSITY_ID)
+                        .header(HttpHeaders.AUTHORIZATION, basicAuthorization(PASSWORD))
+                        .with(csrf()))
+                .andExpect(status().isOk());
+
+        verify(userService).deleteUserByUniversityId(
+                org.mockito.ArgumentMatchers.eq(UNIVERSITY_ID),
+                org.mockito.ArgumentMatchers.eq(UNIVERSITY_ID),
+                org.mockito.ArgumentMatchers.anyCollection());
+    }
+
     private User libroUser() {
+        return libroUser(UserRole.STUDENT);
+    }
+
+    private User libroUser(UserRole role) {
         User user = new User();
         user.setUniversityId(UNIVERSITY_ID);
         user.setPasswordHash(passwordHash);
-        user.setUserRole(UserRole.STUDENT);
+        user.setUserRole(role);
         return user;
     }
 
