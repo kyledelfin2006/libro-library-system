@@ -9,13 +9,27 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
 
-Libro is a Spring Boot REST API and Library Management System. It manages books with CRUD operations, search, pagination, sorting, range filtering, genre analytics, and statistics. It also exposes user account and profile routes for creation, listing, lookup, profile updates, password changes, and deletion. Loan HTTP APIs are not implemented. The prototype uses DTO-driven validation, centralized exception handling, and a Docker-first workflow backed by PostgreSQL 18 with Flyway database migrations.
+Libro is a library management system built with Spring Boot. It helps manage a library's book collection and user accounts.
+
+### Features
+
+- **Manage the collection:** create, view, replace, partially update, and delete book records. Each record represents one physical copy, so duplicate titles can be listed as separate copies.
+- **Search and browse:** search by title, author, genre, or exact price. Combine title, author, genre, and price filters, then page and sort the results.
+- **Filter by price:** find books within a minimum and maximum price, or list books at or below a budget.
+- **Review collection statistics:** see the number of books, total and average collection value, the most expensive book, and a count of books by genre.
+- **Manage user accounts:** sign up, browse the permitted account directory, look up profiles, update profile details, change passwords, and delete accounts. Staff account creation and account management are restricted by role.
+- **Check service availability:** use the health endpoint to check API and database reachability.
+- **Reliable API workflow:** request validation and consistent error responses help make the API easier to use. The application runs with Docker and stores data in PostgreSQL 18, with Flyway managing database changes.
+
+Loan HTTP APIs are not implemented yet.
 
 The institutional context behind the user domain is documented in [Institutional Context](docs/institutional-context.md), including its ASU-CCS setting and alignment with existing MIS identity conventions.
 
 The current domain decision is documented in [Domain Decisions](docs/domain-decisions.md): each `Book` represents one physical borrowable copy, so one copy can be assigned to only one active borrower at a time. Separate copies of the same title are separate records.
 
-The API exposes generated OpenAPI documentation through Springdoc. Swagger UI is available at `/swagger-ui.html` and the machine-readable specification is available at `/v3/api-docs` when the application is running; both require HTTP Basic authentication under the current catch-all security rule. `POST /app/users/signup` is the only unauthenticated route. Other routes require a university ID and password. CSRF protection remains enabled, so unsafe requests also need a valid CSRF token. See the [API Documentation Guideline](docs/api-documentation-guideline.md) for the project standard.
+The API exposes generated OpenAPI documentation through Springdoc. When the application is running, explore it in [Swagger UI](http://localhost:8080/swagger-ui.html) or view the machine-readable specification at [`/v3/api-docs`](http://localhost:8080/v3/api-docs).
+
+Routes require HTTP Basic authentication with a university ID and password, except for `POST /app/users/signup`. CSRF protection is enabled, so requests that change data also need a valid CSRF token. See the [API Documentation Guideline](docs/api-documentation-guideline.md) for the project standard.
 
 Main Developer: **Aldrin Kyle Delfin**
 
