@@ -11,49 +11,20 @@
 
 Libro is a library management system built with Spring Boot. It helps manage a library's book collection and user accounts.
 
-### Features
+### ✨ Features
 
-#### Book catalog
+- 📚 **Books:** create, view, replace, partially update, and delete physical-copy records.
+- 🔎 **Search:** find books by title, author, genre, or exact price; combine filters, sort, paginate, and filter by price or budget.
+- 📊 **Insights:** view book counts, total and average value, the most expensive book, and genre counts.
+- 👥 **Accounts:** sign up, browse permitted listings, look up profiles, update details, change passwords, and delete accounts. Staff access follows role permissions.
+- 🛠️ **Built for development:** Docker, PostgreSQL 18, Flyway migrations, request validation, and consistent error responses.
+- 🩺 **Health check:** check API and database reachability.
 
-- Create, view, replace, partially update, and delete book records.
-- Search by title, author, genre, or exact price.
-- Combine search filters, sort results, and browse them page by page.
-- Filter by a price range or set a maximum budget.
-- Track each physical copy as a separate record, including duplicate titles.
+Loan HTTP APIs are not implemented yet. Each `Book` is one physical copy; separate copies of a title have separate records. See [Domain Decisions](docs/domain-decisions.md).
 
-#### Library insights
+### 🔐 API access
 
-- View the number of books and their total and average value.
-- Find the most expensive book.
-- See how many books are listed in each genre.
-
-#### User accounts
-
-- Sign up, view permitted account listings, and look up profiles.
-- Update profile details, change passwords, and delete accounts.
-- Create and manage staff accounts according to role permissions.
-
-#### API and setup
-
-- Validate requests and return consistent error responses.
-- Run the application with Docker, PostgreSQL 18, and Flyway database migrations.
-- Check API and database reachability through the health endpoint.
-
-Loan HTTP APIs are not implemented yet.
-
-### Project context
-
-The user domain reflects the ASU-CCS setting and existing MIS identity conventions. See [Institutional Context](docs/institutional-context.md).
-
-### Book-copy model
-
-Each `Book` represents one physical borrowable copy. A copy can be assigned to only one active borrower at a time, and separate copies of the same title have separate records. See [Domain Decisions](docs/domain-decisions.md).
-
-### API documentation and access
-
-The API exposes generated OpenAPI documentation through Springdoc. When the application is running, use [Swagger UI](http://localhost:8080/swagger-ui.html) or view the specification at [`/v3/api-docs`](http://localhost:8080/v3/api-docs).
-
-Routes require HTTP Basic authentication with a university ID and password, except for `POST /app/users/signup`. CSRF protection is enabled, so requests that change data also need a valid CSRF token. See the [API Documentation Guideline](docs/api-documentation-guideline.md) for the project standard.
+Explore the generated API docs in [Swagger UI](http://localhost:8080/swagger-ui.html) or [`/v3/api-docs`](http://localhost:8080/v3/api-docs). HTTP Basic authentication is required except for `POST /app/users/signup`; write requests also require a CSRF token. See [Institutional Context](docs/institutional-context.md) and the [API Documentation Guideline](docs/api-documentation-guideline.md).
 
 Main Developer: **Aldrin Kyle Delfin**
 
