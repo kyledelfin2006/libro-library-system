@@ -69,7 +69,7 @@ Main Developer: **Aldrin Kyle Delfin**
 
 This README remains the project's main portfolio entry point. Supporting documents are grouped by audience so readers can choose a project overview or implementation reference.
 
-### For recruiters and project reviewers
+**For technical and peer review**
 
 1. The Architecture Overview and Request Lifecycle sections below explain the current system with component, security, persistence, and startup diagrams.
 2. [Development Problems Solved](docs/development-problems-solved.md) explains major engineering challenges, decisions, and verification.
