@@ -6,6 +6,7 @@ import app.book.repository.projection.LibraryAggregate;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -13,10 +14,21 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import jakarta.persistence.LockModeType;
 
 /** Persistence operations for physical book copies and collection statistics. */
 @Repository
 public interface BookRepository extends JpaRepository<Book, Long> {
+
+    /**
+     * Loads and write-locks one physical copy during a checkout or loss resolution.
+     *
+     * @param id physical copy identifier
+     * @return the locked copy, if it exists
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Book b WHERE b.id = :id")
+    Optional<Book> findByIdForUpdate(@Param("id") Long id);
 
     /**
      * Finds a page of books matching every supplied filter.
@@ -175,6 +187,7 @@ public interface BookRepository extends JpaRepository<Book, Long> {
      *
      * @param id the ID of the book to delete
      * @return the number of rows deleted (0 if no book with the given ID was found)
+     * @throws org.springframework.dao.DataIntegrityViolationException if a loan references this copy
      */
     @Modifying(clearAutomatically = true) // Essentially it clears the persistence context to avoid stale data
     @Query("DELETE FROM Book b WHERE b.id = :id")

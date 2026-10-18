@@ -1,6 +1,6 @@
 # API Documentation Guideline
 
-This guide defines how to keep the book and user APIs complete in generated OpenAPI while keeping Spring MVC controller code focused on HTTP behavior. Swagger UI should be useful as the project's interactive API reference and portfolio demonstration; the OpenAPI document is the contract it renders.
+This guide defines how to keep the book, user, and loan APIs complete in generated OpenAPI while keeping Spring MVC controller code focused on HTTP behavior. Swagger UI should be useful as the project's interactive API reference and portfolio demonstration; the OpenAPI document is the contract it renders.
 
 ## Documentation ownership
 
@@ -70,7 +70,7 @@ Swagger UI is an interactive API explorer backed by the generated OpenAPI specif
 
 Before calling the API documentation portfolio-ready, inspect the generated `/v3/api-docs` and Swagger UI for both tags and verify:
 
-- every live route appears under the correct book or user tag;
+- every live route appears under the correct resource tag (Books, Users, or Loans);
 - summaries, descriptions, parameter defaults/limits, request schemas, response schemas, status codes, and expected errors match runtime behavior;
 - examples validate against the request DTOs and reveal no secrets or personal data;
 - PATCH and PUT semantics are distinct where the implementation distinguishes them;

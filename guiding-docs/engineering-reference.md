@@ -6,7 +6,7 @@ This is the detailed implementation reference for agents and contributors. The r
 
 It documents the repository as it exists, the intended architecture, the contracts between layers, and the checks expected before a contribution is considered complete.
 
-The application is a single-module Spring Boot REST API for managing a library's book collection and user accounts. It exposes book CRUD, search, pagination, sorting, price filtering, aggregation, and health endpoints, plus user creation, listing, lookup, profile updates, password changes, and deletion. PostgreSQL backs persistence. Loan routes are not implemented.
+The application is a single-module Spring Boot REST API for managing a library's book collection, user accounts, and loan history. It exposes book CRUD/search/statistics, user/account operations, loan checkout/return/loss/history routes, and health endpoints. PostgreSQL backs persistence.
 
 ## Project Snapshot
 
@@ -45,6 +45,14 @@ library-api-system/
     |   |   |-- LibraryApplication.java
     |   |   |-- auth/
     |   |   |   `-- SecurityConfig.java
+    |   |   |-- loan/
+    |   |   |   |-- config/LoanTimeConfig.java
+    |   |   |   |-- controller/LoanAPI.java
+    |   |   |   |-- dto/LoanResponseDTO.java
+    |   |   |   |-- entity/Loan.java and LoanStatus.java
+    |   |   |   |-- mapper/LoanMapper.java
+    |   |   |   |-- repository/LoanRepository.java
+    |   |   |   `-- service/LoanService.java
     |   |   |-- book/
     |   |   |   |-- controller/BookAPI.java
     |   |   |   |-- dto/
@@ -52,7 +60,7 @@ library-api-system/
     |   |   |   |   |-- BookPatchRequestDTO.java
     |   |   |   |   |-- BookResponseDTO.java
     |   |   |   |   `-- LibraryStatisticsDTO.java
-    |   |   |   |-- entity/Book.java
+    |   |   |   |-- entity/Book.java, BookCopyStatus.java
     |   |   |   |-- exceptions/
     |   |   |   |   |-- BookNotFoundException.java
     |   |   |   |   `-- BookValidationException.java
@@ -94,6 +102,7 @@ library-api-system/
     |           |-- V1__create_books_table.sql
     |           |-- V2__create_users_table.sql
     |           |-- V3__add_librarian_role.sql
+    |           `-- V4__add_loans_and_copy_status.sql
     `-- test/
         |-- java/unit/auth/
         |   `-- SecurityFlowMvcTest.java
@@ -121,14 +130,14 @@ Keep production code below the root `app` package. `LibraryApplication` sits at 
 
 ## Runtime Architecture
 
-Book and user API operations follow their own controller and service paths, then share the JPA persistence boundary:
+Book, user, and loan API operations follow their feature controller and service paths, then share the JPA persistence boundary:
 
 ```text
 HTTP client
   -> Spring Security filter chain
-  -> BookAPI or UserAPI controller
-  -> BookService or UserService
-  -> BookRepository or UserRepository
+  -> BookAPI, UserAPI, or LoanAPI controller
+  -> BookService, UserService, or LoanService
+  -> feature repositories (LoanService also uses BookRepository and UserRepository)
   -> Hibernate/JPA
   -> PostgreSQL
 ```
@@ -144,7 +153,7 @@ HTTP Basic credentials
   -> PostgreSQL users table
 ```
 
-`UserService` uses `UserRepository` for signup and account operations; `LibroUserDetailsService` uses it to load the stored password hash and role for authentication. Signup is public, while other routes require authentication. Neither controller accesses a repository directly. Response paths generally convert entities to DTOs through the feature mapper. Exceptions escape their originating layer and are converted to JSON by `GlobalExceptionHandler`.
+`UserService` uses `UserRepository` for signup and account operations; `LoanService` uses it to load and lock borrowers; `LibroUserDetailsService` uses it to load the stored password hash and role for authentication. Signup is public, while other routes require authentication. Controllers do not access repositories directly. Response paths generally convert entities to DTOs through the feature mapper. Exceptions escape their originating layer and are converted to JSON by `GlobalExceptionHandler`.
 
 ### Application entry point
 
@@ -166,9 +175,11 @@ HTTP Basic credentials
 
 Do not add repository access to the controller. New endpoint logic should remain thin and be independently testable in the service.
 
+`UserAPI` owns account routes and delegates ownership and target-role checks to `UserService`. `LoanAPI` binds checkout, return, lost-resolution, and history routes; it passes the authenticated university ID to `LoanService` and never accepts a borrower ID for checkout.
+
 ### Service layer
 
-`BookService` is the business-logic boundary and transaction owner. It coordinates repositories and mapping, validates rules not adequately represented by request annotations, and translates missing data into `BookNotFoundException`.
+`BookService`, `UserService`, and `LoanService` are the business-logic boundaries and transaction owners for their features. They coordinate repositories and mapping, validate rules not adequately represented by request annotations, and translate missing data into feature exceptions.
 
 Write methods are transactional:
 
@@ -190,7 +201,7 @@ PATCH and PUT intentionally omit `repository.save(existingBook)`. Hibernate dirt
 
 #### PUT vs PATCH: partial-update design
 
-The controller layer distinguishes full replacement (PUT) from partial updates (PATCH) through validation strategy:
+The book controller distinguishes full replacement (PUT) from partial updates (PATCH) through validation strategy:
 
 - **PUT (`replaceBook`)**: The controller annotates the request body with `@Valid @RequestBody BookRequestDTO`. This activates all DTO annotations (`@NotBlank`, `@Size`, `@Positive`, `@NotNull`) on every invocation, enforcing a complete, valid payload. The service method (`replaceBook`) additionally performs manual checks as defense-in-depth, protecting callers that bypass the controller's `@Valid` (e.g., scheduled jobs, internal consumers). The mapper's `updateBookFromDto` overwrites every mutable field onto the fetched managed entity.
 
@@ -227,7 +238,9 @@ The user feature currently contains the entity, enums, create/response DTOs, map
 
 ### Entity and database model
 
-The current domain decision is that one `Book` entity represents one physical borrowable copy, not a title-level inventory record. Separate physical copies of the same title are separate rows with different generated IDs. A future loan feature must allow at most one active borrower per `Book` row; do not add `availableCopies` or `totalCopies` to `Book` without revisiting this decision.
+The current domain decision is that one `Book` entity represents one physical borrowable copy, not a title-level inventory record. Separate physical copies of the same title are separate rows with different generated IDs. One `Book` row can have at most one active loan, enforced by a PostgreSQL partial unique index. Do not add `availableCopies` or `totalCopies` to `Book` without revisiting this decision.
+
+`Loan` represents one checkout event and remains in history after return or loss. Its explicit state is `ACTIVE`, `RETURNED`, or `LOST`; nullable `returnedAt` alone does not define activity because a lost loan also has no return time. Overdue is derived from active status and the Manila-local due time, and is not stored. V4 adds loan state constraints and prevents deletion of referenced users or copies.
 
 `Book` maps to `books`:
 
@@ -238,7 +251,10 @@ The current domain decision is that one `Book` entity represents one physical bo
 | `author` | `String` | `VARCHAR(50)` | Nonblank, not null |
 | `genre` | `String` | `VARCHAR(50)` | Nonblank, not null |
 | `price` | `BigDecimal` | `DECIMAL(10,2)` | Not null, positive at application boundary |
+| `copyStatus` | `BookCopyStatus` | `VARCHAR(24)` | `IN_COLLECTION` or `LOST`; defaults to `IN_COLLECTION` |
 | `createdAt` | `LocalDateTime` | `TIMESTAMP` | Not null, set on insert, immutable after creation, omitted from response DTOs |
+
+`Loan` maps to `loans` and has required borrower/book links plus `borrowedAt`, `dueAt`, and `status`. `returnedAt` is set only for returned loans; `lostAt` and `lostBy` are set only for lost loans. All timestamps are Manila-local `LocalDateTime` values. The response DTO adds a calculated `overdue` field; it is never persisted.
 
 Use `BigDecimal` for all money-related values and comparisons. Do not replace it with `double` or `float`. Use `compareTo` for numerical equality in tests because `BigDecimal.equals` also compares scale.
 
@@ -300,7 +316,7 @@ Before deploying user routes to an environment with untrusted clients, select th
 
 ## Endpoint Inventory
 
-Book routes use `/app/books`; user routes use `/app/users`.
+Book routes use `/app/books`; user routes use `/app/users`; loan routes use `/app/loans`.
 
 | Method | Path | Purpose | Response shape |
 |---|---|---|---|
@@ -334,6 +350,18 @@ User routes:
 | PUT | `/app/users/{universityId}` | Replace own or student/faculty profile (staff may manage student/faculty) | `ApiResponse<UserResponseDTO>` |
 | PUT | `/app/users/{universityId}/password` | Change own password or staff-reset a student/faculty password | `ApiResponse<Void>` |
 | DELETE | `/app/users/{universityId}` | Owner deletes own student/faculty account; staff delete permitted target roles | `ApiResponse<Void>` |
+
+Loan routes:
+
+| Method | Path | Purpose | Response shape |
+|---|---|---|---|
+| POST | `/app/loans/{bookId}` | Student/faculty borrows one physical copy; 14-calendar-day term | `ApiResponse<LoanResponseDTO>`, HTTP 201 |
+| PUT | `/app/loans/{loanId}/return` | Borrower returns own active loan | `ApiResponse<LoanResponseDTO>` |
+| PUT | `/app/loans/{loanId}/lost` | Authorized library staff resolves an active loan as lost | `ApiResponse<LoanResponseDTO>` |
+| GET | `/app/loans/me` | Caller reads own paged history | Spring `Page<LoanResponseDTO>` |
+| GET | `/app/loans/users/{universityId}` | Authorized staff reads a permitted user's history | Spring `Page<LoanResponseDTO>` |
+
+Only students and faculty can borrow or return. All roles can read their own history. Library assistants can view/resolve student and faculty loans; librarians can also view/resolve library-assistant loans. Check `SecurityConfig` and `LoanService` for the enforced policy.
 
 When adding an endpoint, update this file and `README.md`, document the operation and public DTO schemas following [API Documentation Guideline](../docs/api-documentation-guideline.md), provide request/response examples where useful, and add tests at the appropriate layer.
 
@@ -416,7 +444,7 @@ Important persistence settings:
 
 ## Database Migration Rules
 
-`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` creates `users` with identity, role, course, major, uniqueness, format, and cross-field constraints, then inserts the historical bootstrap administrator/library assistant using the configured BCrypt hash. V3 adds the LIBRARIAN role and matching staff academic-field constraints. No librarian or loan data is seeded. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
+`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` creates `users` with identity, role, course, major, uniqueness, format, and cross-field constraints, then inserts the historical bootstrap administrator/library assistant using the configured BCrypt hash. V3 adds the LIBRARIAN role and matching staff academic-field constraints. V4 adds `books.copy_status` and the `loans` table with state checks, foreign-key delete restrictions, borrower-history indexes, and the one-active-loan-per-copy index. No librarian or loan data is seeded. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
 
 For every schema change:
 
@@ -617,8 +645,8 @@ When a breaking change is intended, document migration guidance and update all e
 - The Docker image requires a prebuilt JAR and does not build source itself.
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
 - Signup always creates a student; librarians create faculty and library assistants; students/faculty may delete themselves, administrators may delete student/faculty accounts, and librarians may also delete library assistant accounts.
-- There is no loan feature. User routes have MVC contract, PostgreSQL integration, and HTTP Basic security-flow coverage; the security MVC tests mock the user repository.
-- Docker-backed JPA/migration checks are implemented but require a working Docker daemon to verify. A fresh-to-existing migration upgrade path still needs tests.
+- Loan routes and V4 are implemented, but loan-specific service, MVC/security, and PostgreSQL tests have not yet been added. User routes have MVC contract, PostgreSQL integration, and HTTP Basic security-flow coverage; the security MVC tests mock the user repository.
+- Docker-backed JPA/migration checks are implemented but require a working Docker daemon to verify. A V1-to-V4 fresh startup and V3-to-V4 upgrade path need explicit verification.
 - Success response shapes are inconsistent across endpoints.
 - `timestamp` fields are epoch milliseconds rather than ISO-8601 values.
 - The book health endpoint runs a lightweight database ping but is not integrated with Spring Boot Actuator or container health checks.

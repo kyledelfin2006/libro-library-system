@@ -3,6 +3,8 @@ package app.global.exceptions;
 import app.book.exceptions.BookNotFoundException;
 import app.book.exceptions.BookValidationException;
 import app.global.responses.ErrorResponse;
+import app.loan.exception.LoanConflictException;
+import app.loan.exception.LoanNotFoundException;
 import app.user.exception.UserNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -49,6 +51,32 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex) {
         ErrorResponse error = new ErrorResponse("Forbidden", "You are not allowed to access this account", 403);
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    /**
+     * Converts a loan state or availability conflict into HTTP 409.
+     *
+     * @param ex the client-safe loan conflict
+     * @return a standardized conflict response
+     */
+    @ExceptionHandler(LoanConflictException.class)
+    public ResponseEntity<ErrorResponse> handleLoanConflict(LoanConflictException ex) {
+        // Loan rules provide a safe explanation without exposing database constraints.
+        ErrorResponse error = new ErrorResponse("Loan conflict", ex.getMessage(), 409);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    /**
+     * Converts a missing or inaccessible loan into HTTP 404.
+     *
+     * @param ex the client-safe loan lookup failure
+     * @return a standardized not-found response
+     */
+    @ExceptionHandler(LoanNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleLoanNotFound(LoanNotFoundException ex) {
+        // The service uses the same response for missing and another borrower's loan IDs.
+        ErrorResponse error = new ErrorResponse("Loan not found", ex.getMessage(), 404);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
     /**

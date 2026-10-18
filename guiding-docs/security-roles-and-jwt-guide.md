@@ -1,13 +1,13 @@
 # Libro Roles and JWT Guide
 
-This guide defines the target authorization policy and a staged implementation path for replacing HTTP Basic with local JWT authentication. It is a specification, not a statement that the endpoints described here are already implemented.
+This guide records the live role and loan policy plus a target design for replacing HTTP Basic with local JWT authentication. Loan rules below are implemented; JWT remains planned.
 
 ## Current state
 
 - Libro currently uses HTTP Basic authentication backed by `LibroUserDetailsService` and BCrypt.
 - `UserRole` contains `STUDENT`, `FACULTY`, `ADMINISTRATOR`, and `LIBRARIAN`; Flyway V3 adds the librarian value to the accepted database role constraint.
-- Role and account boundaries below are implemented while HTTP Basic remains active. No librarian is seeded; first-account provisioning is deferred. JWT and loans are still planned.
-- There is no loan entity or loan API yet. A `Book` row represents one physical copy, and the loan domain must prevent more than one active loan for that copy.
+- Role and account boundaries below are implemented while HTTP Basic remains active. No librarian is seeded; first-account provisioning is deferred. JWT remains planned.
+- Loan routes and persistence are implemented under HTTP Basic. A `Book` row represents one physical copy; only one active loan may reference a copy, and a copy marked lost cannot be loaned again.
 
 ## Role policy
 
@@ -18,12 +18,12 @@ Role names describe library access levels, not school job titles:
 - `FACULTY` means school faculty using the library as patrons.
 - `STUDENT` means students using the library as patrons.
 
-| Role | Can do | Cannot do | Future loan permissions (not implemented) |
+| Role | Can do | Cannot do | Loan permissions |
 |---|---|---|---|
-| `STUDENT` | View/search books; manage and delete their own account; create a student account through public signup | View/manage other users; add, update, or delete books; create privileged accounts | Borrow/return books and view own loan history |
-| `FACULTY` | Same patron permissions as students; manage and delete their own account | Self-register as faculty; view/manage other users; add, update, or delete books | Same as students |
-| `ADMINISTRATOR` (library assistant) | View, edit, and reset student/faculty accounts; delete student/faculty accounts; add, update, and delete books; manage own profile/password | Create accounts; manage/delete administrator or librarian accounts; delete own account | Borrow/return and view own history; view student/faculty loan histories |
-| `LIBRARIAN` | Create faculty and administrator accounts; view, edit, reset, and delete student/faculty/administrator accounts; add, update, and delete books; manage own profile/password | Manage/delete another librarian account; delete own account | Borrow/return and view own history; view student, faculty, and administrator loan histories |
+| `STUDENT` | View/search books; manage and delete their own account; create a student account through public signup | View/manage other users; add, update, or delete books; create privileged accounts | Borrow and return own loans; view own loan history |
+| `FACULTY` | Same patron permissions as students; manage and delete their own account | Self-register as faculty; view/manage other users; add, update, or delete books | Same loan permissions as students |
+| `ADMINISTRATOR` (library assistant) | View, edit, and reset student/faculty accounts; delete student/faculty accounts; add, update, and delete books; manage own profile/password | Create accounts; manage/delete administrator or librarian accounts; delete own account | Cannot borrow or return books; view own history and student/faculty loan histories |
+| `LIBRARIAN` | Create faculty and administrator accounts; view, edit, reset, and delete student/faculty/administrator accounts; add, update, and delete books; manage own profile/password | Manage/delete another librarian account; delete own account | Cannot borrow or return books; view own history and student/faculty/administrator loan histories |
 
 `FACULTY` has the same patron permissions as `STUDENT`. Administrators inherit the patron book permissions. The librarian can manage the library collection and user groups listed above. Neither staff role can change another librarian's account. Account roles are selected by the service, never by a submitted request role.
 
@@ -35,25 +35,29 @@ Account boundaries:
 - `GET /app/users/{universityId}` is available to the owner. Administrators may additionally read student/faculty profiles. Librarians may additionally read student/faculty/administrator profiles, but no staff role may read another librarian's profile.
 - Profile PATCH/PUT and password change are available to the owner, administrators, and librarians. Administrators may manage student/faculty accounts; librarians may also manage administrator accounts. Neither staff role may manage another librarian's profile/password.
 - `DELETE /app/users/{universityId}` allows students/faculty to delete themselves, administrators to delete students/faculty, and librarians to delete students/faculty/administrators. Administrator and librarian accounts cannot delete themselves; librarian accounts cannot be deleted through this route.
-- To preserve future loan history and its foreign-key references, account deletion must return HTTP 409 while any loan record references that user.
+- To preserve loan history and its foreign-key references, account deletion returns HTTP 409 while any loan record references that user.
 
 Use Spring authorities named `ROLE_STUDENT`, `ROLE_FACULTY`, `ROLE_ADMINISTRATOR`, and `ROLE_LIBRARIAN`. Keep authorization rules in the security layer and ownership checks in the service layer, where the authenticated university ID is passed explicitly. Do not trust a user ID in a request body to identify the caller.
 
 ## Loan API and persistence
 
-Loans are a separate feature under `app.loan`, following the existing feature-oriented package structure.
+Loans are implemented as a separate feature under `app.loan`, following the existing feature-oriented package structure.
 
 | Method | Path | Purpose | Access |
 |---|---|---|---|
-| POST | `/app/loans/{bookId}` | Borrow one physical copy for the authenticated user | All roles |
-| PUT | `/app/loans/{loanId}/return` | Return the caller's active loan | All roles; own loan only |
-| GET | `/app/loans/me` | View the caller's loan history, including active and returned loans | All roles |
+| POST | `/app/loans/{bookId}` | Borrow one physical copy for the authenticated user | Students/faculty only; at most three active loans and no overdue active loan |
+| PUT | `/app/loans/{loanId}/return` | Return the caller's active loan | Students/faculty only; own loan only |
+| PUT | `/app/loans/{loanId}/lost` | Staff closes an active loan as lost and marks the copy lost | Library assistants: student/faculty; librarians: student/faculty/library assistants |
+| GET | `/app/loans/me` | View the caller's loan history, including active and terminal loans | All roles |
+| GET | `/app/loans/users/{universityId}` | View a patron's loan history | Administrators: students/faculty; librarians: students/faculty/administrators |
 
-The borrower is always derived from the authenticated principal. The client supplies a book ID to borrow, never a borrower ID. A loan response should contain its loan ID, book ID, borrow date, due date, and nullable return date; it must not expose JPA entities.
+The borrower is always derived from the authenticated principal. The client supplies a book ID to borrow, never a borrower ID. Loan responses contain a DTO, not JPA entities.
 
-The `Loan` entity references one `User` and one `Book`, with `borrowedAt`, `dueAt`, and nullable `returnedAt` fields. Keep writes in `LoanService` transactions. Check availability for a clear error, then enforce the concurrency invariant in PostgreSQL with a partial unique index on `book_id` where `returned_at IS NULL`. Translate a duplicate-active-loan constraint failure to HTTP 409. Preserve loan rows; user deletion is blocked while loan history exists.
+Only students and faculty may create loans or return their own loans. Administrators (library assistants) and librarians cannot borrow or return books, but can view their own history through `/app/loans/me`. They may also view other patrons' histories within the role boundaries above. A borrower may have at most three active loans. A borrower with any overdue active loan cannot borrow another copy. Overdue is calculated when needed and is not stored. Library assistants and librarians can mark permitted active patron loans as lost; the action records who and when and marks the physical copy unavailable. Penalties and repeat-offender rules are out of scope for the current loan implementation.
 
-**Policy needed before coding loans:** the library must choose the loan period used to calculate `dueAt`. Do not invent a duration in the implementation.
+The `Loan` entity references one `User` and one `Book`, with `borrowedAt`, `dueAt`, `status`, nullable `returnedAt`, and optional loss audit fields. `ACTIVE`, `RETURNED`, and `LOST` are event-driven states; overdue is calculated at read time. Writes run in `LoanService` transactions. The service checks availability for a clear error, and PostgreSQL enforces the concurrency invariant with a partial unique index on `book_id` where `status = 'ACTIVE'`. Loan rows are preserved; user and book deletion are blocked while loan history exists.
+
+The approved loan period is 14 calendar days with no weekend or holiday extension. Use Java `LocalDateTime`, interpreted as Asia/Manila local time, for loan timestamps. A book copy with any loan history cannot be deleted; return HTTP 409 and preserve its loan rows. Marking a loan lost records the staff member and time, closes that loan, and marks the physical copy `LOST`; lost copies cannot be borrowed or deleted. Monetary penalties and borrower suspension are out of scope.
 
 ## JWT login and request validation
 
@@ -88,9 +92,9 @@ Spring Security documents Resource Server support for JWT Bearer tokens and the 
 ## Implementation sequence
 
 1. **Roles and access rules:** implemented in `UserRole`, `SecurityConfig`, `UserService`, and Flyway V3. Public signup remains pinned to `STUDENT`; directory and ownership boundaries are enforced while Basic authentication remains active.
-2. **Loans:** add the entity, repository, next forward-only migration, partial unique index, DTOs, service, and controller. Resolve the loan-period policy first. Keep user deletion blocked while loan history references the account.
+2. **Loans:** implemented with a forward-only V4 migration, active-copy and borrower-limit concurrency protection, role-scoped histories, and lost-copy resolution. Focused service, MVC/security, and PostgreSQL tests remain to be added and run.
 3. **JWT:** add the Spring Boot OAuth2 Resource Server starter, JWT encoder/decoder configuration, secret/issuer settings, login DTO/controller/service, Bearer authorization, stateless session policy, and OpenAPI scheme. Remove HTTP Basic after the Bearer flow is working.
-4. **Documentation:** update `AGENTS.md`, README endpoint/security inventories, and OpenAPI annotations when the implementation lands. Keep this guide as the detailed policy reference.
+4. **Documentation:** keep `AGENTS.md`, README endpoint/security inventories, OpenAPI annotations, and [Loan Implementation Guide](../docs/loan.md) aligned with runtime behavior.
 
 ## Acceptance checks
 
@@ -99,6 +103,7 @@ Spring Security documents Resource Server support for JWT Bearer tokens and the 
 - Signup with `FACULTY`, `ADMINISTRATOR`, or `LIBRARIAN` in the payload still creates a student. Only librarians create faculty and library assistant accounts. Students/faculty may delete themselves, administrators may delete student/faculty accounts, and librarians may also delete library assistant accounts; staff cannot delete their own account.
 - Login uses the stored BCrypt hash and does not reveal whether the university ID exists.
 - Token claims contain the correct subject and role, use the configured issuer and 15-minute expiry, and contain no credential/profile secrets.
-- A loan always uses the authenticated caller as borrower. A borrower cannot return another user's loan. Two concurrent borrow attempts cannot create two active loans for one book copy.
-- Account deletion with loan history returns HTTP 409 and leaves the account and loan rows intact.
+- Only students and faculty can borrow and return their own loans; no caller can return another user's loan. Administrators and librarians can view and resolve loans only within their role boundaries. A borrower can have at most three active loans and cannot borrow while any loan is overdue.
+- Every loan uses the authenticated caller as borrower. Two concurrent borrow attempts cannot create two active loans for one book copy; concurrent attempts by one borrower cannot exceed the three-loan limit. Staff loss resolution records who and when, closes the active loan, and makes the physical copy unavailable.
+- Loan history prevents deletion of its referenced user or book copy with HTTP 409. User and copy history remain in the database.
 - Generated `/v3/api-docs` shows Bearer security on protected operations and no security requirement on signup/login. Run the normal Maven test suite and PostgreSQL integration profile where Docker is available.

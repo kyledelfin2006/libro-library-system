@@ -540,6 +540,7 @@ public class UserService {
      * @throws UserNotFoundException if no matching user exists
      * @throws AccessDeniedException if neither ownership nor a staff rule permits deletion
      * @throws IllegalArgumentException if the university ID format is invalid
+     * @throws org.springframework.dao.DataIntegrityViolationException if loan history references the account
      */
     @Transactional
     public void deleteUserByUniversityId(

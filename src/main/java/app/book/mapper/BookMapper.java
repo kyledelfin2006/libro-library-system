@@ -14,7 +14,7 @@ public class BookMapper {
 
 
     /**
-     * Converts a Book entity to a BookResponseDTO.
+     * Converts a Book entity to a response DTO, including the physical-copy status.
      *
      * @param book the entity to convert (maybe null)
      * @return the response DTO, or null if input is null
@@ -29,7 +29,8 @@ public class BookMapper {
                 book.getTitle(),
                 book.getAuthor(),
                 book.getGenre(),
-                book.getPrice()
+                book.getPrice(),
+                book.getCopyStatus()
         );
     }
 
@@ -65,8 +66,8 @@ public class BookMapper {
     }
 
     /**
-     * Updates an existing BookEntity from a BookRequestDTO.
-     * Useful for changing entire entities. (i.e. PUT)
+     * Replaces catalog fields from a complete request without changing copy status or creation time.
+     * Copy status is managed by the loan workflow, not by book-edit requests.
      */
     public void updateBookFromDto(BookRequestDTO dto, Book existingBook) {
         if (dto == null) return;

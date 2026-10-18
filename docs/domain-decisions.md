@@ -10,14 +10,16 @@ This means:
 - one physical item can be borrowed by only one person at a time;
 - separate physical copies of the same title are stored as separate `Book` records with different generated IDs;
 - duplicate title/author combinations are therefore allowed and do not represent accidental duplicates by themselves;
-- the future loan model should reference `Book.id` and enforce at most one active loan for each book copy.
+- the loan model references `Book.id` and enforces at most one active loan for each book copy.
 
 ### Institutional interpretation
 
 This decision matches the current institutional prototype context: the library tracks the individual item that is issued to a borrower. A loan is therefore an assignment of one available physical copy to one borrower, rather than a reservation against a title-level stock count.
 
-### Consequences for future loans
+### Loan behavior
 
-Before loan endpoints are implemented, the system should add a loan entity that references both the borrower and the physical `Book` record. The persistence model should enforce the one-active-loan rule through application validation and, where practical, a database constraint or partial unique index over active loans for the same `book_id`.
+The implemented `Loan` entity references both the borrower and physical `Book` record. The service checks availability and PostgreSQL enforces the one-active-loan rule with a partial unique index over active loans for the same `book_id`. Loan history is retained; a copy or user referenced by a loan cannot be deleted.
+
+Staff can resolve an active loan as `LOST`. This closes the loan without claiming the book was returned, records the staff member and time, and marks the physical copy lost so it cannot be loaned again. See [Loan Implementation Guide](loan.md) for roles and lifecycle details.
 
 If future requirements need title-level inventory, reporting, ISBN metadata, or multiple editions, introduce a separate title/work model and link individual `Book` copies to it. Do not add `availableCopies` or `totalCopies` directly to the current `Book` entity without revisiting this decision.

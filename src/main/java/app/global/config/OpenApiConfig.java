@@ -20,8 +20,8 @@ import org.springframework.context.annotation.Configuration;
         info = @Info(
                 title = "Libro Library API",
                 version = "1.0.0",
-                description = "Book collection and user account API for the Libro library management system prototype. "
-                        + "Book and user routes are live; loan routes are not implemented. HTTP Basic authentication uses a university ID and password; POST /app/users/signup is public, and all other routes require authentication. "
+                description = "Book collection, user account, and loan API for the Libro library management system prototype. "
+                        + "HTTP Basic authentication uses a university ID and password; POST /app/users/signup is public, and all other routes require authentication. "
                         + "Signup is public and creates student patron accounts only. Only the library librarian creates school faculty and library assistant accounts. All roles may read books; library assistants and the librarian may add, update, or delete books. Library assistants may view and manage student/faculty accounts; the librarian may also manage library assistant accounts. Students and faculty may delete their own accounts. CSRF protection remains enabled, so state-changing requests also need a valid CSRF token.",
                 license = @License(name = "Project-specific prototype; no distribution license declared")
         )

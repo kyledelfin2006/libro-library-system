@@ -1,5 +1,6 @@
 package app.book.dto;
 
+import app.book.entity.BookCopyStatus;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -23,4 +24,19 @@ public class BookResponseDTO {
     private String genre;
     @Schema(description = "Positive decimal price for the book.", example = "19.99")
     private BigDecimal price;
+    @Schema(description = "Whether the physical copy remains in the loanable collection.", example = "IN_COLLECTION")
+    private BookCopyStatus copyStatus;
+
+    /**
+     * Keeps existing response construction source-compatible with copies in the collection.
+     *
+     * @param id generated book identifier
+     * @param title normalized book title
+     * @param author normalized author name
+     * @param genre normalized genre
+     * @param price positive book price
+     */
+    public BookResponseDTO(Long id, String title, String author, String genre, BigDecimal price) {
+        this(id, title, author, genre, price, BookCopyStatus.IN_COLLECTION);
+    }
 }

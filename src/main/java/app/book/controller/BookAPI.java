@@ -108,10 +108,11 @@ public class BookAPI {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Delete a book", description = "Only library assistants and the librarian may delete books.")
+    @Operation(summary = "Delete a book", description = "Only library assistants and the librarian may delete books. A physical copy referenced by any loan history cannot be deleted.")
     @ErrorApiResponse(responseCode = "400", description = "Book ID must be a number")
     @ErrorApiResponse(responseCode = "404", description = "Book not found")
     @ErrorApiResponse(responseCode = "403", description = "Only library assistants and the librarian may delete books")
+    @ErrorApiResponse(responseCode = "409", description = "Book copy has loan history and must be retained")
     public ResponseEntity<ApiResponse<Void>> deleteBook(@PathVariable Long id) {
         service.deleteBookById(id);
         return ResponseEntity.ok(new ApiResponse<>(true, "Book deleted successfully"));

@@ -36,7 +36,7 @@ The service and database rules preserve the relationships between role, course, 
 
 In this institutional prototype, one `Book` record represents one physical copy held by the library. It is not a title-level inventory record. Therefore, one physical copy can be assigned to only one active borrower at a time. If the library owns multiple copies of the same title, each copy is represented by a separate `Book` record with its own generated ID.
 
-This keeps the model aligned with how an issued library item is tracked and gives a future loan feature a clear rule: a loan references one physical `Book` copy and an active copy cannot be loaned to another borrower until it is returned. The full rationale and future persistence implications are documented in [Domain Decisions](domain-decisions.md).
+This keeps the model aligned with how an issued library item is tracked: each loan references one physical `Book` copy and an active copy cannot be loaned to another borrower until the loan is returned or staff resolve it as lost. The rationale and persistence rules are documented in [Domain Decisions](domain-decisions.md).
 
 ## Why this belongs in the project reference
 

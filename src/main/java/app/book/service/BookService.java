@@ -147,6 +147,7 @@ public class BookService {
      *
      * @param id the ID of the book to delete
      * @throws BookNotFoundException if no book exists with the given ID
+     * @throws org.springframework.dao.DataIntegrityViolationException if loan history references this copy
      */
     @Transactional
     public void deleteBookById(Long id) {

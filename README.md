@@ -11,18 +11,19 @@
 
 Libro is a library management system built with Spring Boot. It helps manage a library's book collection and user accounts.
 
-### ✨ Features
+### Features
 
 - 📚 **Books:** create, view, replace, partially update, and delete physical-copy records.
 - 🔎 **Search:** find books by title, author, genre, or exact price; combine filters, sort, paginate, and filter by price or budget.
 - 📊 **Insights:** view book counts, total and average value, the most expensive book, and genre counts.
 - 👥 **Accounts:** sign up, browse permitted listings, look up profiles, update details, change passwords, and delete accounts. Staff access follows role permissions.
+- 🔄 **Loans:** students and faculty borrow and return physical copies; staff can review permitted histories and mark lost copies.
 - 🛠️ **Built for development:** Docker, PostgreSQL 18, Flyway migrations, request validation, and consistent error responses.
 - 🩺 **Health check:** check API and database reachability.
 
-Loan HTTP APIs are not implemented yet. Each `Book` is one physical copy; separate copies of a title have separate records. See [Domain Decisions](docs/domain-decisions.md).
+Each `Book` is one physical copy; separate copies of a title have separate records. Loans use a 14-calendar-day term, allow up to three active loans per borrower, and block new checkouts while any loan is overdue. See the [Loan Implementation Guide](docs/loan.md) and [Domain Decisions](docs/domain-decisions.md).
 
-### 🔐 API access
+### API access
 
 Explore the generated API docs in [Swagger UI](http://localhost:8080/swagger-ui.html) or [`/v3/api-docs`](http://localhost:8080/v3/api-docs). HTTP Basic authentication is required except for `POST /app/users/signup`; write requests also require a CSRF token. See [Institutional Context](docs/institutional-context.md) and the [API Documentation Guideline](docs/api-documentation-guideline.md).
 
@@ -74,19 +75,20 @@ This README remains the project's main portfolio entry point. Supporting documen
 1. The Architecture Overview and Request Lifecycle sections below explain the current system with component, security, persistence, and startup diagrams.
 2. [Development Problems Solved](docs/development-problems-solved.md) explains major engineering challenges, decisions, and verification.
 3. [Institutional Context](docs/institutional-context.md) describes the ASU-CCS academic model and existing MIS assumptions behind the user domain.
-4. [Domain Decisions](docs/domain-decisions.md) explains why a Book represents one physical copy and what that means for future loan features.
+4. [Domain Decisions](docs/domain-decisions.md) explains why a Book represents one physical copy and how loans preserve copy history.
+5. [Loan Implementation Guide](docs/loan.md) explains the loan lifecycle, permissions, API, database design, and local build flow.
 
 ### For agents, AI, and contributors
 
 1. [Agent and Contributor Guide](AGENTS.md) records current facts, source-of-truth rules, do's and don'ts, and the contribution workflow.
 2. [Current System Engineering Reference](guiding-docs/engineering-reference.md) contains the detailed repository map, layer contracts, endpoint inventory, configuration, and test strategy.
 3. [Development Roadmap](guiding-docs/TODO.md) tracks current implementation status and remaining work.
-4. [Security Roles and JWT Guide](guiding-docs/security-roles-and-jwt-guide.md) defines the target role policy and planned JWT/loan design; those features are not implemented yet.
+4. [Security Roles and JWT Guide](guiding-docs/security-roles-and-jwt-guide.md) defines the role policy, live loan permissions, and planned JWT design.
 5. [API Documentation Guideline](docs/api-documentation-guideline.md) sets the standard for accurate OpenAPI and Swagger documentation without unnecessary annotation boilerplate.
 
 ## Architecture Overview
 
-The system runs as a Spring Boot API alongside PostgreSQL. Book and user requests pass through the HTTP, business, and persistence layers; Flyway prepares the schema at startup. Shared validation, mapping, security configuration, and error handling support the API. `UserRepository` has two clear consumers: `UserService` for account use cases and `LibroUserDetailsService` for the account lookup Spring Security needs during HTTP Basic authentication.
+The system runs as a Spring Boot API alongside PostgreSQL. Book, user, and loan requests pass through their HTTP and business layers to persistence; Flyway prepares the schema at startup. Shared validation, mapping, security configuration, and error handling support the API. `UserRepository` serves account and loan use cases, plus `LibroUserDetailsService` for Spring Security's HTTP Basic account lookup.
 
 ```mermaid
 flowchart LR
@@ -94,6 +96,11 @@ flowchart LR
     subgraph App["Docker Compose: Spring Boot application"]
         API["BookAPI<br/>Spring MVC"] --> Service["BookService<br/>business rules · transactions"]
         Service --> BookRepo["BookRepository<br/>Spring Data JPA"]
+        LoanAPI["LoanAPI<br/>checkout · return · history"] --> LoanService["LoanService<br/>loan rules · transactions"]
+        LoanService --> LoanRepo["LoanRepository<br/>loan history · state checks"]
+        LoanService --> BookRepo
+        LoanService --> UserRepo
+        LoanRepo --> ORM
         BookRepo --> ORM["Hibernate / JPA"]
         UserAPI["UserAPI<br/>account and profile routes"] --> User["UserService<br/>profile and password rules"]
         User --> UserRepo["UserRepository"]
@@ -103,19 +110,22 @@ flowchart LR
         Shared["Shared concerns<br/>DTOs · mappers · Jakarta validation<br/>GlobalExceptionHandler · OpenAPI"]
         Security -->|authorized request| API
         Security -->|authorized request| UserAPI
+        Security -->|authorized request| LoanAPI
         API -.-> Shared
+        LoanAPI -.-> Shared
+        LoanService -.-> Shared
         Service -.-> Shared
         UserAPI -.-> Shared
         User -.-> Shared
     end
     ORM -->|JDBC| DB[("PostgreSQL 18")]
-    Flyway["Flyway migrations<br/>V1 books · V2 users · V3 librarian role"] -->|startup schema changes| DB
+    Flyway["Flyway migrations<br/>V1 books · V2 users · V3 librarian role · V4 loans"] -->|startup schema changes| DB
     Compose["Docker Compose<br/>starts app after database is healthy"] -.-> App
     Compose -.-> DB
 
     classDef service fill:#e8f1fb,stroke:#5078a0,color:#172b3d
     classDef data fill:#edf5ed,stroke:#62836a,color:#203528
-    class API,Service,BookRepo,ORM,UserAPI,User,UserRepo,UserDetails,Shared,Security service
+    class API,Service,BookRepo,LoanAPI,LoanService,LoanRepo,ORM,UserAPI,User,UserRepo,UserDetails,Shared,Security service
     class DB,Flyway data
 ```
 
@@ -152,7 +162,7 @@ sequenceDiagram
     end
 ```
 
-Account access is checked against the authenticated user's university ID and role. `ADMINISTRATOR` is the library-assistant role, and `LIBRARIAN` is the library's librarian. Loans remain future work.
+Account and loan access is checked against the authenticated user's university ID and role. `ADMINISTRATOR` is the library-assistant role, and `LIBRARIAN` is the library's librarian. Students and faculty borrow and return their own loans; staff review only the histories permitted by their role.
 
 | Current rule | Allowed access |
 | --- | --- |
@@ -167,16 +177,21 @@ Account access is checked against the authenticated user's university ID and rol
 | Delete own student/faculty account | Owner |
 | Delete student/faculty accounts | ADMINISTRATOR, LIBRARIAN |
 | Delete library assistant accounts | LIBRARIAN |
+| Borrow and return own loans | STUDENT, FACULTY |
+| View own loan history | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN |
+| View or mark student/faculty loans lost | ADMINISTRATOR, LIBRARIAN |
+| View or mark library-assistant loans lost | LIBRARIAN |
 
 ### Layered Design
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 18}, "themeVariables": {"fontSize": "12px"}}}%%
 flowchart TD
-    C["<b>Controller Layer (BookAPI / UserAPI)</b><br/>HTTP routing · Request validation<br/>Response mapping · Delegates to services"]
-    S["<b>Service Layer (BookService / UserService)</b><br/>Business logic · Transaction boundaries<br/>Orchestrates repositories"]
+    C["<b>Controller Layer (BookAPI / UserAPI / LoanAPI)</b><br/>HTTP routing · Request validation<br/>Response mapping · Delegates to services"]
+    S["<b>Service Layer (BookService / UserService / LoanService)</b><br/>Business rules · Transaction boundaries<br/>Orchestrates repositories"]
     BR["<b>BookRepository</b><br/>Spring Data JPA<br/>Book queries and persistence"]
     UR["<b>UserRepository</b><br/>Spring Data JPA<br/>Account queries and persistence"]
+    LR["<b>LoanRepository</b><br/>Spring Data JPA<br/>Loan state and history queries"]
     A["<b>Authentication Lookup</b><br/>LibroUserDetailsService<br/>Loads account by university ID"]
     P["<b>Persistence Layer (JPA / Hibernate)</b><br/>Entity management · Dirty checking<br/>Flush / commit · Maps objects to tables"]
     D["<b>Database (PostgreSQL 18)</b><br/>Tables · Indexes · Constraints<br/>Flyway migrations"]
@@ -185,6 +200,7 @@ flowchart TD
     C --> S
     S --> BR --> P
     S --> UR --> P
+    S --> LR --> P
     A -->|findByUniversityId| UR
     X -.-> C
     X -.-> S
@@ -193,11 +209,11 @@ flowchart TD
     X -.-> A
 ```
 
-Both user flows converge on `UserRepository`: `UserService` uses it for signup, profile, and password operations; `LibroUserDetailsService` uses it only to load the account Spring Security authenticates. The authentication lookup does not route through `UserAPI` or `UserService`.
+Account operations and Basic authentication use `UserRepository`: `UserService` uses it for signup, profile, and password operations; `LoanService` uses it to identify and lock borrowers; `LibroUserDetailsService` loads the account Spring Security authenticates. Authentication does not route through `UserAPI` or `UserService`.
 
 ### Current Persistence Model
 
-The current schema stores books and users as separate domains. A Book row is one physical copy. There is no loan table or user-to-book relationship yet; the future loan design must identify the borrower from the authenticated principal and allow only one active loan per copy. See [Domain Decisions](docs/domain-decisions.md) for the reasoning.
+The current schema stores books, users, and loans. A Book row is one physical copy. Loan rows identify the borrower from the authenticated principal and preserve checkout, return, or loss history. The database permits only one active loan per copy. See [Domain Decisions](docs/domain-decisions.md) for the reasoning.
 
 ```mermaid
 erDiagram
@@ -221,6 +237,39 @@ erDiagram
     }
 ```
 
+#### Loan Relationship
+
+One loan row represents one borrowing event for one physical book copy. Students and faculty are the only borrower roles, with up to three active loans each; a borrower with an overdue loan cannot start another loan. Library assistants and librarians can mark an authorized active loan lost; this also marks the physical copy lost. A copy with any loan history is retained and cannot be deleted; deletion returns `409 Conflict`.
+
+```mermaid
+erDiagram
+    USER ||--o{ LOAN : borrows
+    USER o|--o{ LOAN : records_loss
+    BOOK ||--o{ LOAN : appears_in
+    USER {
+        BIGINT id PK
+        VARCHAR university_id UK
+    }
+    BOOK {
+        BIGINT id PK
+        VARCHAR title
+        VARCHAR copy_status
+    }
+    LOAN {
+        BIGINT id PK
+        BIGINT user_id FK
+        BIGINT book_id FK
+        TIMESTAMP borrowed_at
+        TIMESTAMP due_at
+        VARCHAR status
+        TIMESTAMP returned_at
+        TIMESTAMP lost_at
+        BIGINT lost_by_user_id FK
+    }
+```
+
+Each checkout creates a new `LOAN` row. Its lifecycle status is `ACTIVE`, `RETURNED`, or `LOST`; overdue is calculated at request time and is not stored. Returned and lost events remain in history. Penalties and repeat-offender rules are future scope.
+
 ## File Structure
 
 ```text
@@ -231,6 +280,7 @@ docs/
   development-problems-solved.md
   domain-decisions.md
   institutional-context.md
+  loan.md
 guiding-docs/
   engineering-reference.md
   security-roles-and-jwt-guide.md
@@ -240,6 +290,15 @@ src/main/java/app/
   LibraryApplication.java
   auth/
     SecurityConfig.java
+  loan/
+    config/LoanTimeConfig.java
+    controller/LoanAPI.java
+    dto/LoanResponseDTO.java
+    entity/Loan.java
+    entity/LoanStatus.java
+    mapper/LoanMapper.java
+    repository/LoanRepository.java
+    service/LoanService.java
   book/
     controller/
       BookAPI.java
@@ -252,6 +311,7 @@ src/main/java/app/
         LibraryAggregate.java
     entity/
       Book.java
+      BookCopyStatus.java
     dto/
       BookRequestDTO.java
       BookPatchRequestDTO.java
@@ -297,6 +357,7 @@ src/main/resources/
       V1__create_books_table.sql
       V2__create_users_table.sql
       V3__add_librarian_role.sql
+      V4__add_loans_and_copy_status.sql
 
 src/test/java/
   unit/
@@ -529,11 +590,21 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 | `DELETE` | `/app/users/{universityId}` | Owner deletes a student/faculty account; administrator deletes student/faculty; librarian also deletes library assistants | `DELETE /app/users/2025-4321` | `ApiResponse<Void>` |
 | `POST` | `/app/users/administrators` | Librarian creates a library assistant account | `POST /app/users/administrators` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 
-`/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minPrice` and `maxPrice` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `price`; invalid ranges, decimals, or sort fields return HTTP 400. Existing list routes retain their response shapes.
+### Loan API
+
+| Method | Path | Description | Access |
+| --- | --- | --- | --- |
+| `POST` | `/app/loans/{bookId}` | Borrows one physical copy; 14-day due time | Students and faculty |
+| `PUT` | `/app/loans/{loanId}/return` | Returns caller's own active loan | Students and faculty |
+| `PUT` | `/app/loans/{loanId}/lost` | Closes a loan as lost and marks copy unavailable | Library assistants/librarians within target-role scope |
+| `GET` | `/app/loans/me` | Reads caller's paged history | All roles |
+| `GET` | `/app/loans/users/{universityId}` | Reads another user's paged loan history | Library assistants/librarians within target-role scope |
+
+`/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minPrice` and `maxPrice` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `price`; invalid ranges, decimals, or sort fields return HTTP 400. Existing list routes retain their response shapes. `BookResponseDTO` also includes `copyStatus` (`IN_COLLECTION` or `LOST`); the compact book examples above omit it for readability.
 
 ### User API
 
-User routes are available under `/app/users` for signup, staff directories, profile lookup and updates, password changes, account creation, and role-scoped deletion. STUDENT means a student patron; FACULTY means school faculty using the library as patrons; ADMINISTRATOR means a library assistant (for example, fellow faculty, student assistants, or volunteers); LIBRARIAN means the library's librarian. Signup is public and always creates a student. Only the librarian creates faculty and library assistant accounts. Students and faculty can delete their own accounts; library assistants can manage/delete student and faculty accounts; librarians can also manage/delete library assistant accounts. Neither staff role manages another librarian account. All roles can read books; administrators and librarians can add, update, and delete books. See [the role permissions table](guiding-docs/security-roles-and-jwt-guide.md#role-policy) for allowed, denied, and future loan permissions. HTTP Basic authentication uses a university ID and password. Flyway V2 historically seeds the bootstrap administrator as `0000-0000`; V3 adds LIBRARIAN to the schema. The application does not seed a librarian. Set `LIBRO_ADMIN_PASSWORD_HASH` to a BCrypt hash before startup and protect it. Loan routes and history are not implemented.
+User routes are available under `/app/users` for signup, staff directories, profile lookup and updates, password changes, account creation, and role-scoped deletion. STUDENT means a student patron; FACULTY means school faculty using the library as patrons; ADMINISTRATOR means a library assistant (for example, fellow faculty, student assistants, or volunteers); LIBRARIAN means the library's librarian. Signup is public and always creates a student. Only the librarian creates faculty and library assistant accounts. Students and faculty can delete their own accounts; library assistants can manage/delete student and faculty accounts; librarians can also manage/delete library assistant accounts. Neither staff role manages another librarian account. All roles can read books; administrators and librarians can add, update, and delete books. See [the role permissions table](guiding-docs/security-roles-and-jwt-guide.md#role-policy) for access rules. HTTP Basic authentication uses a university ID and password. Flyway V2 historically seeds the bootstrap administrator as `0000-0000`; V3 adds LIBRARIAN to the schema; V4 adds loans and copy status. The application does not seed a librarian. Set `LIBRO_ADMIN_PASSWORD_HASH` to a BCrypt hash before startup and protect it. Loans are live under `/app/loans`; JWT is not implemented.
 
 ## Setup & Installation
 
@@ -624,7 +695,7 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The default Docker-free suite covers book and user MVC contracts, generated OpenAPI security-sensitive schemas, services, DTOs, mappings, and exception handling. The opt-in PostgreSQL profile checks Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, and database constraints. PostgreSQL integration execution requires Docker.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The current Docker-free suite covers book and user MVC contracts, generated OpenAPI security-sensitive schemas, services, DTOs, mappings, and exception handling; loan-specific tests have not been added. The opt-in PostgreSQL profile checks existing Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, and database constraints. PostgreSQL integration execution requires Docker.
 
 Tests are grouped by test scope and domain: `src/test/java/unit/auth`, `src/test/java/unit/book`, `src/test/java/unit/user`, and `src/test/java/unit/global`; PostgreSQL integration tests live under `src/test/java/integration/book` and `src/test/java/integration/user`. Keep new tests with the domain they exercise. Shared PostgreSQL test configuration lives directly under `integration` so both integration classes use one Spring context and container.
 
@@ -723,9 +794,8 @@ The [Development Problems Solved](docs/development-problems-solved.md) write-up 
 
 - Inspect the generated OpenAPI document and Swagger UI with the application and database running; verify parameter defaults, request/response schemas, statuses, errors, and examples against the implementation.
 - Replace HTTP Basic with the planned short-lived JWT Bearer flow, or choose institutional SSO before deployment.
-- Add focused security tests for student, faculty, and administrator access decisions.
-- Revisit CSRF handling and document the HTTP Basic scheme and CSRF requirements in OpenAPI before external use.
-- Implement the loan domain with active-loan constraints and overdue/history queries, using the authenticated identity for borrower operations; document its API when routes are added.
+- Review the HTTP Basic and CSRF model before exposing the API to external clients.
+- Add and run focused loan service, MVC/security, and PostgreSQL migration/concurrency tests.
 - Run `mvn -Pintegration verify` on a Docker-enabled machine to execute the PostgreSQL integration tests; add them to CI when a CI workflow is introduced.
 - Benchmark case-insensitive substring searches as the catalog grows; add database search indexes only if measurements justify them.
 

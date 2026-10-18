@@ -10,12 +10,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * Represents a book entity in the bookstore application.
- * This class is mapped to the "books" table in the database and includes
- * validation constraints for each field.
- * <p>
- * Lombok provides boilerplate shortcuts for Getters,Setters,toString and Constructors via Lombok Annotations
- * </p>
+ * Represents one physical book copy held by the library.
+ * Each copy has its own database row and may have loan history. The copy status
+ * determines whether the service may issue it for another loan.
  */
 @Getter
 @Setter
@@ -76,18 +73,43 @@ public class Book {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "copy_status", nullable = false, length = 24)
+    private BookCopyStatus copyStatus = BookCopyStatus.IN_COLLECTION;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * Creates a new copy that is initially part of the loanable collection.
+     *
+     * @param title copy title
+     * @param author copy author
+     * @param genre copy genre
+     * @param price recorded book value
+     */
     public Book(String title, String author, String genre, BigDecimal price) {
         this.title = title;
         this.author = author;
         this.genre = genre;
         this.price = price;
+        this.copyStatus = BookCopyStatus.IN_COLLECTION;
     }
 
+    /**
+     * Marks this physical copy as lost so it cannot be loaned again.
+     */
+    public void markLost() {
+        // Copy condition is separate from whether its last loan is active.
+        this.copyStatus = BookCopyStatus.LOST;
+    }
+
+    /**
+     * Sets the creation timestamp immediately before the copy is inserted.
+     */
     @PrePersist
     public void prePersist() {
+        // Preserve the catalog's existing creation-time behavior; loan events use the Manila Clock.
         this.createdAt = LocalDateTime.now();
     }
 }

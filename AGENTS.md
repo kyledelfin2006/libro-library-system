@@ -7,7 +7,8 @@ This file is the repository's internal entry point for AI agents and human contr
 1. Read this file for contributor rules and the source-of-truth map.
 2. Read [Current System Engineering Reference](guiding-docs/engineering-reference.md) for the repository map, current layer contracts, API inventory, configuration, and test strategy.
 3. Read the relevant focused document before editing:
-   - [Role and JWT target specification](guiding-docs/security-roles-and-jwt-guide.md) for the planned role policy, JWT design, and future loan rules.
+   - [Role and JWT guide](guiding-docs/security-roles-and-jwt-guide.md) for live role/loan behavior and the planned JWT design.
+   - [Loan implementation guide](docs/loan.md) for the loan lifecycle, API, schema, and build flow.
    - [Development roadmap](guiding-docs/TODO.md) for outstanding work.
    - [API documentation guideline](docs/api-documentation-guideline.md) for controller/OpenAPI documentation.
    - [Domain decisions](docs/domain-decisions.md) for the physical-copy model and loan constraints.
@@ -23,7 +24,7 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 | What roles and columns the database accepts | Latest applied Flyway migrations; JPA mappings must match |
 | Current entity and relationship model | JPA entities plus [Domain Decisions](docs/domain-decisions.md) |
 | API documentation conventions | [API Documentation Guideline](docs/api-documentation-guideline.md) |
-| Planned role policy, JWT design, and loan behavior | [Role and JWT target specification](guiding-docs/security-roles-and-jwt-guide.md); it is a target, not live implementation |
+| Planned JWT design and current role/loan policy | [Role and JWT guide](guiding-docs/security-roles-and-jwt-guide.md); verify live behavior against code and migrations |
 | Remaining work | [Development roadmap](guiding-docs/TODO.md) |
 | Recruiter-facing project description | [README](README.md) and the public-facing documents it links to |
 
@@ -37,7 +38,7 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 - Librarians create faculty and administrator/library-assistant accounts. Administrators can list/read/manage student and faculty accounts and delete those accounts; librarians may also manage/delete administrator accounts. Students and faculty can delete their own accounts. Staff cannot manage another librarian account; administrator and librarian accounts cannot delete themselves.
 - User account ownership and target-role rules are enforced in UserService as well as by route authorization. HTTP Basic and CSRF remain enabled.
 - No librarian account is seeded; librarian-only routes require an existing librarian account. The historical V2 administrator bootstrap remains in place.
-- Loans and loan history are not implemented. Each Book row represents one physical copy; documented loan permissions remain future policy.
+- Loans are implemented under HTTP Basic. Each Book row represents one physical copy; V4 adds loan history and copy status. See [Loan Implementation Guide](docs/loan.md). JWT remains planned.
 - Flyway owns schema changes; Hibernate uses ddl-auto=validate.
 
 These are a snapshot, not a substitute for checking the code when a task changes the relevant area.
@@ -46,16 +47,17 @@ These are a snapshot, not a substitute for checking the code when a task changes
 
 - Keep HTTP handling in controllers, business rules and transactions in services, persistence behind repositories, and entity/DTO mapping explicit.
 - Use request and response DTOs at API boundaries. Never accept a JPA entity from a client or return one directly.
+- For Java methods you add or materially change, write method-level JavaDocs and line comments that explain the business rules and meaningful implementation steps.
 - Keep secrets and real personal data out of source, migrations, docs, tests, logs, and examples. The historical administrator bootstrap migration accepts only a BCrypt hash through LIBRO_ADMIN_PASSWORD_HASH. No librarian account is seeded.
 - Add forward-only Flyway migrations for schema changes once a migration may have been applied to a persistent database. Keep SQL and JPA mappings aligned.
-- Preserve the physical-book-copy domain decision and enforce loan ownership from the authenticated principal when loan work begins.
+- Preserve the physical-book-copy domain decision and enforce loan ownership from the authenticated principal.
 - Update the README, this guide, the engineering reference, OpenAPI, and the roadmap only where their owned facts changed.
 - Add focused tests for behavior changes at the appropriate service, MVC/security, or PostgreSQL persistence boundary.
 
 ## Don't
 
-- Don't implement a future item merely because it appears in the JWT/loan specification; follow the user's requested scope.
-- Don't claim JWT, Bearer authentication, or loan routes are live until code and tests enforce them.
+- Don't implement planned JWT work merely because it appears in the security guide; follow the user's requested scope.
+- Don't claim JWT or Bearer authentication is live until code and tests enforce it. Loan routes are implemented, but their new behavior still needs focused tests before release.
 - Don't let public signup choose a privileged role.
 - Don't add repository access or domain workflows to controllers.
 - Don't pass arbitrary client sort properties through to persistence.

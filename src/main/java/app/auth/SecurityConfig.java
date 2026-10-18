@@ -10,6 +10,13 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+    /**
+     * Applies authentication and role rules to the HTTP API while retaining CSRF protection.
+     *
+     * @param http Spring Security HTTP configuration
+     * @return the configured filter chain
+     * @throws Exception if the security chain cannot be built
+     */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -27,6 +34,18 @@ public class SecurityConfig {
                         .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
                         .requestMatchers(HttpMethod.DELETE, "/app/users/**")
                         .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
+
+                        // Borrowers are students/faculty; administrators are library assistants.
+                        .requestMatchers(HttpMethod.POST, "/app/loans/**")
+                        .hasAnyRole("STUDENT", "FACULTY")
+                        .requestMatchers(HttpMethod.PUT, "/app/loans/*/return")
+                        .hasAnyRole("STUDENT", "FACULTY")
+                        .requestMatchers(HttpMethod.PUT, "/app/loans/*/lost")
+                        .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
+                        .requestMatchers(HttpMethod.GET, "/app/loans/me")
+                        .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
+                        .requestMatchers(HttpMethod.GET, "/app/loans/users/**")
+                        .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
 
                         .requestMatchers(HttpMethod.GET, "/app/books/**")
                         .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")

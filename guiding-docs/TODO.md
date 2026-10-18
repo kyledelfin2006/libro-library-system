@@ -11,11 +11,11 @@ This is the working implementation roadmap. It is not the public project overvie
 | Roles in Java and the current schema | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN (Flyway V3) |
 | Authentication | HTTP Basic using university ID, UserDetailsService, and BCrypt |
 | Authorization | Book reads for all roles; ADMINISTRATOR/LIBRARIAN book CRUD; librarian creates faculty/library assistants; role-scoped service account checks |
-| Loans | Not implemented |
+| Loans | Implemented in application and V4 migration; focused tests and runtime verification remain |
 | JWT login and Bearer validation | Not implemented |
 | LIBRARIAN role and target owner/directory rules | Implemented with HTTP Basic |
 
-See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md). Administrator means library assistant, not system administrator. The paginated directory and profile/password operations follow role and target-account boundaries; students/faculty may delete their own accounts. Loans remain unimplemented.
+See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md). Administrator means library assistant, not system administrator. The paginated directory and profile/password operations follow role and target-account boundaries; students/faculty may delete their own accounts. Loan policy and build guidance are in [Loan Implementation Guide](../docs/loan.md).
 
 ## Recommended implementation order
 
@@ -31,15 +31,14 @@ See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-
 - [x] Add authorization tests for allowed and denied requests, including cross-account profile/password attempts.
 - [ ] Define a controlled first-librarian provisioning workflow before using librarian-only account routes; no librarian seed is installed.
 
-### 2. Add loans
+### 2. Verify and harden loans
 
-- [ ] Decide the loan period before implementing due dates.
-- [ ] Add the Loan entity, service, controller, DTOs, and persistence migration.
-- [ ] Identify borrowers only from the authenticated principal.
-- [ ] Enforce at most one active loan for each physical Book copy in application logic and PostgreSQL.
-- [ ] Allow a borrower to return only their own active loan.
-- [ ] Preserve loan history and block deletion of an account referenced by loans.
+- [x] Agree a 14-calendar-day term, Manila `LocalDateTime`, 3 active-loan limit, overdue checkout block, and student/faculty-only borrowing.
+- [x] Add loan lifecycle, ownership checks, staff history and lost-copy resolution.
+- [x] Add forward-only V4 schema with copy status, state constraints, and one-active-loan-per-copy index.
+- [x] Preserve book and user history by returning HTTP 409 when referenced records are deleted.
 - [ ] Add service, MVC/security, and PostgreSQL concurrency/invariant coverage.
+- [ ] Verify fresh V1-to-V4 startup and upgrade from a database already migrated through V3.
 
 ### 3. Replace HTTP Basic with local JWT authentication
 
@@ -68,7 +67,8 @@ Before changing a migration, establish whether that version has been applied to 
 
 ## Source documents
 
-- [Security Roles and JWT Guide](security-roles-and-jwt-guide.md): target behavior and acceptance checks.
+- [Security Roles and JWT Guide](security-roles-and-jwt-guide.md): live role/loan policy, JWT target behavior, and acceptance checks.
 - [Current System Engineering Reference](engineering-reference.md): current repository facts and technical conventions.
 - [API Documentation Guideline](../docs/api-documentation-guideline.md): OpenAPI/controller documentation rules.
-- [Domain Decisions](../docs/domain-decisions.md): physical-copy model and future loan invariant.
+- [Domain Decisions](../docs/domain-decisions.md): physical-copy model and loan invariant.
+- [Loan Implementation Guide](../docs/loan.md): live loan behavior, endpoints, schema, and build flow.

@@ -226,6 +226,7 @@ public class UserAPI {
     @ErrorApiResponse(responseCode = "400", description = "University ID must use the ####-#### format")
     @ErrorApiResponse(responseCode = "404", description = "User not found")
     @ErrorApiResponse(responseCode = "403", description = "The caller cannot delete the requested account")
+    @ErrorApiResponse(responseCode = "409", description = "Account has loan history and must be retained")
     public ResponseEntity<ApiResponse<Void>> deleteUser(
             @Parameter(description = "University identifier in ####-#### format.", example = "2025-4321")
             @PathVariable String universityId,
