@@ -24,7 +24,9 @@ public class BookResponseDTO {
     private String genre;
     @Schema(description = "Positive decimal price for the book.", example = "19.99")
     private BigDecimal price;
-    @Schema(description = "Whether the physical copy remains in the loanable collection.", example = "IN_COLLECTION")
+    @Schema(
+            description = "Physical-copy disposition. IN_COLLECTION does not mean available when an active loan exists.",
+            example = "IN_COLLECTION")
     private BookCopyStatus copyStatus;
 
     /**

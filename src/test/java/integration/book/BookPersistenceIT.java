@@ -4,10 +4,19 @@ import app.LibraryApplication;
 import app.book.dto.BookPatchRequestDTO;
 import app.book.dto.BookRequestDTO;
 import app.book.entity.Book;
+import app.book.entity.BookCopyStatus;
 import app.book.repository.BookRepository;
 import app.book.repository.projection.GenreCount;
 import app.book.repository.projection.LibraryAggregate;
 import app.book.service.BookService;
+import app.loan.entity.Loan;
+import app.loan.entity.LoanStatus;
+import app.loan.repository.LoanRepository;
+import app.loan.service.LoanService;
+import app.user.entity.User;
+import app.user.entity.enums.UserCourse;
+import app.user.entity.enums.UserRole;
+import app.user.repository.UserRepository;
 import integration.PostgresTestConfig;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
@@ -16,13 +25,21 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -40,19 +57,38 @@ class BookPersistenceIT {
     private BookService bookService;
 
     @Autowired
+    private LoanService loanService;
+
+    @Autowired
+    private LoanRepository loanRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private Flyway flyway;
 
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
     @Test
     void applicationStartupAppliesMigrationsAndValidatesSchema() {
-        assertEquals(3, flyway.info().applied().length);
+        assertEquals(4, flyway.info().applied().length);
         assertEquals(1, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'books'",
                 Integer.class));
         assertEquals(1, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users'",
+                Integer.class));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'loans'",
+                Integer.class));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' " +
+                        "AND table_name = 'books' AND column_name = 'copy_status'",
                 Integer.class));
     }
 
@@ -131,5 +167,128 @@ class BookPersistenceIT {
         } finally {
             bookRepository.deleteById(saved.getId());
         }
+    }
+
+    /**
+     * Verifies a concurrent catalog edit cannot restore a copy's pre-loss status.
+     *
+     * @throws Exception if a concurrent transaction fails or exceeds its bounded wait
+     */
+    @Test
+    void patchWaitsForLostResolutionAndPreservesLostCopyStatus() throws Exception {
+        // Prepare one student borrower, one library assistant, one copy, and one active loan.
+        int uniqueSuffix = Math.floorMod((int) System.nanoTime(), 10_000);
+        String borrowerId = String.format("9%03d-%04d", uniqueSuffix / 10, uniqueSuffix);
+        String staffId = String.format("8%03d-%04d", uniqueSuffix / 10, uniqueSuffix);
+        User borrower = new User();
+        borrower.setUniversityId(borrowerId);
+        borrower.setPasswordHash("test-only-hash");
+        borrower.setFirstName("Loan");
+        borrower.setLastName("Borrower");
+        borrower.setEmail(borrowerId + "@example.test");
+        borrower.setUserRole(UserRole.STUDENT);
+        borrower.setUserCourse(UserCourse.IS);
+        userRepository.saveAndFlush(borrower);
+
+        User staff = new User();
+        staff.setUniversityId(staffId);
+        staff.setPasswordHash("test-only-hash");
+        staff.setFirstName("Library");
+        staff.setLastName("Assistant");
+        staff.setEmail(staffId + "@example.test");
+        staff.setUserRole(UserRole.ADMINISTRATOR);
+        userRepository.saveAndFlush(staff);
+
+        Book copy = bookRepository.saveAndFlush(
+                new Book("Race title", "Race author", "Test", new BigDecimal("10.00")));
+        LocalDateTime borrowedAt = LocalDateTime.now().minusDays(1);
+        Loan loan = loanRepository.saveAndFlush(new Loan(borrower, copy, borrowedAt, borrowedAt.plusDays(14)));
+
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        CountDownLatch lostResolutionHoldingLock = new CountDownLatch(1);
+        CountDownLatch releaseLostResolution = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        String editApplicationName = "book-edit-lost-race-test";
+
+        try {
+            // Keep the loss transaction open after its service operation has locked and changed the copy.
+            Future<?> lossResolution = executor.submit(() -> transactionTemplate.executeWithoutResult(status -> {
+                loanService.markLost(staffId, loan.getId());
+                lostResolutionHoldingLock.countDown();
+                try {
+                    if (!releaseLostResolution.await(10, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("Timed out waiting to release lost-resolution transaction");
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Lost-resolution transaction was interrupted", exception);
+                }
+            }));
+
+            assertTrue(lostResolutionHoldingLock.await(5, TimeUnit.SECONDS),
+                    "Lost resolution should reach the point where it holds the copy row lock");
+
+            // Identify the edit connection in pg_stat_activity so the test can wait for the real row-lock wait.
+            Future<?> catalogEdit = executor.submit(() -> transactionTemplate.executeWithoutResult(status -> {
+                jdbcTemplate.queryForObject(
+                        "SELECT set_config('application_name', ?, true)",
+                        String.class,
+                        editApplicationName);
+                bookService.patchBook(copy.getId(), new BookPatchRequestDTO(
+                        "Edited while lost", null, null, null));
+            }));
+
+            assertTrue(awaitPostgresLockWait(editApplicationName),
+                    "The catalog edit should wait for the lost-resolution row lock");
+
+            // Releasing the first transaction allows the edit to read the committed LOST state.
+            releaseLostResolution.countDown();
+            lossResolution.get(10, TimeUnit.SECONDS);
+            catalogEdit.get(10, TimeUnit.SECONDS);
+
+            Book updatedCopy = bookRepository.findById(copy.getId()).orElseThrow();
+            Loan updatedLoan = loanRepository.findById(loan.getId()).orElseThrow();
+            assertEquals("Edited while lost", updatedCopy.getTitle());
+            assertEquals(BookCopyStatus.LOST, updatedCopy.getCopyStatus());
+            assertEquals(LoanStatus.LOST, updatedLoan.getStatus());
+        } finally {
+            // Always unblock the worker before waiting for it and removing its foreign-key fixtures.
+            releaseLostResolution.countDown();
+            executor.shutdown();
+            executor.awaitTermination(10, TimeUnit.SECONDS);
+            loanRepository.deleteById(loan.getId());
+            userRepository.deleteById(borrower.getId());
+            userRepository.deleteById(staff.getId());
+            bookRepository.deleteById(copy.getId());
+        }
+    }
+
+    /**
+     * Waits until PostgreSQL reports the named test connection blocked by a database lock.
+     *
+     * @param applicationName PostgreSQL application name assigned to the concurrent catalog edit
+     * @return true if a lock wait was observed before the timeout
+     */
+    private boolean awaitPostgresLockWait(String applicationName) {
+        // Bound the wait so a broken lock path fails the test instead of hanging the suite.
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < deadline) {
+            Boolean waiting = jdbcTemplate.queryForObject(
+                    "SELECT EXISTS (SELECT 1 FROM pg_stat_activity " +
+                            "WHERE application_name = ? AND wait_event_type = 'Lock')",
+                    Boolean.class,
+                    applicationName);
+            if (Boolean.TRUE.equals(waiting)) {
+                return true;
+            }
+            try {
+                // Poll briefly so the database, rather than an arbitrary sleep, determines progress.
+                Thread.sleep(10);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
     }
 }

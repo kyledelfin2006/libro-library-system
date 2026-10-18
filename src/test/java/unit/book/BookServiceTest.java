@@ -201,7 +201,7 @@ class BookServiceTest {
         // Given an existing book
         Book existing = new Book("Old Title", "Old Author", "Old Genre", new BigDecimal("10.0"));
         existing.setId(BOOK_ID);
-        when(repository.findById(BOOK_ID)).thenReturn(Optional.of(existing));
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(existing));
 
         // Update only title and price
         BookPatchRequestDTO updates = new BookPatchRequestDTO("New Title", null, null, new BigDecimal("30.0"));
@@ -212,6 +212,8 @@ class BookServiceTest {
         assertEquals("Old Author", result.getAuthor());  // unchanged
         assertEquals("Old Genre", result.getGenre());    // unchanged
         assertEquals(0, new BigDecimal("30.0").compareTo(result.getPrice()));
+        verify(repository).findByIdForUpdate(BOOK_ID);
+        verify(repository, never()).findById(BOOK_ID);
         // No save() call expected
         verify(repository, never()).save(any());
     }
@@ -221,7 +223,7 @@ class BookServiceTest {
     void patchBook_shouldUpdateOnlyAuthorWhenOnlyAuthorProvided() {
         Book existing = new Book("Old Title", "Old Author", "Old Genre", new BigDecimal("10.0"));
         existing.setId(BOOK_ID);
-        when(repository.findById(BOOK_ID)).thenReturn(Optional.of(existing));
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(existing));
 
         BookPatchRequestDTO updates = new BookPatchRequestDTO(null, "New Author", null, null);
 
@@ -239,7 +241,7 @@ class BookServiceTest {
     void patchBook_shouldUpdateOnlyGenreWhenOnlyGenreProvided() {
         Book existing = new Book("Old Title", "Old Author", "Old Genre", new BigDecimal("10.0"));
         existing.setId(BOOK_ID);
-        when(repository.findById(BOOK_ID)).thenReturn(Optional.of(existing));
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(existing));
 
         BookPatchRequestDTO updates = new BookPatchRequestDTO(null, null, "New Genre", null);
 
@@ -257,7 +259,7 @@ class BookServiceTest {
     void patchBook_whenAllFieldsBlankOrNull_shouldLeaveBookUnchanged() {
         Book existing = new Book("Old Title", "Old Author", "Old Genre", new BigDecimal("10.0"));
         existing.setId(BOOK_ID);
-        when(repository.findById(BOOK_ID)).thenReturn(Optional.of(existing));
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(existing));
 
         // Blank strings should be treated as no update
         BookPatchRequestDTO updates = new BookPatchRequestDTO("   ", "", "  ", null);
@@ -276,7 +278,7 @@ class BookServiceTest {
     void patchBook_whenPriceIsNull_shouldLeavePriceUnchanged() {
         Book existing = new Book("Old Title", "Old Author", "Old Genre", new BigDecimal("10.0"));
         existing.setId(BOOK_ID);
-        when(repository.findById(BOOK_ID)).thenReturn(Optional.of(existing));
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(existing));
 
         BookPatchRequestDTO updates = new BookPatchRequestDTO("New Title", null, null, null);
 
@@ -290,7 +292,7 @@ class BookServiceTest {
     /** Verifies that a negative PATCH price is rejected before persistence. */
     @Test
     void patchBook_whenPriceIsZeroOrNegative_shouldThrowBookValidationException() {
-        when(repository.findById(BOOK_ID)).thenReturn(Optional.of(sampleBook));
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(sampleBook));
         BookPatchRequestDTO updates = new BookPatchRequestDTO(null, null, null, new BigDecimal("-5.0"));
 
         assertThrows(BookValidationException.class, () -> bookService.patchBook(BOOK_ID, updates));
@@ -300,7 +302,7 @@ class BookServiceTest {
     /** Verifies that zero is rejected because prices must be strictly positive. */
     @Test
     void patchBook_whenPriceIsExactlyZero_shouldThrowBookValidationException() {
-        when(repository.findById(BOOK_ID)).thenReturn(Optional.of(sampleBook));
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(sampleBook));
         BookPatchRequestDTO updates = new BookPatchRequestDTO(null, null, null, BigDecimal.ZERO);
 
         assertThrows(BookValidationException.class, () -> bookService.patchBook(BOOK_ID, updates));
@@ -310,7 +312,7 @@ class BookServiceTest {
     /** Verifies that PATCH delegates missing-entity handling to the service lookup contract. */
     @Test
     void patchBook_whenBookNotFound_shouldThrowBookNotFoundException() {
-        when(repository.findById(BOOK_ID)).thenReturn(Optional.empty());
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.empty());
         BookPatchRequestDTO updates = new BookPatchRequestDTO("New", null, null, new BigDecimal("20.0"));
 
         assertThrows(BookNotFoundException.class, () -> bookService.patchBook(BOOK_ID, updates));
@@ -321,7 +323,7 @@ class BookServiceTest {
     /** Verifies PUT semantics by replacing every mutable field through the mapper. */
     @Test
     void replaceBook_shouldReplaceAllFields() {
-        when(repository.findById(BOOK_ID)).thenReturn(Optional.of(sampleBook));
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(sampleBook));
         BookRequestDTO newData = new BookRequestDTO("New Title", "New Author", "New Genre", new BigDecimal("99.99"));
 
         Book result = bookService.replaceBook(BOOK_ID, newData);
@@ -330,12 +332,14 @@ class BookServiceTest {
         assertEquals("New Author", result.getAuthor());
         assertEquals("New Genre", result.getGenre());
         assertEquals(0, new BigDecimal("99.99").compareTo(result.getPrice()));
+        verify(repository).findByIdForUpdate(BOOK_ID);
+        verify(repository, never()).findById(BOOK_ID);
     }
 
     /** Verifies PUT normalization is consistent with POST and PATCH. */
     @Test
     void replaceBook_shouldTrimTextFieldsBeforeDirtyChecking() {
-        when(repository.findById(BOOK_ID)).thenReturn(Optional.of(sampleBook));
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(sampleBook));
 
         Book result = bookService.replaceBook(
                 BOOK_ID,
@@ -430,7 +434,7 @@ class BookServiceTest {
     /** Verifies that a valid replacement still fails when its target entity does not exist. */
     @Test
     void replaceBook_whenBookNotFound_shouldThrowBookNotFoundException() {
-        when(repository.findById(BOOK_ID)).thenReturn(Optional.empty());
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.empty());
         BookRequestDTO dto = new BookRequestDTO("Title", "Author", "Genre", new BigDecimal("20.0"));
 
         assertThrows(BookNotFoundException.class, () -> bookService.replaceBook(BOOK_ID, dto));

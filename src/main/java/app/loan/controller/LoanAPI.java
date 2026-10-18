@@ -29,6 +29,13 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Loans", description = "Borrowing, returns, lost-copy resolution, and loan history")
 public class LoanAPI {
 
+    /** Shared public page/sort contract for both loan-history routes. */
+    private static final String HISTORY_PAGINATION_DESCRIPTION =
+            "Page numbers are zero-based; page size defaults to 12 and is capped at 100. "
+                    + "Allowed sort fields are id, borrowedAt, dueAt, returnedAt, and status; directions are asc or desc. "
+                    + "Without a requested sort, results use borrowedAt descending then id descending. "
+                    + "For a supplied sort, id descending is appended only when id is not already included.";
+
     private final LoanService loanService;
 
     /**
@@ -120,7 +127,8 @@ public class LoanAPI {
      */
     @GetMapping("/me")
     @Operation(summary = "View my loan history",
-            description = "Returns active, returned, and lost loans for the authenticated caller. Page size defaults to 12 and is capped at 100. Overdue is calculated at request time.")
+            description = "Returns active, returned, and lost loans for the authenticated caller. "
+                    + HISTORY_PAGINATION_DESCRIPTION + " Overdue is calculated at request time.")
     @ErrorApiResponse(responseCode = "400", description = "Unsupported sort property")
     public ResponseEntity<Page<LoanResponseDTO>> myHistory(
             @ParameterObject @PageableDefault(size = 12, sort = {"borrowedAt", "id"}, direction = org.springframework.data.domain.Sort.Direction.DESC)
@@ -141,7 +149,9 @@ public class LoanAPI {
      */
     @GetMapping("/users/{universityId}")
     @Operation(summary = "View a patron's loan history",
-            description = "Library assistants may view student/faculty histories. Librarians may also view library-assistant histories. Neither staff role may view another librarian's history. Page size defaults to 12 and is capped at 100.")
+            description = "Library assistants may view student/faculty histories. "
+                    + "Librarians may also view library-assistant histories. Neither staff role may view another librarian's history. "
+                    + HISTORY_PAGINATION_DESCRIPTION)
     @ErrorApiResponse(responseCode = "403", description = "Caller cannot view this patron's history")
     @ErrorApiResponse(responseCode = "404", description = "Patron account not found")
     @ErrorApiResponse(responseCode = "400", description = "Unsupported sort property")

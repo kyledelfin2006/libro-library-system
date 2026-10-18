@@ -28,7 +28,7 @@ Overdue is a calculated condition, not a status: `status == ACTIVE && now.isAfte
 - Staff marks a loan `LOST` through an explicit action. The loan records the staff member and time; the related physical book is marked `LOST` and cannot be borrowed again. This is a recorded resolution, not an automatic overdue transition.
 - Any loan history prevents deletion of its referenced book copy or user. The API returns `409 Conflict`; the foreign keys use `ON DELETE RESTRICT`.
 - There are no fines, penalty balances, borrower suspensions, or repeat-offender rules in this version. A lost loan closes the active loan slot but does not assess a penalty.
-- History defaults to 12 rows per page, permits at most 100, and only allows approved sort fields.
+- History uses zero-based pages, defaults to 12 rows per page, permits at most 100, and only allows `id`, `borrowedAt`, `dueAt`, `returnedAt`, or `status` as sort fields. Sort direction is `asc` or `desc`; without a requested sort, history uses `borrowedAt` descending then `id` descending.
 
 ## User flow
 
@@ -110,7 +110,7 @@ src/main/java/app/
 ├── book/
 │   ├── entity/Book.java                     # Physical copy, including IN_COLLECTION or LOST
 │   ├── entity/BookCopyStatus.java
-│   └── repository/BookRepository.java        # Pessimistic copy lock
+│   └── repository/BookRepository.java        # Copy lock shared by checkout, edits, and loss resolution
 ├── loan/
 │   ├── config/LoanTimeConfig.java            # Asia/Manila Clock
 │   ├── controller/LoanAPI.java               # HTTP endpoints and OpenAPI descriptions
@@ -160,8 +160,8 @@ Prerequisites are Java 25, Maven 3.x, and Docker Desktop if you want PostgreSQL 
    mvn clean verify
    ```
 
-The PostgreSQL persistence profile requires a working Docker daemon. For a loan smoke test, authenticate as a student/faculty user, create a book copy, call `POST /app/loans/{bookId}`, inspect `GET /app/loans/me`, then return it. Swagger UI is at `http://localhost:8080/swagger-ui.html`; because CSRF remains enabled, state-changing requests must include the configured CSRF token.
+The PostgreSQL persistence profile requires a working Docker daemon and `LIBRO_ADMIN_PASSWORD_HASH` set to a test-only BCrypt hash so Flyway V2 can seed its bootstrap account in the disposable test database. For a loan smoke test, authenticate as a student/faculty user, create a book copy, call `POST /app/loans/{bookId}`, inspect `GET /app/loans/me`, then return it. Swagger UI is at `http://localhost:8080/swagger-ui.html`; because CSRF remains enabled, state-changing requests must include the configured CSRF token.
 
 ## Before extending the feature
 
-Add focused service, MVC/security, and PostgreSQL tests for loan state changes, concurrent checkout limits, role boundaries, Flyway V4 schema validation, and deletion restrictions. Do not edit V4 after it has reached a persistent database; add a new forward-only migration. Keep the README relationship diagram and this guide synchronized with the entity and database model.
+`LoanServiceTest` covers the main checkout, return, lost-resolution, role-scope, ownership, and history rules. `LoanSecurityMvcTest` checks route roles, principal-derived identity, and CSRF. `BookPersistenceIT` covers V4 schema validation and the concurrent catalog-edit/lost-resolution race; `LoanPersistenceIT` covers return persistence, the one-active-loan index, and deletion restrictions. A concurrent borrower-limit checkout test and the V3-to-V4 upgrade test remain open. Do not edit V4 after it has reached a persistent database; add a new forward-only migration. Keep the README relationship diagram and this guide synchronized with the entity and database model.

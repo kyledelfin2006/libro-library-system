@@ -5,9 +5,12 @@ import app.book.controller.BookAPI;
 import app.book.mapper.BookMapper;
 import app.book.service.BookService;
 import app.global.config.OpenApiConfig;
+import app.loan.controller.LoanAPI;
+import app.loan.service.LoanService;
 import app.user.controller.UserAPI;
 import app.user.service.UserService;
 import org.junit.jupiter.api.Test;
+import org.hamcrest.Matchers;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -26,7 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest({BookAPI.class, UserAPI.class})
+@WebMvcTest({BookAPI.class, UserAPI.class, LoanAPI.class})
 @AutoConfigureMockMvc(addFilters = false)
 @Import({OpenApiConfig.class, OpenApiMvcTest.MockBeans.class})
 @ContextConfiguration(classes = LibraryApplication.class)
@@ -53,8 +56,15 @@ class OpenApiMvcTest {
         UserService userService() {
             return mock(UserService.class);
         }
+
+        /** Supplies the loan controller's business dependency without starting persistence. */
+        @Bean
+        LoanService loanService() {
+            return mock(LoanService.class);
+        }
     }
 
+    /** Verifies public schemas, security metadata, endpoint contracts, and loan pagination documentation. */
     @Test
     void generatedSpecDescribesRoutesAndProtectsPasswordFields() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
@@ -74,6 +84,10 @@ class OpenApiMvcTest {
                 .andExpect(jsonPath("$.paths['/app/books/query'].get.responses['400'].content['*/*'].schema.$ref")
                         .value("#/components/schemas/ErrorResponse"))
                 .andExpect(jsonPath("$.paths['/app/users/{universityId}'].get.tags[0]").value("Users"))
+                .andExpect(jsonPath("$.paths['/app/loans/me'].get.description")
+                        .value(Matchers.containsString("Page numbers are zero-based")))
+                .andExpect(jsonPath("$.paths['/app/loans/me'].get.description")
+                        .value(Matchers.containsString("Allowed sort fields are id, borrowedAt, dueAt, returnedAt, and status")))
                 .andExpect(jsonPath("$.paths['/app/users/signup'].post.responses['201']").exists())
                 .andExpect(jsonPath("$.paths['/app/users/signup'].post.responses['400']").exists())
                 .andExpect(jsonPath("$.paths['/app/users/signup'].post.responses['409']").exists())

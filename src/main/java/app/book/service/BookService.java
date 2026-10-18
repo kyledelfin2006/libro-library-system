@@ -140,6 +140,20 @@ public class BookService {
     }
 
     /**
+     * Loads a physical copy under a write lock for a transaction that will change its fields.
+     * The lock makes book edits serialize with loan operations that change copy status.
+     *
+     * @param id identifier of the physical copy to load
+     * @return the managed, write-locked copy
+     * @throws BookNotFoundException if no copy exists with the given ID
+     */
+    private Book findBookByIdForUpdate(Long id) {
+        // Reuse the same row lock as checkout and lost-loan resolution to avoid stale copy status.
+        return repository.findByIdForUpdate(id)
+                .orElseThrow(() -> new BookNotFoundException("Couldn't find book of ID: " + id));
+    }
+
+    /**
      * Deletes a book by its ID.
      * <p>
      * Uses a custom JPQL delete query to avoid loading the entity first.
@@ -165,6 +179,8 @@ public class BookService {
      * Performs a partial update on an existing book.
      * <p>
      * Only fields that are non-{@code null} and have text (for strings) are updated.
+     * The physical-copy row is write-locked before loading so a concurrent lost resolution
+     * cannot have its copy status overwritten by a stale managed entity.
      * Price updates must be positive; otherwise, an exception is thrown.
      * </p>
      *
@@ -182,8 +198,8 @@ public class BookService {
             throw new BookValidationException("Book update data must not be null");
         }
 
-        // 1. Find Book ID
-        Book existingBook = findBookById(id);
+        // 1. Lock and load the copy before applying changes to prevent status lost updates.
+        Book existingBook = findBookByIdForUpdate(id);
 
         // 2. Only set new value if update is available
         if (hasText(updates.title())) {
@@ -214,7 +230,8 @@ public class BookService {
     /**
      * Completely replaces an existing book with new data.
      * <p>
-     * All fields of the book are overwritten with the values from the DTO.
+     * All editable catalog fields are overwritten with the values from the DTO. The row lock
+     * preserves concurrently committed physical-copy status changes such as a lost resolution.
      * </p>
      *
      * @param id      the ID of the book to replace
@@ -243,8 +260,8 @@ public class BookService {
             throw new BookValidationException("Price must be greater than 0");
         }
 
-        // 2. Fetch the existing book (throws 404 if not found)
-        Book existingBook = findBookById(id);
+        // 2. Lock and fetch the copy so a concurrent lost resolution cannot be overwritten.
+        Book existingBook = findBookByIdForUpdate(id);
 
         // 3. Update entire entity using BookMapper
         mapper.updateBookFromDto(updates, existingBook);

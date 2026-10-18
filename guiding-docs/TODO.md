@@ -11,7 +11,7 @@ This is the working implementation roadmap. It is not the public project overvie
 | Roles in Java and the current schema | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN (Flyway V3) |
 | Authentication | HTTP Basic using university ID, UserDetailsService, and BCrypt |
 | Authorization | Book reads for all roles; ADMINISTRATOR/LIBRARIAN book CRUD; librarian creates faculty/library assistants; role-scoped service account checks |
-| Loans | Implemented in application and V4 migration; focused tests and runtime verification remain |
+| Loans | Implemented in application and V4 migration; service/MVC rules and key PostgreSQL invariants covered, borrower-limit checkout race remains |
 | JWT login and Bearer validation | Not implemented |
 | LIBRARIAN role and target owner/directory rules | Implemented with HTTP Basic |
 
@@ -37,8 +37,13 @@ See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-
 - [x] Add loan lifecycle, ownership checks, staff history and lost-copy resolution.
 - [x] Add forward-only V4 schema with copy status, state constraints, and one-active-loan-per-copy index.
 - [x] Preserve book and user history by returning HTTP 409 when referenced records are deleted.
-- [ ] Add service, MVC/security, and PostgreSQL concurrency/invariant coverage.
-- [ ] Verify fresh V1-to-V4 startup and upgrade from a database already migrated through V3.
+- [x] Cover the PostgreSQL race where a catalog edit competes with a lost-loan resolution and must preserve `LOST` copy status.
+- [x] Add focused loan service tests for borrower rules, availability, returns, lost-resolution scope, and history pagination.
+- [x] Add loan MVC/security tests for route roles, authenticated identity, and CSRF enforcement.
+- [x] Add PostgreSQL tests for returned history, the one-active-loan index, and protected deletion.
+- [ ] Add a concurrent checkout test proving the three-active-loan borrower limit cannot be exceeded.
+- [x] Verify fresh V1-to-V4 startup through the PostgreSQL integration profile.
+- [ ] Verify upgrade from a database already migrated through V3.
 
 ### 3. Replace HTTP Basic with local JWT authentication
 
@@ -61,7 +66,7 @@ Before changing a migration, establish whether that version has been applied to 
 
 ## Verification queue
 
-- [ ] Run the PostgreSQL-backed integration profile when Docker is available.
+- [x] Run the PostgreSQL-backed integration profile with Docker and a test-only BCrypt hash.
 - [ ] Perform the generated OpenAPI/Swagger UI review with the application running.
 - [ ] Review each security change against the allowed and denied cases in the target specification.
 

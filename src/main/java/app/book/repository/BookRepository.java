@@ -21,7 +21,9 @@ import jakarta.persistence.LockModeType;
 public interface BookRepository extends JpaRepository<Book, Long> {
 
     /**
-     * Loads and write-locks one physical copy during a checkout or loss resolution.
+     * Loads and write-locks one physical copy during checkout, catalog edits, or loss resolution.
+     * Using the same row lock for state-changing paths prevents an update based on an old
+     * copy-status value from overwriting a concurrently committed lost status.
      *
      * @param id physical copy identifier
      * @return the locked copy, if it exists

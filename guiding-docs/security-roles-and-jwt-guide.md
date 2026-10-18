@@ -92,7 +92,7 @@ Spring Security documents Resource Server support for JWT Bearer tokens and the 
 ## Implementation sequence
 
 1. **Roles and access rules:** implemented in `UserRole`, `SecurityConfig`, `UserService`, and Flyway V3. Public signup remains pinned to `STUDENT`; directory and ownership boundaries are enforced while Basic authentication remains active.
-2. **Loans:** implemented with a forward-only V4 migration, active-copy and borrower-limit concurrency protection, role-scoped histories, and lost-copy resolution. Focused service, MVC/security, and PostgreSQL tests remain to be added and run.
+2. **Loans:** implemented with a forward-only V4 migration, active-copy and borrower-limit concurrency protection, role-scoped histories, and lost-copy resolution. `LoanServiceTest` and `LoanSecurityMvcTest` cover key rules and route boundaries; PostgreSQL tests cover copy edit/loss races, return persistence, copy uniqueness, and deletion restrictions. A concurrent borrower-limit checkout test remains.
 3. **JWT:** add the Spring Boot OAuth2 Resource Server starter, JWT encoder/decoder configuration, secret/issuer settings, login DTO/controller/service, Bearer authorization, stateless session policy, and OpenAPI scheme. Remove HTTP Basic after the Bearer flow is working.
 4. **Documentation:** keep `AGENTS.md`, README endpoint/security inventories, OpenAPI annotations, and [Loan Implementation Guide](../docs/loan.md) aligned with runtime behavior.
 

@@ -106,6 +106,9 @@ library-api-system/
     `-- test/
         |-- java/unit/auth/
         |   `-- SecurityFlowMvcTest.java
+        |-- java/unit/loan/
+        |   |-- LoanSecurityMvcTest.java
+        |   `-- LoanServiceTest.java
         |-- java/unit/book/
         |   |-- BookApiMvcTest.java
         |   |-- BookMapperTest.java
@@ -120,6 +123,7 @@ library-api-system/
         |-- java/integration/
         |   |-- PostgresTestConfig.java
         |   |-- book/BookPersistenceIT.java
+        |   |-- loan/LoanPersistenceIT.java
         |   `-- user/UserPersistenceIT.java
         `-- resources/
             |-- junit-platform.properties
@@ -187,6 +191,8 @@ Write methods are transactional:
 - `patchBook` loads a managed entity and changes only supplied fields.
 - `replaceBook` validates a complete replacement, then maps all fields onto a managed entity.
 - `deleteBookById` executes a modifying JPQL query and checks the affected row count.
+
+PATCH and PUT load the copy through `BookRepository.findByIdForUpdate`. That pessimistic row lock is also used by loan checkout and lost-loan resolution. It makes catalog edits wait for an in-flight loss resolution and then load the committed copy status, preventing a stale edit from restoring `IN_COLLECTION` after staff recorded `LOST`.
 
 Before create, PATCH, and PUT reach the persistence boundary, the service explicitly validates
 the resulting `Book` with Jakarta `Validator`. This makes entity constraints effective for
@@ -430,8 +436,9 @@ The opt-in `integration` Maven profile uses Testcontainers PostgreSQL and Spring
 | `SPRING_DATASOURCE_URL` | JDBC database URL | `jdbc:postgresql://db:5432/${POSTGRES_DB}` |
 | `SPRING_DATASOURCE_USERNAME` | Database role | `${POSTGRES_USER}` |
 | `SPRING_DATASOURCE_PASSWORD` | Database password | `${POSTGRES_PASSWORD}` |
+| `LIBRO_ADMIN_PASSWORD_HASH` | BCrypt hash used by the historical V2 bootstrap account migration | `${LIBRO_ADMIN_PASSWORD_HASH}` |
 
-Docker Compose additionally reads `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` from a root `.env` file. `envFileExample` is a template; never commit real credentials. Do not log secrets or place them in source, tests, migrations, README examples, or exception messages.
+Docker Compose additionally reads `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` from a root `.env` file. Any Flyway startup, including the Testcontainers integration profile, also requires `LIBRO_ADMIN_PASSWORD_HASH` to be set to a valid BCrypt hash because V2 seeds the historical bootstrap assistant account. Use a test-only hash for the disposable integration database; never use a raw password or commit a real credential. `envFileExample` is a template; never commit real credentials. Do not log secrets or place them in source, migrations, README examples, or exception messages.
 
 Important persistence settings:
 
@@ -533,22 +540,25 @@ Central advice maps Java/application exceptions to stable HTTP errors, keeping e
 
 ## Testing Strategy
 
-Test sources are grouped by scope and feature: security MVC tests live in `src/test/java/unit/auth`, book unit/MVC tests in `src/test/java/unit/book`, user unit tests in `src/test/java/unit/user`, cross-domain unit tests in `src/test/java/unit/global`, and PostgreSQL-backed tests in `src/test/java/integration/book` and `src/test/java/integration/user`. Keep new tests in the matching package so the filesystem and Java package names remain aligned. Use the current run's `target/surefire-reports/` and `target/failsafe-reports/` as the source for test counts; do not maintain totals in this guide.
+Test sources are grouped by scope and feature: security MVC tests live in `src/test/java/unit/auth`, loan unit/MVC tests in `src/test/java/unit/loan`, book unit/MVC tests in `src/test/java/unit/book`, user unit tests in `src/test/java/unit/user`, cross-domain unit tests in `src/test/java/unit/global`, and PostgreSQL-backed tests in `src/test/java/integration/{book,loan,user}`. Keep new tests in the matching package so the filesystem and Java package names remain aligned. Use the current run's `target/surefire-reports/` and `target/failsafe-reports/` as the source for test counts; do not maintain totals in this guide.
 
 - `BookApiMvcTest`: Spring Boot 4 MVC-slice coverage for route/status contracts, JSON shapes, invalid request bodies, pagination and query binding, and global exception responses. It uses mocked service/mapper beans and does not start JPA, Flyway, or PostgreSQL.
 
 - `UserApiMvcTest`: MVC-slice coverage for every user route, binding and validation behavior, pagination, response shapes, 404/409 error bodies, and exclusion of password data from public responses. It uses a mocked `UserService` and does not start JPA, Flyway, or PostgreSQL.
 - `SecurityFlowMvcTest`: MVC-slice checks for public signup, unauthenticated rejection, valid and invalid HTTP Basic credentials, and university-ID lookup through the real `LibroUserDetailsService` backed by a mocked repository.
-- `OpenApiMvcTest`: generated `/v3/api-docs` contract checks in an MVC slice, covering representative paths, response codes, write-only password inputs, and public response privacy without Docker.
+- `LoanSecurityMvcTest`: MVC-slice checks for loan role gates, principal-derived borrower identity, authenticated history access, and CSRF on unsafe requests.
+- `OpenApiMvcTest`: generated `/v3/api-docs` contract checks in an MVC slice, covering representative paths, response codes, write-only password inputs, public response privacy, and loan-history pagination/sort documentation without Docker.
 
 - `UserServiceTest`: Mockito-based service unit tests for partial-update normalization, validation, password verification and encoding, password-length bounds, unchanged-email handling, duplicate-email rejection, missing-user handling, and dirty-checking expectations.
+- `LoanServiceTest`: Mockito-based service tests for student/faculty checkout, overdue and three-active-loan limits, copy availability, return ownership and terminal state, staff lost-resolution scope, history access, sorting, and page-size bounds.
 
 - `BookServiceTest`: Mockito-based service unit tests for CRUD rules, text normalization, entity-validation enforcement, price-range validation, dirty-checking expectations, search, sorting, pricing, typed statistics projections, genre distribution, and other aggregate behavior.
 - `BookTest`: entity-construction, lifecycle, and direct Jakarta Validator tests for request DTO and entity constraints.
 - `BookMapperTest`: focused tests for entity-to-DTO mapping, null inputs, and list mapping.
 - `GlobalExceptionHandlerTest`: direct unit tests for exception handlers, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
-- `BookPersistenceIT`: PostgreSQL 18 integration tests for Flyway migrations, Hibernate schema validation, repository queries and projections, and committed service updates.
-- `UserPersistenceIT`: PostgreSQL integration tests for normalized creation, stored hashes, committed updates, and uniqueness/format constraints. `PostgresTestConfig` supplies one context-managed PostgreSQL container to both classes. They use the same JUnit resource lock to avoid concurrent database writes. Run them with `mvn -Pintegration verify`; Docker-backed verification is still pending.
+- `BookPersistenceIT`: PostgreSQL 18 integration tests for Flyway migrations, Hibernate schema validation, repository queries and projections, committed service updates, and a catalog edit waiting for lost-loan resolution while preserving the committed `LOST` copy status.
+- `LoanPersistenceIT`: PostgreSQL integration tests for committed return history, the one-active-loan-per-copy index, and foreign-key deletion restrictions.
+- `UserPersistenceIT`: PostgreSQL integration tests for normalized creation, stored hashes, committed updates, and uniqueness/format constraints. `PostgresTestConfig` supplies one context-managed PostgreSQL container to all three integration classes. They use the same JUnit resource lock to avoid concurrent database writes. Run them with `mvn -Pintegration verify`.
 
 The unit/MVC suite execution setup is deliberately small and optimized:
 
@@ -645,8 +655,8 @@ When a breaking change is intended, document migration guidance and update all e
 - The Docker image requires a prebuilt JAR and does not build source itself.
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
 - Signup always creates a student; librarians create faculty and library assistants; students/faculty may delete themselves, administrators may delete student/faculty accounts, and librarians may also delete library assistant accounts.
-- Loan routes and V4 are implemented, but loan-specific service, MVC/security, and PostgreSQL tests have not yet been added. User routes have MVC contract, PostgreSQL integration, and HTTP Basic security-flow coverage; the security MVC tests mock the user repository.
-- Docker-backed JPA/migration checks are implemented but require a working Docker daemon to verify. A V1-to-V4 fresh startup and V3-to-V4 upgrade path need explicit verification.
+- Loan routes and V4 are implemented. `LoanServiceTest` and `LoanSecurityMvcTest` cover key service rules and route gates; `BookPersistenceIT` and `LoanPersistenceIT` cover V4, the lost-status/catalog-edit lock interaction, loan history constraints, and terminal return persistence. Concurrent borrower-limit checkout attempts still need a dedicated PostgreSQL test. User routes have MVC contract, PostgreSQL integration, and HTTP Basic security-flow coverage; the security MVC tests mock the user repository.
+- `BookPersistenceIT` verifies a fresh PostgreSQL database migrates through V4 and passes Hibernate schema validation. The V3-to-V4 upgrade path for an existing database still needs explicit verification; running the integration profile requires Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH`.
 - Success response shapes are inconsistent across endpoints.
 - `timestamp` fields are epoch milliseconds rather than ISO-8601 values.
 - The book health endpoint runs a lightweight database ping but is not integrated with Spring Boot Actuator or container health checks.

@@ -217,12 +217,16 @@ The current schema stores books, users, and loans. A Book row is one physical co
 
 ```mermaid
 erDiagram
+    USER ||--o{ LOAN : borrower
+    USER o|--o{ LOAN : lost_by
+    BOOK ||--o{ LOAN : copy_for
     BOOK {
         BIGINT id PK
         VARCHAR title
         VARCHAR author
         VARCHAR genre
         DECIMAL price
+        VARCHAR copy_status
         TIMESTAMP created_at
     }
     USER {
@@ -231,29 +235,9 @@ erDiagram
         VARCHAR password_hash
         VARCHAR user_role
         VARCHAR email UK
-        VARCHAR user_course
-        VARCHAR major
+        VARCHAR student_course
+        VARCHAR infotech_major
         TIMESTAMP created_at
-    }
-```
-
-#### Loan Relationship
-
-One loan row represents one borrowing event for one physical book copy. Students and faculty are the only borrower roles, with up to three active loans each; a borrower with an overdue loan cannot start another loan. Library assistants and librarians can mark an authorized active loan lost; this also marks the physical copy lost. A copy with any loan history is retained and cannot be deleted; deletion returns `409 Conflict`.
-
-```mermaid
-erDiagram
-    USER ||--o{ LOAN : borrows
-    USER o|--o{ LOAN : records_loss
-    BOOK ||--o{ LOAN : appears_in
-    USER {
-        BIGINT id PK
-        VARCHAR university_id UK
-    }
-    BOOK {
-        BIGINT id PK
-        VARCHAR title
-        VARCHAR copy_status
     }
     LOAN {
         BIGINT id PK
@@ -268,7 +252,7 @@ erDiagram
     }
 ```
 
-Each checkout creates a new `LOAN` row. Its lifecycle status is `ACTIVE`, `RETURNED`, or `LOST`; overdue is calculated at request time and is not stored. Returned and lost events remain in history. Penalties and repeat-offender rules are future scope.
+Each checkout creates a new `LOAN` row for one physical copy and one borrower; `lost_by_user_id` is optional because only a lost loan has a staff resolver. Its lifecycle status is `ACTIVE`, `RETURNED`, or `LOST`; overdue is calculated at request time and is not stored. Returned and lost events remain in history. Students and faculty may have up to three active loans each, and a borrower with an overdue loan cannot start another loan. Library assistants and librarians can mark authorized active loans lost, which also marks the physical copy lost. A copy with any loan history is retained and cannot be deleted; deletion returns `409 Conflict`. Penalties and repeat-offender rules are future scope.
 
 ## File Structure
 
@@ -695,9 +679,9 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The current Docker-free suite covers book and user MVC contracts, generated OpenAPI security-sensitive schemas, services, DTOs, mappings, and exception handling; loan-specific tests have not been added. The opt-in PostgreSQL profile checks existing Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, and database constraints. PostgreSQL integration execution requires Docker.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The Docker-free suite covers book, user, and loan service/MVC contracts, generated OpenAPI security-sensitive schemas, DTOs, mappings, and exception handling. The opt-in PostgreSQL profile checks Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, database constraints, loan lifecycle persistence, and the race between catalog edits and lost-loan resolution. A concurrent borrower-limit checkout test remains outstanding. PostgreSQL integration execution requires Docker and a valid `LIBRO_ADMIN_PASSWORD_HASH` for Flyway V2; use a test-only hash for its disposable database.
 
-Tests are grouped by test scope and domain: `src/test/java/unit/auth`, `src/test/java/unit/book`, `src/test/java/unit/user`, and `src/test/java/unit/global`; PostgreSQL integration tests live under `src/test/java/integration/book` and `src/test/java/integration/user`. Keep new tests with the domain they exercise. Shared PostgreSQL test configuration lives directly under `integration` so both integration classes use one Spring context and container.
+Tests are grouped by test scope and domain: `src/test/java/unit/auth`, `src/test/java/unit/loan`, `src/test/java/unit/book`, `src/test/java/unit/user`, and `src/test/java/unit/global`; PostgreSQL integration tests live under `src/test/java/integration/book`, `src/test/java/integration/loan`, and `src/test/java/integration/user`. Keep new tests with the domain they exercise. Shared PostgreSQL test configuration lives directly under `integration` so all integration classes use one Spring context and container.
 
 - `BookTest` verifies book construction and request DTO constraints.
 - `BookApiMvcTest` verifies routes, status codes, JSON response shapes, invalid request payloads, pagination/query binding, and global exception responses without starting JPA or PostgreSQL.
@@ -705,11 +689,14 @@ Tests are grouped by test scope and domain: `src/test/java/unit/auth`, `src/test
 - `BookServiceTest` verifies service rules, repository interaction, search, sorting, pricing, typed statistics projections, genre-distribution mapping, and dirty-checking expectations.
 - `UserApiMvcTest` verifies all user routes, request binding and validation, paging defaults, direct DTO versus envelope response shapes, 404/409 error responses, and that public responses do not expose password fields. It mocks `UserService` and does not start JPA or PostgreSQL.
 - `SecurityFlowMvcTest` exercises the real filter chain and `LibroUserDetailsService` with a mocked user repository: public signup, unauthenticated rejection, valid university-ID/password authentication, and incorrect-password rejection.
-- `OpenApiMvcTest` generates `/v3/api-docs` in an MVC slice and checks representative routes, response codes, write-only password inputs, and absence of password fields in public responses without Docker.
+- `LoanServiceTest` covers checkout rules, active-loan/overdue rejection, return ownership, staff loss scope, history permissions, and pagination restrictions.
+- `LoanSecurityMvcTest` exercises loan route role rules, principal-derived identity, authenticated history, and CSRF enforcement through the real filter chain.
+- `OpenApiMvcTest` generates `/v3/api-docs` in an MVC slice and checks representative routes, response codes, write-only password inputs, absence of password fields in public responses, and loan-history pagination/sort documentation without Docker.
 - `GlobalExceptionHandlerTest` directly invokes the exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
 - `UserServiceTest` verifies partial-update normalization, DTO and business validation, password verification and encoding, unchanged-email handling, duplicate-email rejection, and dirty-checking expectations. Academic combinations still need focused coverage; `UserPersistenceIT` covers selected real-database paths.
-- `BookPersistenceIT` runs only with the `integration` profile and Docker. It checks migrations/schema validation, PostgreSQL book queries and projections, and committed PATCH/PUT updates.
-- `UserPersistenceIT` checks normalized user creation, stored password hashes, committed profile/password changes, and PostgreSQL uniqueness and ID-format constraints. Both integration classes share a PostgreSQL 18 container and serialize access to it; their runtime verification still depends on a working Docker daemon.
+- `BookPersistenceIT` runs only with the `integration` profile and Docker. It checks all four migrations/schema validation, PostgreSQL book queries and projections, committed PATCH/PUT updates, and that an edit waiting for a concurrent lost-loan resolution preserves the copy's `LOST` status.
+- `LoanPersistenceIT` checks returned history persistence, the one-active-loan-per-copy database index, and deletion restrictions for borrowers and copies with history.
+- `UserPersistenceIT` checks normalized user creation, stored password hashes, committed profile/password changes, and PostgreSQL uniqueness and ID-format constraints. All three integration classes share a PostgreSQL 18 container and serialize access to it; running them requires Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH`.
 
 ### Unit-test performance
 
@@ -730,7 +717,7 @@ Run all unit tests:
 mvn clean test
 ```
 
-Run PostgreSQL integration tests (requires Docker):
+Run PostgreSQL integration tests (requires Docker and `LIBRO_ADMIN_PASSWORD_HASH` set to a test-only BCrypt hash):
 
 ```powershell
 mvn -Pintegration verify
@@ -795,8 +782,7 @@ The [Development Problems Solved](docs/development-problems-solved.md) write-up 
 - Inspect the generated OpenAPI document and Swagger UI with the application and database running; verify parameter defaults, request/response schemas, statuses, errors, and examples against the implementation.
 - Replace HTTP Basic with the planned short-lived JWT Bearer flow, or choose institutional SSO before deployment.
 - Review the HTTP Basic and CSRF model before exposing the API to external clients.
-- Add and run focused loan service, MVC/security, and PostgreSQL migration/concurrency tests.
-- Run `mvn -Pintegration verify` on a Docker-enabled machine to execute the PostgreSQL integration tests; add them to CI when a CI workflow is introduced.
+- Add a concurrent borrower-limit checkout test; include the PostgreSQL integration profile in CI when a CI workflow is introduced.
 - Benchmark case-insensitive substring searches as the catalog grows; add database search indexes only if measurements justify them.
 
 ## License

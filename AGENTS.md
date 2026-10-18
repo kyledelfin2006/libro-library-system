@@ -57,7 +57,7 @@ These are a snapshot, not a substitute for checking the code when a task changes
 ## Don't
 
 - Don't implement planned JWT work merely because it appears in the security guide; follow the user's requested scope.
-- Don't claim JWT or Bearer authentication is live until code and tests enforce it. Loan routes are implemented, but their new behavior still needs focused tests before release.
+- Don't claim JWT or Bearer authentication is live until code and tests enforce it. Loan service rules and route role/CSRF gates have focused tests; concurrent checkout races, especially the borrower active-loan limit, still need dedicated PostgreSQL coverage before release.
 - Don't let public signup choose a privileged role.
 - Don't add repository access or domain workflows to controllers.
 - Don't pass arbitrary client sort properties through to persistence.
