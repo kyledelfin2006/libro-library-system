@@ -33,7 +33,7 @@ See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-
 
 ### 2. Verify and harden loans
 
-- [x] Agree a 14-calendar-day term, Manila `LocalDateTime`, 3 active-loan limit, overdue checkout block, and student/faculty-only borrowing.
+- [x] Agree a 14-calendar-day term, Asia/Manila clock for offset-free `LocalDateTime` values, 3 active-loan limit, overdue checkout block, and student/faculty-only borrowing.
 - [x] Add loan lifecycle, ownership checks, staff history and lost-copy resolution.
 - [x] Add forward-only V4 schema with copy status, state constraints, and one-active-loan-per-copy index.
 - [x] Preserve book and user history by returning HTTP 409 when referenced records are deleted.

@@ -169,7 +169,7 @@ I kept the suite focused and explicit: shared the stateless Jakarta Validator wh
 
 ### Verification
 
-At that historical milestone, the Docker-free suite passed. The repository README and contributor guide describe coverage by responsibility; the Surefire reports from a current run provide its test count. `mvn test` is the normal fast check; `mvn clean verify` additionally produces the JaCoCo report. Security integration and a successful Docker-backed PostgreSQL run remain open verification areas.
+At that historical milestone, the Docker-free suite passed. Security integration and a successful Docker-backed PostgreSQL run were still open verification areas at that time; the later PostgreSQL run is recorded in section 9. The repository README and contributor guide describe coverage by responsibility; use Surefire reports from a current run for its test count. `mvn test` is the normal fast check; `mvn clean verify` additionally produces the JaCoCo report.
 
 ## 9. Persistence behavior needed a real PostgreSQL test boundary
 
@@ -183,7 +183,7 @@ I added an opt-in Maven `integration` profile with Testcontainers 2.x and Spring
 
 ### Verification and remaining limit
 
-On 2026-09-30, the Docker-free `mvn clean test -q` suite passed. `mvn -Pintegration verify -q` reached Failsafe but Testcontainers could not find a valid Docker environment, so the book and user persistence assertions remain unverified. Run the integration profile with a working Docker daemon to verify them.
+On 2026-09-30, the Docker-free `mvn clean test -q` suite passed. The attempted `mvn -Pintegration verify -q` reached Failsafe but Testcontainers could not find a valid Docker environment, so those persistence assertions were unverified at that time. On 2026-10-19, the PostgreSQL integration profile later passed, covering the fresh V1-to-V4 schema and the book, loan, and user persistence checks. The concurrent borrower-limit checkout test and upgrade from a database already at V3 remain open; see the current [roadmap](../guiding-docs/TODO.md).
 
 ## 10. User routes were missing HTTP-contract coverage
 
@@ -217,7 +217,7 @@ I added `GET /app/books/query` as one paginated path. It accepts optional title,
 
 Before this change, a filtered request returned an unbounded list. Now a client can request one bounded page and receive `totalElements` and `totalPages` for navigation. The configured maximum page size is 100. The database still has to evaluate matching predicates and count results, so this change bounds returned rows and payload size rather than promising constant query time; substring search should be benchmarked as the catalog grows.
 
-On 2026-10-03, the Docker-free Maven test suite passed. I also started the application against a newly created, isolated PostgreSQL 18 database and exercised the HTTP route through Flyway, Spring MVC, the service, Hibernate, and PostgreSQL. The checks covered combined filters, inclusive bounds, one-sided price filtering, page totals and ordering, the page-size cap, and HTTP 400 responses for invalid sort and price range. The temporary database was removed afterward. The Testcontainers `mvn -Pintegration verify` suite still needs a running Docker daemon; the local PostgreSQL smoke check does not replace that full suite.
+On 2026-10-03, the Docker-free Maven test suite passed. I also started the application against a newly created, isolated PostgreSQL 18 database and exercised the HTTP route through Flyway, Spring MVC, the service, Hibernate, and PostgreSQL. The checks covered combined filters, inclusive bounds, one-sided price filtering, page totals and ordering, the page-size cap, and HTTP 400 responses for invalid sort and price range. The temporary database was removed afterward. At that point, the local PostgreSQL smoke check did not replace the still-unrun Testcontainers profile; that profile passed later on 2026-10-19, as recorded in section 9.
 
 ## 12. Test totals in prose became stale
 

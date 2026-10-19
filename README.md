@@ -597,8 +597,8 @@ User routes are available under `/app/users` for signup, staff directories, prof
 Docker is the preferred way to run the project because it brings up both PostgreSQL 18 and the Spring Boot application together.
 
 1. Create your environment file from the example:
-    ```bash
-    copy envFileExample .env
+    ```powershell
+    Copy-Item envFileExample .env
     ```
     Use values like:
     ```env
@@ -623,15 +623,17 @@ Docker is the preferred way to run the project because it brings up both Postgre
 If you prefer to run the application directly on the host machine, start only PostgreSQL with Docker and then run Spring Boot locally.
 
 1. Start the database:
-    ```bash
-    docker compose up db
+    ```powershell
+    docker compose up -d db
     ```
 2. Set the datasource environment variables:
-    ```bash
+    ```powershell
     $env:SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5432/librarydb"
     $env:SPRING_DATASOURCE_USERNAME="admin"
     $env:SPRING_DATASOURCE_PASSWORD="change_me"
+    $env:LIBRO_ADMIN_PASSWORD_HASH="<BCrypt hash for the local bootstrap account>"
     ```
+    Maven does not read Docker Compose's `.env` file, so set the bootstrap hash in the shell environment used to run the app.
 3. Run the app:
     ```bash
     mvn spring-boot:run
@@ -655,17 +657,19 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 
 ## Quick Start
 
-1. Copy `envFileExample` to `.env` and fill in PostgreSQL credentials.
+1. Copy `envFileExample` to `.env` and fill in PostgreSQL credentials and `LIBRO_ADMIN_PASSWORD_HASH` for Flyway V2's bootstrap account.
 2. Run `mvn clean package`.
 3. Run `docker compose up --build`.
-4. Open `http://localhost:8080/app/books/health`.
+4. Open `http://localhost:8080/app/books/health` with HTTP Basic credentials; the health endpoint is protected like other application routes.
 
 ## Data Management
 
-- PostgreSQL 18 stores all book records.
+- PostgreSQL 18 stores physical book copies, user accounts, and loan history.
 - Flyway manages schema changes via versioned SQL migrations in `src/main/resources/db/migration/`.
   - `V1__create_books_table.sql` creates the `books` table with the `created_at` column and indexes.
-  - `V2__create_users_table.sql` creates the users table with role, course, major, identity-format, uniqueness, and relationship constraints.
+  - `V2__create_users_table.sql` creates the users table with role, course, major, identity-format, uniqueness, and relationship constraints, then seeds the historical bootstrap library assistant from `LIBRO_ADMIN_PASSWORD_HASH`.
+  - `V3__add_librarian_role.sql` adds `LIBRARIAN` to the accepted database roles and applies the staff academic-field rules.
+  - `V4__add_loans_and_copy_status.sql` adds physical-copy status, loan history, state constraints, deletion restrictions, and the one-active-loan-per-copy index.
 - Compose no longer mounts SQL into PostgreSQL's init directory; Flyway is the only schema owner.
 - V1 uses `BIGSERIAL`, matching the entity's Java `Long`/SQL `BIGINT` mapping from the first migration.
 - The app uses JPA and Hibernate for entity persistence with `ddl-auto=validate`.
@@ -679,7 +683,7 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The Docker-free suite covers book, user, and loan service/MVC contracts, generated OpenAPI security-sensitive schemas, DTOs, mappings, and exception handling. The opt-in PostgreSQL profile checks Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, database constraints, loan lifecycle persistence, and the race between catalog edits and lost-loan resolution. A concurrent borrower-limit checkout test remains outstanding. PostgreSQL integration execution requires Docker and a valid `LIBRO_ADMIN_PASSWORD_HASH` for Flyway V2; use a test-only hash for its disposable database.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The Docker-free suite covers book, user, and loan service/MVC contracts, generated OpenAPI security-sensitive schemas, DTOs, mappings, and exception handling. The opt-in PostgreSQL profile checks Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, database constraints, loan lifecycle persistence, and the race between catalog edits and lost-loan resolution. A concurrent borrower-limit checkout test remains outstanding. PostgreSQL integration execution requires Docker and a valid test-only `LIBRO_ADMIN_PASSWORD_HASH` for Flyway V2. Set the variable in the environment inherited by Maven; Maven does not load Docker Compose's `.env` file.
 
 Tests are grouped by test scope and domain: `src/test/java/unit/auth`, `src/test/java/unit/loan`, `src/test/java/unit/book`, `src/test/java/unit/user`, and `src/test/java/unit/global`; PostgreSQL integration tests live under `src/test/java/integration/book`, `src/test/java/integration/loan`, and `src/test/java/integration/user`. Keep new tests with the domain they exercise. Shared PostgreSQL test configuration lives directly under `integration` so all integration classes use one Spring context and container.
 
@@ -717,7 +721,7 @@ Run all unit tests:
 mvn clean test
 ```
 
-Run PostgreSQL integration tests (requires Docker and `LIBRO_ADMIN_PASSWORD_HASH` set to a test-only BCrypt hash):
+Run PostgreSQL integration tests (requires Docker and `LIBRO_ADMIN_PASSWORD_HASH` set in the shell environment inherited by Maven to a test-only BCrypt hash):
 
 ```powershell
 mvn -Pintegration verify

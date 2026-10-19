@@ -438,7 +438,7 @@ The opt-in `integration` Maven profile uses Testcontainers PostgreSQL and Spring
 | `SPRING_DATASOURCE_PASSWORD` | Database password | `${POSTGRES_PASSWORD}` |
 | `LIBRO_ADMIN_PASSWORD_HASH` | BCrypt hash used by the historical V2 bootstrap account migration | `${LIBRO_ADMIN_PASSWORD_HASH}` |
 
-Docker Compose additionally reads `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` from a root `.env` file. Any Flyway startup, including the Testcontainers integration profile, also requires `LIBRO_ADMIN_PASSWORD_HASH` to be set to a valid BCrypt hash because V2 seeds the historical bootstrap assistant account. Use a test-only hash for the disposable integration database; never use a raw password or commit a real credential. `envFileExample` is a template; never commit real credentials. Do not log secrets or place them in source, migrations, README examples, or exception messages.
+Docker Compose additionally reads `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` from a root `.env` file. Any Flyway startup, including the Testcontainers integration profile, also requires `LIBRO_ADMIN_PASSWORD_HASH` to be set to a valid BCrypt hash because V2 seeds the historical bootstrap assistant account. Docker Compose reads that value from `.env`; when running the application or Maven directly, set it in the process environment because Maven does not load `.env` files. Use a test-only hash for the disposable integration database; never use a raw password or commit a real credential. `envFileExample` is a template; never commit real credentials. Do not log secrets or place them in source, migrations, README examples, or exception messages.
 
 Important persistence settings:
 
@@ -658,7 +658,7 @@ When a breaking change is intended, document migration guidance and update all e
 - Loan routes and V4 are implemented. `LoanServiceTest` and `LoanSecurityMvcTest` cover key service rules and route gates; `BookPersistenceIT` and `LoanPersistenceIT` cover V4, the lost-status/catalog-edit lock interaction, loan history constraints, and terminal return persistence. Concurrent borrower-limit checkout attempts still need a dedicated PostgreSQL test. User routes have MVC contract, PostgreSQL integration, and HTTP Basic security-flow coverage; the security MVC tests mock the user repository.
 - `BookPersistenceIT` verifies a fresh PostgreSQL database migrates through V4 and passes Hibernate schema validation. The V3-to-V4 upgrade path for an existing database still needs explicit verification; running the integration profile requires Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH`.
 - Success response shapes are inconsistent across endpoints.
-- `timestamp` fields are epoch milliseconds rather than ISO-8601 values.
+- API envelope and error `timestamp` fields are epoch milliseconds rather than ISO-8601 values. Loan date-time fields use `LocalDateTime` and are serialized without a timezone offset; the loan contract treats them as Asia/Manila local time.
 - The book health endpoint runs a lightweight database ping but is not integrated with Spring Boot Actuator or container health checks.
 - Ordinary indexes may not accelerate case-insensitive substring searches as expected.
 - The database enforces `NOT NULL` for price but not a positive-value check; application validation is the current positive-price guard.

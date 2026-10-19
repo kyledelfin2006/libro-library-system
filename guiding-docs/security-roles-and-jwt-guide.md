@@ -57,7 +57,7 @@ Only students and faculty may create loans or return their own loans. Administra
 
 The `Loan` entity references one `User` and one `Book`, with `borrowedAt`, `dueAt`, `status`, nullable `returnedAt`, and optional loss audit fields. `ACTIVE`, `RETURNED`, and `LOST` are event-driven states; overdue is calculated at read time. Writes run in `LoanService` transactions. The service checks availability for a clear error, and PostgreSQL enforces the concurrency invariant with a partial unique index on `book_id` where `status = 'ACTIVE'`. Loan rows are preserved; user and book deletion are blocked while loan history exists.
 
-The approved loan period is 14 calendar days with no weekend or holiday extension. Use Java `LocalDateTime`, interpreted as Asia/Manila local time, for loan timestamps. A book copy with any loan history cannot be deleted; return HTTP 409 and preserve its loan rows. Marking a loan lost records the staff member and time, closes that loan, and marks the physical copy `LOST`; lost copies cannot be borrowed or deleted. Monetary penalties and borrower suspension are out of scope.
+The approved loan period is 14 calendar days with no weekend or holiday extension. The service obtains timestamps using `LocalDateTime.now` with an Asia/Manila `Clock`, independent of the server timezone. `LocalDateTime` itself carries no zone or UTC offset; the API treats those values as Manila-local time. A book copy with any loan history cannot be deleted; return HTTP 409 and preserve its loan rows. Marking a loan lost records the staff member and time, closes that loan, and marks the physical copy `LOST`; lost copies cannot be borrowed or deleted. Monetary penalties and borrower suspension are out of scope.
 
 ## JWT login and request validation
 

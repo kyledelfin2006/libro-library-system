@@ -19,7 +19,7 @@ public class LoanTimeConfig {
      */
     @Bean
     public Clock libraryClock() {
-        // LocalDateTime values are interpreted as Asia/Manila throughout this feature.
+        // The Manila clock supplies local wall time; LocalDateTime itself carries no zone or offset.
         return Clock.system(ZoneId.of("Asia/Manila"));
     }
 }
