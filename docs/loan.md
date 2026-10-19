@@ -22,7 +22,7 @@ Overdue is a calculated condition, not a status: `status == ACTIVE && now.isAfte
 - Each book row is one physical copy. A copy can have only one `ACTIVE` loan at a time.
 - A borrower can have at most **3 active loans**. A borrower with any overdue active loan cannot check out another copy.
 - A loan is due **14 calendar days** after checkout. Weekends and holidays do not extend the due time.
-- Loan timestamps use `LocalDateTime` interpreted as Asia/Manila time. `LoanTimeConfig` supplies a Manila `Clock` so the service does not depend on the machine timezone.
+- The service obtains loan timestamps with `LocalDateTime.now` and an Asia/Manila `Clock`, so it uses Manila wall time independently of the server timezone. `LocalDateTime` itself stores no timezone or UTC offset; the API contract treats these values as Manila-local time.
 - `ADMINISTRATOR` means library assistant. Assistants and librarians cannot borrow or return, but can view their own histories.
 - Library assistants may view and resolve student/faculty loans. Librarians may also view and resolve assistant loans. Neither staff role can manage another librarian's loan history.
 - Staff marks a loan `LOST` through an explicit action. The loan records the staff member and time; the related physical book is marked `LOST` and cannot be borrowed again. This is a recorded resolution, not an automatic overdue transition.
@@ -32,21 +32,44 @@ Overdue is a calculated condition, not a status: `status == ACTIVE && now.isAfte
 
 ## User flow
 
+### Borrower checkout and return
+
 ```mermaid
 flowchart TD
-    Start[Student or faculty selects a copy] --> Auth[HTTP Basic authenticates caller]
-    Auth --> Borrow[POST /app/loans/{bookId}]
-    Borrow --> Checks{Role, copy, overdue, and 3-loan checks pass?}
-    Checks -->|No| Conflict[Return 403 or 409]
-    Checks -->|Yes| Create[Create ACTIVE loan; dueAt = borrowedAt + 14 days]
-    Create --> History[View history with GET /app/loans/me]
-    History --> Choice{What happens to the copy?}
-    Choice -->|Borrower returns it| Return[PUT /app/loans/{loanId}/return]
-    Return --> Returned[Record returnedAt; status = RETURNED]
-    Choice -->|Staff confirms it is lost| Lost[PUT /app/loans/{loanId}/lost]
-    Lost --> Closed[Record lostAt and lostBy; status = LOST]
-    Closed --> CopyLost[Set book copy status = LOST]
+    Start[Student or faculty selects a copy] --> Auth{Authenticated with HTTP Basic?}
+    Auth -->|No| SignIn[401: sign in]
+    Auth -->|Yes| Role{Role is STUDENT or FACULTY?}
+    Role -->|No| Forbidden[403: borrowing is not allowed]
+    Role -->|Yes| Borrow["POST /app/loans/{bookId} with CSRF token"]
+    Borrow --> Checks{Copy exists and is available; no overdue loan; fewer than 3 active loans?}
+    Checks -->|No| Rejected[404 if copy is missing; 409 if unavailable overdue or at limit]
+    Checks -->|Yes| Active[Create ACTIVE loan; dueAt is 14 days after checkout]
+    Active --> History[View GET /app/loans/me]
+    Active --> Due{Borrower returns by dueAt?}
+    Due -->|Yes| Return["PUT /app/loans/{loanId}/return with CSRF token"]
+    Due -->|No| Overdue[Loan stays ACTIVE; overdue is calculated; new checkout is blocked]
+    Overdue --> Return
+    Return --> Ownership{Loan is ACTIVE and belongs to caller?}
+    Ownership -->|No| ReturnError[404 if missing or not owned; 409 if already terminal]
+    Ownership -->|Yes| Returned[Record returnedAt; set status RETURNED]
 ```
+
+### Staff lost-copy resolution
+
+```mermaid
+flowchart TD
+    Staff[Assistant or librarian opens patron loan history] --> History["GET /app/loans/users/{universityId}"]
+    History --> Scope{Staff role permits access to this borrower?}
+    Scope -->|No| Denied[403: borrower is outside staff scope]
+    Scope -->|Yes| Select[Select an ACTIVE loan]
+    Select --> Resolve["PUT /app/loans/{loanId}/lost with CSRF token"]
+    Resolve --> Active{Loan is still ACTIVE?}
+    Active -->|No| Conflict[409: loan is already terminal]
+    Active -->|Yes| Lost[Set loan status LOST; record lostAt and lostBy]
+    Lost --> Copy[Set physical copy status LOST]
+```
+
+An overdue loan is not automatically marked lost. The borrower can still return it; only authorized staff can resolve an active loan as lost. Assistants can resolve student/faculty loans, while librarians can also resolve library-assistant loans.
 
 ## Request flow through the code
 
@@ -154,13 +177,15 @@ Prerequisites are Java 25, Maven 3.x, and Docker Desktop if you want PostgreSQL 
 
    Flyway applies V1 through V4 at startup. Do not use `docker compose down -v` unless you intentionally want to destroy the database volume.
 
-4. Run the full Maven verification suite when ready to verify behavior:
+4. Run the default unit/MVC verification suite:
 
    ```powershell
    mvn clean verify
    ```
 
-The PostgreSQL persistence profile requires a working Docker daemon and `LIBRO_ADMIN_PASSWORD_HASH` set to a test-only BCrypt hash so Flyway V2 can seed its bootstrap account in the disposable test database. For a loan smoke test, authenticate as a student/faculty user, create a book copy, call `POST /app/loans/{bookId}`, inspect `GET /app/loans/me`, then return it. Swagger UI is at `http://localhost:8080/swagger-ui.html`; because CSRF remains enabled, state-changing requests must include the configured CSRF token.
+To include PostgreSQL integration tests, run `mvn -Pintegration clean verify` with Docker available and `LIBRO_ADMIN_PASSWORD_HASH` set in the shell environment inherited by Maven to a test-only BCrypt hash. Maven does not load the Docker Compose `.env` file; Flyway V2 needs the variable to seed its bootstrap account in the disposable test database.
+
+For a loan smoke test, have a library assistant or librarian create a book copy, then authenticate as a student or faculty borrower. Call `POST /app/loans/{bookId}`, inspect `GET /app/loans/me`, and return it with `PUT /app/loans/{loanId}/return`. Swagger UI is at `http://localhost:8080/swagger-ui.html`; because CSRF remains enabled, state-changing requests must include the configured CSRF token.
 
 ## Before extending the feature
 
