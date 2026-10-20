@@ -13,15 +13,25 @@ Libro is a library management system built with Spring Boot. It helps manage a l
 
 ### Features
 
-- 📚 **Books:** create, view, replace, partially update, and delete physical-copy records.
-- 🔎 **Search:** find books by title, author, genre, or exact replacement cost; combine filters, sort, paginate, and filter by replacement cost or budget.
-- 📊 **Insights:** view book counts, total and average replacement cost, the copy with the highest replacement cost, and genre counts.
-- 👥 **Accounts:** sign up, browse permitted listings, look up profiles, update details, change passwords, and delete accounts. Staff access follows role permissions.
-- 🔄 **Loans:** students and faculty borrow and return physical copies; staff can review permitted histories and mark lost copies.
-- 🛠️ **Built for development:** Docker, PostgreSQL 18, Flyway migrations, request validation, and consistent error responses.
-- 🩺 **Health check:** check API and database reachability.
+Libro brings catalog management, borrowing, and account workflows together in one API. A catalog record represents one physical copy, so availability and loan history stay tied to the copy on the shelf.
 
-Each `Book` is one physical copy; separate copies of a title have separate records. Loans use a 14-calendar-day term, allow up to three active loans per borrower, and block new checkouts while any loan is overdue. See the [Loan Implementation Guide](docs/loan.md) and [Domain Decisions](docs/domain-decisions.md).
+**Catalog and discovery**
+
+Add and update copies, then find them by title, author, genre, or replacement cost. Combine filters, sort results, and browse large collections in pages. Optional descriptions help distinguish or describe copies.
+
+**Borrowing and circulation**
+
+Students and faculty can borrow and return copies and review their own loan history. Loans are due after 14 calendar days; borrowers may have up to three active loans, and an overdue loan blocks another checkout. Library assistants and librarians can review histories within their role and record a copy as lost.
+
+**Accounts and access**
+
+Public signup creates student accounts. Librarians create faculty and library-assistant accounts, while staff manage patron accounts within their assigned permissions. Passwords are stored as BCrypt hashes, and authenticated routes use role-based access.
+
+**Collection insight and operations**
+
+Collection summaries report book and genre counts, total and average replacement cost, and the copy with the highest replacement cost. Docker Compose, PostgreSQL, Flyway migrations, request validation, consistent API errors, and a health endpoint support local development and operation.
+
+Replacement cost records the amount associated with replacing a physical copy; it does not assess a charge. See the [Loan Implementation Guide](docs/loan.md) for circulation rules and [Domain Decisions](docs/domain-decisions.md) for the copy-level model.
 
 ### API access
 
@@ -53,7 +63,8 @@ Main Developer: **Aldrin Kyle Delfin**
 * [Current Persistence Model](#current-persistence-model)
 * [File Structure](#file-structure)
 * [Core Design Patterns](#core-design-patterns)
-* [Key Features](#key-features)
+* [Features](#features)
+* [Feature Details](#feature-details)
 * [Request Lifecycle](#request-lifecycle)
 * [Code Highlights](#code-highlights)
 * [API Endpoints](#api-endpoints)
@@ -441,23 +452,42 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 }
 ```
 
-## Key Features
+## Feature Details
 
-- CRUD operations for books.
-- Each `Book` represents one physical borrowable copy. Duplicate titles and authors are allowed because separate copies have separate generated IDs; the model does not yet include an ISBN or edition key.
-- Pagination and sorting through `GET /app/books/all` and paginated filtering through `GET /app/books/query`.
-- Advanced search by title, author, genre, or replacement cost.
-- Replacement cost range filtering through `GET /app/books/replacement-cost`.
-- Budget filtering through `GET /app/books/budget`.
-- Statistics endpoints for total books, total replacement cost, average replacement cost, and the copy with the highest replacement cost.
-- Genre distribution endpoint.
-- User-domain API for account creation, profile lookup and updates, password changes, and deletion; the service applies duplicate checks, academic business rules, and BCrypt password hashing.
-- OpenAPI 3 documentation through Springdoc Swagger UI and `/v3/api-docs`, with operation-specific behavior, DTO schemas, and expected error responses.
-- Validation with `@Valid` on create and replace requests.
-- Global handling for `BookNotFoundException`, validation errors, malformed JSON, number format errors, database issues, and unsupported methods.
-- Validation errors also include a `fieldErrors` map keyed by request field (or `_global` when no field is available), so clients can render precise messages without parsing the combined `details` string.
-- HTTP Basic authentication through Spring Security; signup is public and other routes require authentication.
-- Versioned database schema via Flyway.
+### Catalog and discovery
+
+Each `Book` is one physical borrowable copy. Separate copies can share a title or author and still have independent availability and loan histories. The catalog supports:
+
+- Create, view, replace, partially update, and delete copy records.
+- Search by title, author, genre, or exact replacement cost; combine text and inclusive replacement-cost filters.
+- Paginate and sort results, with supported sort fields validated by the API.
+- Filter by a replacement-cost range or a maximum budget.
+- Record an optional description and a positive replacement cost. Replacement cost is catalog information, not a fee charged to a borrower.
+
+### Collection insight
+
+Collection statistics include the number of copies, total and average replacement cost, the copy with the highest replacement cost, and counts by genre.
+
+### Loans and circulation
+
+- Students and faculty borrow and return their own copies and view their own paged loan history.
+- Loans are due 14 calendar days after checkout. A borrower can have at most three active loans; an overdue active loan blocks another checkout.
+- Library assistants and librarians can view permitted patron histories and resolve an active loan as lost. That action records who resolved it and marks the copy unavailable.
+- Returned and lost loans remain in history. Overdue loans are not automatically marked lost, and replacement cost does not create a penalty balance.
+
+### Accounts and permissions
+
+- Public signup always creates a student account. Librarians can create faculty and library-assistant accounts.
+- Students and faculty manage their own profiles, passwords, and account deletion. Administrators (library assistants) can manage student and faculty accounts; librarians can also manage library-assistant accounts.
+- The service checks account ownership and role rules. Passwords are stored as BCrypt hashes and are omitted from account responses.
+
+### API and operations
+
+- Springdoc OpenAPI 3 generates Swagger UI and `/v3/api-docs` from the API contract.
+- Request validation and shared error responses give clients structured field-level details for invalid requests and consistent responses for other expected failures.
+- Spring Security uses HTTP Basic; signup is public, and unsafe requests also require a CSRF token.
+- PostgreSQL stores the catalog, accounts, and loan history. Flyway applies versioned schema changes, while Hibernate validates mappings at startup.
+- Docker Compose runs the application with PostgreSQL, and the health endpoint reports API and database reachability.
 
 ## Request Lifecycle
 
