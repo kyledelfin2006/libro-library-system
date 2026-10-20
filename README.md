@@ -13,25 +13,12 @@ Libro is a library management system built with Spring Boot. It helps manage a l
 
 ### Features
 
-Libro brings catalog management, borrowing, and account workflows together in one API. A catalog record represents one physical copy, so availability and loan history stay tied to the copy on the shelf.
+- **Catalog:** Manage physical copies; search and filter by title, author, genre, or replacement cost; sort and paginate results.
+- **Loans:** Students and faculty borrow and return copies. Loans last 14 days, allow up to three active loans per borrower, and block new checkouts while a loan is overdue.
+- **Accounts:** Public signup creates student accounts; librarians create faculty and library-assistant accounts. Role-based permissions protect account and staff workflows.
+- **Insights and operations:** View collection and genre statistics; run the API with PostgreSQL, Flyway, and Docker Compose. Validation, consistent errors, and a health endpoint support reliable use.
 
-**Catalog and discovery**
-
-Add and update copies, then find them by title, author, genre, or replacement cost. Combine filters, sort results, and browse large collections in pages. Optional descriptions help distinguish or describe copies.
-
-**Borrowing and circulation**
-
-Students and faculty can borrow and return copies and review their own loan history. Loans are due after 14 calendar days; borrowers may have up to three active loans, and an overdue loan blocks another checkout. Library assistants and librarians can review histories within their role and record a copy as lost.
-
-**Accounts and access**
-
-Public signup creates student accounts. Librarians create faculty and library-assistant accounts, while staff manage patron accounts within their assigned permissions. Passwords are stored as BCrypt hashes, and authenticated routes use role-based access.
-
-**Collection insight and operations**
-
-Collection summaries report book and genre counts, total and average replacement cost, and the copy with the highest replacement cost. Docker Compose, PostgreSQL, Flyway migrations, request validation, consistent API errors, and a health endpoint support local development and operation.
-
-Replacement cost records the amount associated with replacing a physical copy; it does not assess a charge. See the [Loan Implementation Guide](docs/loan.md) for circulation rules and [Domain Decisions](docs/domain-decisions.md) for the copy-level model.
+Each catalog record is one physical copy. Replacement cost records its value for replacement; it is not a borrower charge. See the [Loan Implementation Guide](docs/loan.md) and [Domain Decisions](docs/domain-decisions.md) for details.
 
 ### API access
 
