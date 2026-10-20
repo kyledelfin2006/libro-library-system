@@ -36,37 +36,37 @@ Overdue is a calculated condition, not a status: `status == ACTIVE && now.isAfte
 
 ```mermaid
 flowchart TD
-    Start[Student or faculty selects a copy] --> Auth{Authenticated with HTTP Basic?}
-    Auth -->|No| SignIn[401: sign in]
-    Auth -->|Yes| Role{Role is STUDENT or FACULTY?}
-    Role -->|No| Forbidden[403: borrowing is not allowed]
+    Start["Student or faculty selects a copy"] --> Auth{"Authenticated with HTTP Basic?"}
+    Auth -->|No| SignIn["401: sign in"]
+    Auth -->|Yes| Role{"Role is STUDENT or FACULTY?"}
+    Role -->|No| Forbidden["403: borrowing is not allowed"]
     Role -->|Yes| Borrow["POST /app/loans/{bookId} with CSRF token"]
-    Borrow --> Checks{Copy exists and is available; no overdue loan; fewer than 3 active loans?}
-    Checks -->|No| Rejected[404 if copy is missing; 409 if unavailable overdue or at limit]
-    Checks -->|Yes| Active[Create ACTIVE loan; dueAt is 14 days after checkout]
-    Active --> History[View GET /app/loans/me]
-    Active --> Due{Borrower returns by dueAt?}
+    Borrow --> Checks{"Copy exists and is available?<br/>No overdue loan?<br/>Fewer than three active loans?"}
+    Checks -->|No| Rejected["404: copy missing<br/>409: unavailable, overdue, or at limit"]
+    Checks -->|Yes| Active["Create ACTIVE loan<br/>Due 14 calendar days after checkout"]
+    Active --> History["View GET /app/loans/me"]
+    Active --> Due{"Returned by dueAt?"}
     Due -->|Yes| Return["PUT /app/loans/{loanId}/return with CSRF token"]
-    Due -->|No| Overdue[Loan stays ACTIVE; overdue is calculated; new checkout is blocked]
+    Due -->|No| Overdue["Loan stays ACTIVE<br/>Overdue is calculated and new checkout is blocked"]
     Overdue --> Return
-    Return --> Ownership{Loan is ACTIVE and belongs to caller?}
-    Ownership -->|No| ReturnError[404 if missing or not owned; 409 if already terminal]
-    Ownership -->|Yes| Returned[Record returnedAt; set status RETURNED]
+    Return --> Ownership{"Loan is ACTIVE and belongs to caller?"}
+    Ownership -->|No| ReturnError["404: missing or not owned<br/>409: already terminal"]
+    Ownership -->|Yes| Returned["Record returnedAt<br/>Set status RETURNED"]
 ```
 
 ### Staff lost-copy resolution
 
 ```mermaid
 flowchart TD
-    Staff[Assistant or librarian opens patron loan history] --> History["GET /app/loans/users/{universityId}"]
-    History --> Scope{Staff role permits access to this borrower?}
-    Scope -->|No| Denied[403: borrower is outside staff scope]
-    Scope -->|Yes| Select[Select an ACTIVE loan]
+    Staff["Library assistant or librarian opens patron loan history"] --> History["GET /app/loans/users/{universityId}"]
+    History --> Scope{"Staff role permits access to this borrower?"}
+    Scope -->|No| Denied["403: borrower is outside staff scope"]
+    Scope -->|Yes| Select["Select an ACTIVE loan"]
     Select --> Resolve["PUT /app/loans/{loanId}/lost with CSRF token"]
-    Resolve --> Active{Loan is still ACTIVE?}
-    Active -->|No| Conflict[409: loan is already terminal]
-    Active -->|Yes| Lost[Set loan status LOST; record lostAt and lostBy]
-    Lost --> Copy[Set physical copy status LOST]
+    Resolve --> Active{"Loan is still ACTIVE?"}
+    Active -->|No| Conflict["409: loan is already terminal"]
+    Active -->|Yes| Lost["Set loan status LOST<br/>Record lostAt and lostBy"]
+    Lost --> Copy["Set physical copy status LOST"]
 ```
 
 An overdue loan is not automatically marked lost. The borrower can still return it; only authorized staff can resolve an active loan as lost. Assistants can resolve student/faculty loans, while librarians can also resolve library-assistant loans.

@@ -9,7 +9,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
 
-Libro is a library management system built with Spring Boot. It helps manage a library's book collection and user accounts.
+Libro is a library management system built with Spring Boot. It helps manage a library's physical book copies, user accounts, and loan history.
 
 ### Features
 
@@ -47,24 +47,24 @@ Main Developer: **Aldrin Kyle Delfin**
 
 ## Table of Contents
 
-* [Architecture Overview](https://github.com/kyledelfin2006/library-api-system#architecture-overview)
-* [Layered Design](https://github.com/kyledelfin2006/library-api-system#layered-design)
-* [Current Authentication and Authorization Flow](https://github.com/kyledelfin2006/library-api-system#current-authentication-and-authorization-flow)
-* [Current Persistence Model](https://github.com/kyledelfin2006/library-api-system#current-persistence-model)
-* [File Structure](https://github.com/kyledelfin2006/library-api-system#file-structure)
-* [Core Design Patterns](https://github.com/kyledelfin2006/library-api-system#core-design-patterns)
-* [Key Features](https://github.com/kyledelfin2006/library-api-system#key-features)
-* [Request Lifecycle](https://github.com/kyledelfin2006/library-api-system#request-lifecycle)
-* [Code Highlights](https://github.com/kyledelfin2006/library-api-system#code-highlights)
-* [API Endpoints](https://github.com/kyledelfin2006/library-api-system#api-endpoints)
-* [Setup & Installation](https://github.com/kyledelfin2006/library-api-system#setup--installation)
-* [Troubleshooting](https://github.com/kyledelfin2006/library-api-system#troubleshooting)
-* [Data Management](https://github.com/kyledelfin2006/library-api-system#data-management)
-* [Testing](https://github.com/kyledelfin2006/library-api-system#testing)
+* [Architecture Overview](#architecture-overview)
+* [Layered Design](#layered-design)
+* [Current Authentication and Authorization Flow](#current-authentication-and-authorization-flow)
+* [Current Persistence Model](#current-persistence-model)
+* [File Structure](#file-structure)
+* [Core Design Patterns](#core-design-patterns)
+* [Key Features](#key-features)
+* [Request Lifecycle](#request-lifecycle)
+* [Code Highlights](#code-highlights)
+* [API Endpoints](#api-endpoints)
+* [Setup & Installation](#setup--installation)
+* [Troubleshooting](#troubleshooting)
+* [Data Management](#data-management)
+* [Testing](#testing)
 * [Documentation](#documentation)
 * [Problems I Solved](#problems-i-solved)
-* [Upcoming Improvements](https://github.com/kyledelfin2006/library-api-system#upcoming-improvements)
-* [License](https://github.com/kyledelfin2006/library-api-system#license)
+* [Upcoming Improvements](#upcoming-improvements)
+* [License](#license)
 
 ## Documentation
 
@@ -92,8 +92,9 @@ The system runs as a Spring Boot API alongside PostgreSQL. Book, user, and loan 
 
 ```mermaid
 flowchart LR
-    Client["API Client"] -->|HTTP / JSON + optional Basic credentials| Security["Spring Security<br/>signup public; other routes authenticated"]
-    subgraph App["Docker Compose: Spring Boot application"]
+    Client["API client"]
+    subgraph App["Spring Boot application"]
+        Security["Spring Security<br/>signup public; other routes authenticated"]
         API["BookAPI<br/>Spring MVC"] --> Service["BookService<br/>business rules · transactions"]
         Service --> BookRepo["BookRepository<br/>Spring Data JPA"]
         LoanAPI["LoanAPI<br/>checkout · return · history"] --> LoanService["LoanService<br/>loan rules · transactions"]
@@ -107,7 +108,8 @@ flowchart LR
         Security -->|load account for Basic authentication| UserDetails["LibroUserDetailsService<br/>lookup by university ID · map role"]
         UserDetails -->|findByUniversityId| UserRepo
         UserRepo --> ORM
-        Shared["Shared concerns<br/>DTOs · mappers · Jakarta validation<br/>GlobalExceptionHandler · OpenAPI"]
+        Flyway["Flyway migrations<br/>V1 books · V2 users · V3 librarian role · V4 loans"]
+        Shared["Shared concerns<br/>DTOs · mappers · validation<br/>GlobalExceptionHandler · OpenAPI"]
         Security -->|authorized request| API
         Security -->|authorized request| UserAPI
         Security -->|authorized request| LoanAPI
@@ -117,9 +119,11 @@ flowchart LR
         Service -.-> Shared
         UserAPI -.-> Shared
         User -.-> Shared
+        Security -.-> Shared
     end
+    Client -->|HTTP and JSON with optional Basic credentials| Security
     ORM -->|JDBC| DB[("PostgreSQL 18")]
-    Flyway["Flyway migrations<br/>V1 books · V2 users · V3 librarian role · V4 loans"] -->|startup schema changes| DB
+    Flyway -->|startup schema changes| DB
     Compose["Docker Compose<br/>starts app after database is healthy"] -.-> App
     Compose -.-> DB
 
@@ -185,27 +189,28 @@ Account and loan access is checked against the authenticated user's university I
 ### Layered Design
 
 ```mermaid
-%%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 18}, "themeVariables": {"fontSize": "12px"}}}%%
 flowchart TD
-    C["<b>Controller Layer (BookAPI / UserAPI / LoanAPI)</b><br/>HTTP routing · Request validation<br/>Response mapping · Delegates to services"]
-    S["<b>Service Layer (BookService / UserService / LoanService)</b><br/>Business rules · Transaction boundaries<br/>Orchestrates repositories"]
-    BR["<b>BookRepository</b><br/>Spring Data JPA<br/>Book queries and persistence"]
-    UR["<b>UserRepository</b><br/>Spring Data JPA<br/>Account queries and persistence"]
-    LR["<b>LoanRepository</b><br/>Spring Data JPA<br/>Loan state and history queries"]
-    A["<b>Authentication Lookup</b><br/>LibroUserDetailsService<br/>Loads account by university ID"]
-    P["<b>Persistence Layer (JPA / Hibernate)</b><br/>Entity management · Dirty checking<br/>Flush / commit · Maps objects to tables"]
-    D["<b>Database (PostgreSQL 18)</b><br/>Tables · Indexes · Constraints<br/>Flyway migrations"]
-    X["<b>Cross-cutting Concerns</b><br/>DTOs · feature mappers<br/>GlobalExceptionHandler · SecurityConfig"]
+    C["Controller layer<br/>BookAPI, UserAPI, LoanAPI<br/>HTTP routing and request validation"]
+    S["Service layer<br/>Business rules and transactions"]
+    BR["BookRepository<br/>Book queries and persistence"]
+    UR["UserRepository<br/>Account queries and persistence"]
+    LR["LoanRepository<br/>Loan state and history queries"]
+    A["Authentication lookup<br/>LibroUserDetailsService"]
+    P["Persistence layer<br/>JPA, Hibernate, dirty checking"]
+    D["Database<br/>PostgreSQL 18; Flyway migrations"]
+    X["Shared concerns<br/>DTOs, mappers, validation, security, error handling"]
 
     C --> S
-    S --> BR --> P
-    S --> UR --> P
-    S --> LR --> P
+    S --> BR
+    S --> UR
+    S --> LR
+    BR --> P
+    UR --> P
+    LR --> P
+    P --> D
     A -->|findByUniversityId| UR
     X -.-> C
     X -.-> S
-    X -.-> BR
-    X -.-> UR
     X -.-> A
 ```
 
@@ -256,9 +261,15 @@ Each checkout creates a new `LOAN` row for one physical copy and one borrower; `
 
 ## File Structure
 
+This is a selected map of the main application and test files. See the [engineering reference](guiding-docs/engineering-reference.md) for the fuller repository map.
+
 ```text
 AGENTS.md
 README.md
+Dockerfile
+docker-compose.yml
+envFileExample
+pom.xml
 docs/
   api-documentation-guideline.md
   development-problems-solved.md
@@ -274,6 +285,7 @@ src/main/java/app/
   LibraryApplication.java
   auth/
     SecurityConfig.java
+    LibroUserDetailsService.java
   loan/
     config/LoanTimeConfig.java
     controller/LoanAPI.java
@@ -321,6 +333,7 @@ src/main/java/app/
       ChangePasswordDTO.java
       UserCreateRequestDTO.java
       UserCreateUpdateDTO.java
+      UserReplaceRequest.java
       UserResponseDTO.java
     entity/
       User.java
@@ -345,6 +358,8 @@ src/main/resources/
 
 src/test/java/
   unit/
+    auth/
+      SecurityFlowMvcTest.java
     book/
       BookApiMvcTest.java
       BookMapperTest.java
@@ -353,6 +368,9 @@ src/test/java/
     user/
       UserApiMvcTest.java
       UserServiceTest.java
+    loan/
+      LoanSecurityMvcTest.java
+      LoanServiceTest.java
     global/
       GlobalExceptionHandlerTest.java
       OpenApiMvcTest.java
@@ -362,6 +380,8 @@ src/test/java/
       BookPersistenceIT.java
     user/
       UserPersistenceIT.java
+    loan/
+      LoanPersistenceIT.java
 
 src/test/resources/
   junit-platform.properties
@@ -388,7 +408,7 @@ The application never exposes `Book` (or future entity) objects directly to clie
 - **Never** instantiate an entity directly from client input.
 - **Never** return an entity directly in a controller response.
 - Controllers accept request DTOs (`BookRequestDTO` for create/PUT and `BookPatchRequestDTO` for PATCH) and return response DTOs.
-- `BookMapper` is the sole conversion point between entities and DTOs.
+- For book operations, `BookMapper` is the conversion point between `Book` entities and book DTOs; user and loan features use their own mappers.
 
 ### Why This Matters
 
@@ -451,8 +471,8 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 ### Update flow (`PATCH /app/books/{id}`)
 
 1. The controller passes `BookPatchRequestDTO` to `BookService.patchBook()`.
-2. The service loads the managed `Book` entity via `findBookById()`.
-3. Field changes are applied conditionally to the managed entity.
+2. The service loads the managed `Book` entity with `findBookByIdForUpdate()`, taking a row lock shared with checkout and lost-copy resolution.
+3. Field changes are applied conditionally to the locked, managed entity.
 4. Hibernate dirty checking detects the modifications.
 5. The transaction commits and flushes the update without an explicit `save()` call.
 
@@ -545,6 +565,8 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 
 ## API Endpoints
 
+### Book API
+
 | Method | Path | Description | Example Request | Example Response |
 | --- | --- | --- | --- | --- |
 | `GET` | `/app/books/health` | Health check for the API | `GET /app/books/health` | `{"success":true,"message":"Health check","data":{"api":true,"database":true},"timestamp":172...}` |
@@ -564,6 +586,14 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 | `GET` | `/app/books/stats/average-price` | Returns the average price of all books | `GET /app/books/stats/average-price` | `{"success":true,"message":"Average Price of Collection: ","data":20.50,"timestamp":172...}` |
 | `GET` | `/app/books/stats/count` | Returns the total number of books | `GET /app/books/stats/count` | `{"success":true,"message":"Book Collection Count","data":6,"timestamp":172...}` |
 
+`/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minPrice` and `maxPrice` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `price`; invalid ranges, decimals, or sort fields return HTTP 400. Existing list routes retain their response shapes. `BookResponseDTO` also includes `copyStatus` (`IN_COLLECTION` or `LOST`); the compact book examples above omit it for readability.
+
+### User API
+
+Signup is public and always creates a student. Only librarians can create faculty and library assistant accounts. Administrators can manage student and faculty accounts; librarians can also manage library assistant accounts. Students and faculty can manage their own profiles and passwords and delete their own accounts. Staff cannot manage another librarian account or delete their own account. All other routes require HTTP Basic authentication, and unsafe requests also require a CSRF token. See the [role permissions table](guiding-docs/security-roles-and-jwt-guide.md#role-policy) for the full policy.
+
+| Method | Path | Description | Example Request | Example Response |
+| --- | --- | --- | --- | --- |
 | `GET` | `/app/users` | Lists student/faculty accounts for administrators; librarians also see library assistants | `GET /app/users?page=0&size=12` | Spring `Page<UserResponseDTO>` |
 | `GET` | `/app/users/{universityId}` | Gets own profile or a profile visible to the caller's staff role | `GET /app/users/2025-4321` | `UserResponseDTO` |
 | `POST` | `/app/users/signup` | Creates a user account | `POST /app/users/signup` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
@@ -583,12 +613,6 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 | `PUT` | `/app/loans/{loanId}/lost` | Closes a loan as lost and marks copy unavailable | Library assistants/librarians within target-role scope |
 | `GET` | `/app/loans/me` | Reads caller's paged history | All roles |
 | `GET` | `/app/loans/users/{universityId}` | Reads another user's paged loan history | Library assistants/librarians within target-role scope |
-
-`/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minPrice` and `maxPrice` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `price`; invalid ranges, decimals, or sort fields return HTTP 400. Existing list routes retain their response shapes. `BookResponseDTO` also includes `copyStatus` (`IN_COLLECTION` or `LOST`); the compact book examples above omit it for readability.
-
-### User API
-
-User routes are available under `/app/users` for signup, staff directories, profile lookup and updates, password changes, account creation, and role-scoped deletion. STUDENT means a student patron; FACULTY means school faculty using the library as patrons; ADMINISTRATOR means a library assistant (for example, fellow faculty, student assistants, or volunteers); LIBRARIAN means the library's librarian. Signup is public and always creates a student. Only the librarian creates faculty and library assistant accounts. Students and faculty can delete their own accounts; library assistants can manage/delete student and faculty accounts; librarians can also manage/delete library assistant accounts. Neither staff role manages another librarian account. All roles can read books; administrators and librarians can add, update, and delete books. See [the role permissions table](guiding-docs/security-roles-and-jwt-guide.md#role-policy) for access rules. HTTP Basic authentication uses a university ID and password. Flyway V2 historically seeds the bootstrap administrator as `0000-0000`; V3 adds LIBRARIAN to the schema; V4 adds loans and copy status. The application does not seed a librarian. Set `LIBRO_ADMIN_PASSWORD_HASH` to a BCrypt hash before startup and protect it. Loans are live under `/app/loans`; JWT is not implemented.
 
 ## Setup & Installation
 
@@ -650,7 +674,7 @@ If you prefer to run the application directly on the host machine, start only Po
 | `Invalid Number Format` | Non-numeric values were sent to a numeric endpoint | Use numeric values for `price`, `minPrice`, `maxPrice`, and similar fields |
 | `Method not allowed` | Wrong HTTP verb was used | Match the method listed in the endpoint table |
 | Docker app container fails to start | The jar was not built before `docker compose up --build` | Run `mvn clean package` first |
-| Swagger UI loads but API calls fail, or `library-app` keeps restarting | Inspect `docker compose logs app`; the old empty development volume may have `books.id` as `INTEGER` while Hibernate expects `BIGINT` | Rebuild the jar, remove the disposable pre-release volume with `docker compose down -v`, then run `docker compose up -d --build` |
+| Swagger UI loads but API calls fail, or `library-app` keeps restarting | Inspect `docker compose logs app`; an old development volume may have `books.id` as `INTEGER` while Hibernate expects `BIGINT` | If the volume contains only disposable development data, back up anything needed and intentionally remove it with `docker compose down -v`; otherwise preserve the volume and resolve the schema through a forward migration. Then rebuild with `docker compose up -d --build` |
 | No Flyway messages or `flyway_schema_history` table | The Boot 4 Flyway starter is absent, or the container contains an old jar | Keep `spring-boot-starter-flyway`, rebuild the jar, and rebuild the image |
 
 The complete diagnosis, pre-release reset procedure, clean-install behavior, and production-data warning are in [Development Problems Solved](docs/development-problems-solved.md).
