@@ -11,6 +11,7 @@ This means:
 - separate physical copies of the same title are stored as separate `Book` records with different generated IDs;
 - duplicate title/author combinations are therefore allowed and do not represent accidental duplicates by themselves;
 - the loan model references `Book.id` and enforces at most one active loan for each book copy.
+- the optional catalog description and replacement cost are stored on the physical-copy record; the replacement cost is an informational amount and does not collect a fee.
 
 ### Institutional interpretation
 

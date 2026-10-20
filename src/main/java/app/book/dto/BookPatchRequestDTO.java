@@ -15,7 +15,14 @@ public record BookPatchRequestDTO(
         String author,
         @Schema(description = "Replacement genre. Surrounding whitespace is trimmed.", example = "Political Satire", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
         String genre,
-        @Schema(description = "Replacement price; when supplied it must be greater than zero.", example = "12.99", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
-        BigDecimal price
+        @Schema(description = "Optional catalog summary. Surrounding whitespace is trimmed; blank values are ignored and the maximum is 2,000 characters.", example = "A dystopian novel about surveillance and authoritarianism.", maxLength = 2000, requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        String description,
+        @Schema(description = "Replacement amount for this physical copy; when supplied it must be greater than zero.", example = "12.99", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        BigDecimal replacementCost
 ) {
+
+    /** Creates a partial update without changing the optional description. */
+    public BookPatchRequestDTO(String title, String author, String genre, BigDecimal replacementCost) {
+        this(title, author, genre, null, replacementCost);
+    }
 }

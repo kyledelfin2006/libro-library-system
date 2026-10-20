@@ -235,7 +235,7 @@ class SecurityFlowMvcTest {
                         .header(HttpHeaders.AUTHORIZATION, basicAuthorization(PASSWORD))
                         .with(csrf())
                         .contentType(APPLICATION_JSON)
-                        .content("{\"title\":\"1984\",\"author\":\"George Orwell\",\"genre\":\"Dystopian\",\"price\":19.99}"))
+                        .content("{\"title\":\"1984\",\"author\":\"George Orwell\",\"genre\":\"Dystopian\",\"replacementCost\":19.99}"))
                 .andExpect(status().isCreated());
 
         verify(bookService).addBook(any());
@@ -252,7 +252,7 @@ class SecurityFlowMvcTest {
                         .header(HttpHeaders.AUTHORIZATION, basicAuthorization(PASSWORD))
                         .with(csrf())
                         .contentType(APPLICATION_JSON)
-                        .content("{\"title\":\"1984\",\"author\":\"George Orwell\",\"genre\":\"Dystopian\",\"price\":19.99}"))
+                        .content("{\"title\":\"1984\",\"author\":\"George Orwell\",\"genre\":\"Dystopian\",\"replacementCost\":19.99}"))
                 .andExpect(status().isCreated());
 
         verify(bookService).addBook(any());
@@ -267,7 +267,7 @@ class SecurityFlowMvcTest {
                         .header(HttpHeaders.AUTHORIZATION, basicAuthorization(PASSWORD))
                         .with(csrf())
                         .contentType(APPLICATION_JSON)
-                        .content("{\"title\":\"1984\",\"author\":\"George Orwell\",\"genre\":\"Dystopian\",\"price\":19.99}"))
+                        .content("{\"title\":\"1984\",\"author\":\"George Orwell\",\"genre\":\"Dystopian\",\"replacementCost\":19.99}"))
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(bookService, bookMapper);

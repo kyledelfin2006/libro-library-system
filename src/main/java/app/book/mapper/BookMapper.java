@@ -29,7 +29,8 @@ public class BookMapper {
                 book.getTitle(),
                 book.getAuthor(),
                 book.getGenre(),
-                book.getPrice(),
+                book.getDescription(),
+                book.getReplacementCost(),
                 book.getCopyStatus()
         );
     }
@@ -61,7 +62,8 @@ public class BookMapper {
                 trim(dto.getTitle()),
                 trim(dto.getAuthor()),
                 trim(dto.getGenre()),
-                dto.getPrice()
+                trimOptional(dto.getDescription()),
+                dto.getReplacementCost()
         );
     }
 
@@ -75,11 +77,19 @@ public class BookMapper {
         existingBook.setTitle(trim(dto.getTitle()));
         existingBook.setAuthor(trim(dto.getAuthor()));
         existingBook.setGenre(trim(dto.getGenre()));
-        existingBook.setPrice(dto.getPrice());
+        // A full replacement may clear an optional description; blank content is normalized to null.
+        existingBook.setDescription(trimOptional(dto.getDescription()));
+        existingBook.setReplacementCost(dto.getReplacementCost());
     }
 
     private String trim(String value) {
         return value == null ? null : value.trim();
+    }
+
+    /** Trims an optional catalog description and stores blank content as absent. */
+    private String trimOptional(String value) {
+        String trimmed = trim(value);
+        return trimmed == null || trimmed.isEmpty() ? null : trimmed;
     }
 
 

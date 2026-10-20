@@ -10,13 +10,13 @@ import java.util.Map;
 public class ErrorResponse {
     @Schema(example = "Validation failed")
     private final String error;
-    @Schema(description = "Client-safe explanation. Does not include database internals or stack traces.", example = "Price must be greater than 0")
+    @Schema(description = "Client-safe explanation. Does not include database internals or stack traces.", example = "Replacement cost must be greater than 0")
     private final String details;
     @Schema(description = "Response creation time as Unix epoch milliseconds.", example = "1720000000000")
     private final long timestamp;
     @Schema(example = "400")
     private final int statusCode;
-    @Schema(description = "Field name to validation message mapping; _global identifies object-level errors.", example = "{\"price\":\"Price must be greater than 0\"}")
+    @Schema(description = "Field name to validation message mapping; _global identifies object-level errors.", example = "{\"replacementCost\":\"Replacement cost must be greater than 0\"}")
     private final Map<String, String> fieldErrors;
 
     public ErrorResponse(String error, String details, int statusCode) {

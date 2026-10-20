@@ -43,19 +43,19 @@ class BookTest {
         assertEquals("1984", book.getTitle());
         assertEquals("Orwell", book.getAuthor());
         assertEquals("Fiction", book.getGenre());
-        assertEquals(0, new BigDecimal("15.99").compareTo(book.getPrice()));
+        assertEquals(0, new BigDecimal("15.99").compareTo(book.getReplacementCost()));
         // ID is null until the repository saves it and sets it via KeyHolder.
         // We do NOT test it here.
         assertNull(book.getId()); // This is the correct state after construction.
     }
 
     /**
-     * Verifies that blank titles, missing authors, and non-positive prices each produce their
+     * Verifies that blank titles, missing authors, and non-positive replacement costs each produce their
      * documented validation message on an invalid request DTO.
      */
     @Test
     void testBookDtoValidationConstraints() {
-        // Create an INVALID DTO (empty title, null author, negative price)
+        // Create an INVALID DTO (empty title, null author, negative replacementCost)
         BookRequestDTO invalidDto = new BookRequestDTO("", null, "Fiction", new BigDecimal("-5.0"));
 
         Set<ConstraintViolation<BookRequestDTO>> violations = VALIDATOR.validate(invalidDto);
@@ -66,8 +66,8 @@ class BookTest {
                 "Missing validation error for empty title");
         assertTrue(violations.stream().anyMatch(v -> v.getMessage().contains("Author cannot be empty")),
                 "Missing validation error for null author");
-        assertTrue(violations.stream().anyMatch(v -> v.getMessage().contains("Price must be greater than 0")),
-                "Missing validation error for price less than or equal to 0");
+        assertTrue(violations.stream().anyMatch(v -> v.getMessage().contains("Replacement cost must be greater than 0")),
+                "Missing validation error for replacementCost less than or equal to 0");
     }
 
     /**
@@ -82,6 +82,18 @@ class BookTest {
         assertTrue(violations.isEmpty(), "Expected zero validation errors for a valid DTO, but got: " + violations);
     }
 
+    /** Verifies descriptions are optional and reject content over the documented limit. */
+    @Test
+    void descriptionIsOptionalAndLimitedToTwoThousandCharacters() {
+        BookRequestDTO withoutDescription = new BookRequestDTO("The Hobbit", "J.R.R. Tolkien", "Fantasy", BigDecimal.TEN);
+        BookRequestDTO tooLong = new BookRequestDTO("The Hobbit", "J.R.R. Tolkien", "Fantasy",
+                "x".repeat(2001), BigDecimal.TEN);
+
+        assertTrue(VALIDATOR.validate(withoutDescription).isEmpty());
+        assertTrue(VALIDATOR.validate(tooLong).stream()
+                .anyMatch(violation -> violation.getMessage().equals("Description cannot exceed 2000 characters")));
+    }
+
     /** Verifies the persistence model's own constraints are executable, not documentation only. */
     @Test
     void invalidBookEntityFailsValidation() {
@@ -90,7 +102,7 @@ class BookTest {
         Set<ConstraintViolation<Book>> violations = VALIDATOR.validate(invalidBook);
 
         assertTrue(violations.stream().anyMatch(v -> v.getMessage().equals("Title cannot be blank")));
-        assertTrue(violations.stream().anyMatch(v -> v.getMessage().equals("Price must be greater than 0")));
+        assertTrue(violations.stream().anyMatch(v -> v.getMessage().equals("Replacement cost must be greater than 0")));
     }
 
     @Test

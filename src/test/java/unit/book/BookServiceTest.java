@@ -68,21 +68,21 @@ class BookServiceTest {
     private static final String TITLE = "Effective Java";
     private static final String AUTHOR = "Joshua Bloch";
     private static final String GENRE = "Programming";
-    private static final BigDecimal PRICE = new BigDecimal("45.0");
+    private static final BigDecimal REPLACEMENT_COST = new BigDecimal("45.0");
 
     /** Resets mock behavior and rebuilds mutable fixtures before each isolated scenario. */
     @BeforeEach
     void setUp() {
         reset(repository);
-        sampleBook = new Book(TITLE, AUTHOR, GENRE, PRICE);
+        sampleBook = new Book(TITLE, AUTHOR, GENRE, REPLACEMENT_COST);
         sampleBook.setId(BOOK_ID);
 
-        sampleBookRequestDTO = new BookRequestDTO(TITLE, AUTHOR, GENRE, PRICE);
+        sampleBookRequestDTO = new BookRequestDTO(TITLE, AUTHOR, GENRE, REPLACEMENT_COST);
     }
 
     @Test
     void queryBooks_combinesFiltersAndAddsStableIdSort() {
-        Pageable requested = PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "price"));
+        Pageable requested = PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "replacementCost"));
         when(repository.queryBooks(eq("JAVA"), eq("Bloch"), eq("Programming"),
                 eq(new BigDecimal("10")), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(sampleBook)));
@@ -94,7 +94,7 @@ class BookServiceTest {
                 eq(new BigDecimal("10")), isNull(), page.capture());
         assertEquals(1, page.getValue().getPageNumber());
         assertEquals(2, page.getValue().getPageSize());
-        assertEquals(Sort.Direction.DESC, page.getValue().getSort().getOrderFor("price").getDirection());
+        assertEquals(Sort.Direction.DESC, page.getValue().getSort().getOrderFor("replacementCost").getDirection());
         assertEquals(Sort.Direction.ASC, page.getValue().getSort().getOrderFor("id").getDirection());
     }
 
@@ -121,7 +121,7 @@ class BookServiceTest {
         assertEquals(TITLE, result.getTitle());
         assertEquals(AUTHOR, result.getAuthor());
         assertEquals(GENRE, result.getGenre());
-        assertEquals(0, PRICE.compareTo(result.getPrice()));
+        assertEquals(0, REPLACEMENT_COST.compareTo(result.getReplacementCost()));
         verify(repository, times(1)).save(any(Book.class));
     }
 
@@ -134,12 +134,14 @@ class BookServiceTest {
                 "  Effective Java  ",
                 " Joshua Bloch ",
                 " Programming ",
-                PRICE
+                " A guide to Java best practices. ",
+                REPLACEMENT_COST
         ));
 
         assertEquals(TITLE, result.getTitle());
         assertEquals(AUTHOR, result.getAuthor());
         assertEquals(GENRE, result.getGenre());
+        assertEquals("A guide to Java best practices.", result.getDescription());
     }
 
     /** Verifies service callers cannot bypass entity constraints by skipping controller validation. */
@@ -195,7 +197,7 @@ class BookServiceTest {
     }
 
     // ---------- patchBook ----------
-    /** Verifies partial replacement of title and price while omitted fields remain unchanged. */
+    /** Verifies partial replacement of title and replacementCost while omitted fields remain unchanged. */
     @Test
     void patchBook_shouldUpdateOnlyProvidedFields() {
         // Given an existing book
@@ -203,7 +205,7 @@ class BookServiceTest {
         existing.setId(BOOK_ID);
         when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(existing));
 
-        // Update only title and price
+        // Update only title and replacementCost
         BookPatchRequestDTO updates = new BookPatchRequestDTO("New Title", null, null, new BigDecimal("30.0"));
 
         Book result = bookService.patchBook(BOOK_ID, updates);
@@ -211,14 +213,14 @@ class BookServiceTest {
         assertEquals("New Title", result.getTitle());
         assertEquals("Old Author", result.getAuthor());  // unchanged
         assertEquals("Old Genre", result.getGenre());    // unchanged
-        assertEquals(0, new BigDecimal("30.0").compareTo(result.getPrice()));
+        assertEquals(0, new BigDecimal("30.0").compareTo(result.getReplacementCost()));
         verify(repository).findByIdForUpdate(BOOK_ID);
         verify(repository, never()).findById(BOOK_ID);
         // No save() call expected
         verify(repository, never()).save(any());
     }
 
-    /** Verifies that an author-only PATCH does not modify title, genre, or price. */
+    /** Verifies that an author-only PATCH does not modify title, genre, or replacementCost. */
     @Test
     void patchBook_shouldUpdateOnlyAuthorWhenOnlyAuthorProvided() {
         Book existing = new Book("Old Title", "Old Author", "Old Genre", new BigDecimal("10.0"));
@@ -232,11 +234,11 @@ class BookServiceTest {
         assertEquals("Old Title", result.getTitle());
         assertEquals("New Author", result.getAuthor());
         assertEquals("Old Genre", result.getGenre());
-        assertEquals(0, new BigDecimal("10.0").compareTo(result.getPrice()));
+        assertEquals(0, new BigDecimal("10.0").compareTo(result.getReplacementCost()));
         verify(repository, never()).save(any());
     }
 
-    /** Verifies that a genre-only PATCH does not modify title, author, or price. */
+    /** Verifies that a genre-only PATCH does not modify title, author, or replacementCost. */
     @Test
     void patchBook_shouldUpdateOnlyGenreWhenOnlyGenreProvided() {
         Book existing = new Book("Old Title", "Old Author", "Old Genre", new BigDecimal("10.0"));
@@ -250,7 +252,7 @@ class BookServiceTest {
         assertEquals("Old Title", result.getTitle());
         assertEquals("Old Author", result.getAuthor());
         assertEquals("New Genre", result.getGenre());
-        assertEquals(0, new BigDecimal("10.0").compareTo(result.getPrice()));
+        assertEquals(0, new BigDecimal("10.0").compareTo(result.getReplacementCost()));
         verify(repository, never()).save(any());
     }
 
@@ -269,13 +271,36 @@ class BookServiceTest {
         assertEquals("Old Title", result.getTitle());
         assertEquals("Old Author", result.getAuthor());
         assertEquals("Old Genre", result.getGenre());
-        assertEquals(0, new BigDecimal("10.0").compareTo(result.getPrice()));
+        assertEquals(0, new BigDecimal("10.0").compareTo(result.getReplacementCost()));
         verify(repository, never()).save(any());
     }
 
-    /** Verifies that a null PATCH price preserves the existing monetary value. */
+    /** Verifies PATCH trims a supplied description and retains it on the managed copy. */
     @Test
-    void patchBook_whenPriceIsNull_shouldLeavePriceUnchanged() {
+    void patchBook_trimsDescription() {
+        Book existing = new Book("Old Title", "Old Author", "Old Genre", "Old summary", new BigDecimal("10.0"));
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(existing));
+        BookPatchRequestDTO updates = new BookPatchRequestDTO(null, null, null, "  New summary  ", null);
+
+        Book result = bookService.patchBook(BOOK_ID, updates);
+
+        assertEquals("New summary", result.getDescription());
+        verify(repository, never()).save(any());
+    }
+
+    /** Verifies PATCH rejects oversized descriptions before persistence. */
+    @Test
+    void patchBook_rejectsDescriptionOverTwoThousandCharacters() {
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(sampleBook));
+        BookPatchRequestDTO updates = new BookPatchRequestDTO(null, null, null, "x".repeat(2001), null);
+
+        assertThrows(BookValidationException.class, () -> bookService.patchBook(BOOK_ID, updates));
+        verify(repository, never()).save(any());
+    }
+
+    /** Verifies that a null PATCH replacementCost preserves the existing monetary value. */
+    @Test
+    void patchBook_whenReplacementCostIsNull_shouldLeaveReplacementCostUnchanged() {
         Book existing = new Book("Old Title", "Old Author", "Old Genre", new BigDecimal("10.0"));
         existing.setId(BOOK_ID);
         when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(existing));
@@ -285,13 +310,13 @@ class BookServiceTest {
         Book result = bookService.patchBook(BOOK_ID, updates);
 
         assertEquals("New Title", result.getTitle());
-        assertEquals(0, new BigDecimal("10.0").compareTo(result.getPrice())); // unchanged
+        assertEquals(0, new BigDecimal("10.0").compareTo(result.getReplacementCost())); // unchanged
         verify(repository, never()).save(any());
     }
 
-    /** Verifies that a negative PATCH price is rejected before persistence. */
+    /** Verifies that a negative PATCH replacementCost is rejected before persistence. */
     @Test
-    void patchBook_whenPriceIsZeroOrNegative_shouldThrowBookValidationException() {
+    void patchBook_whenReplacementCostIsZeroOrNegative_shouldThrowBookValidationException() {
         when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(sampleBook));
         BookPatchRequestDTO updates = new BookPatchRequestDTO(null, null, null, new BigDecimal("-5.0"));
 
@@ -299,9 +324,9 @@ class BookServiceTest {
         verify(repository, never()).save(any());
     }
 
-    /** Verifies that zero is rejected because prices must be strictly positive. */
+    /** Verifies that zero is rejected because replacement costs must be strictly positive. */
     @Test
-    void patchBook_whenPriceIsExactlyZero_shouldThrowBookValidationException() {
+    void patchBook_whenReplacementCostIsExactlyZero_shouldThrowBookValidationException() {
         when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(sampleBook));
         BookPatchRequestDTO updates = new BookPatchRequestDTO(null, null, null, BigDecimal.ZERO);
 
@@ -324,14 +349,16 @@ class BookServiceTest {
     @Test
     void replaceBook_shouldReplaceAllFields() {
         when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(sampleBook));
-        BookRequestDTO newData = new BookRequestDTO("New Title", "New Author", "New Genre", new BigDecimal("99.99"));
+        BookRequestDTO newData = new BookRequestDTO("New Title", "New Author", "New Genre",
+                "New catalog summary", new BigDecimal("99.99"));
 
         Book result = bookService.replaceBook(BOOK_ID, newData);
 
         assertEquals("New Title", result.getTitle());
         assertEquals("New Author", result.getAuthor());
         assertEquals("New Genre", result.getGenre());
-        assertEquals(0, new BigDecimal("99.99").compareTo(result.getPrice()));
+        assertEquals("New catalog summary", result.getDescription());
+        assertEquals(0, new BigDecimal("99.99").compareTo(result.getReplacementCost()));
         verify(repository).findByIdForUpdate(BOOK_ID);
         verify(repository, never()).findById(BOOK_ID);
     }
@@ -343,13 +370,26 @@ class BookServiceTest {
 
         Book result = bookService.replaceBook(
                 BOOK_ID,
-                new BookRequestDTO(" New Title ", " New Author ", " New Genre ", PRICE)
+                new BookRequestDTO(" New Title ", " New Author ", " New Genre ", " New summary ", REPLACEMENT_COST)
         );
 
         assertEquals("New Title", result.getTitle());
         assertEquals("New Author", result.getAuthor());
         assertEquals("New Genre", result.getGenre());
+        assertEquals("New summary", result.getDescription());
         verify(repository, never()).save(any());
+    }
+
+    /** Verifies PUT can clear the optional description by replacing it with null. */
+    @Test
+    void replaceBook_clearsOptionalDescription() {
+        Book existing = new Book("Title", "Author", "Genre", "Old summary", REPLACEMENT_COST);
+        when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(existing));
+        BookRequestDTO replacement = new BookRequestDTO("Title", "Author", "Genre", null, REPLACEMENT_COST);
+
+        Book result = bookService.replaceBook(BOOK_ID, replacement);
+
+        assertNull(result.getDescription());
     }
 
     /** Verifies that a null replacement payload is rejected before repository interaction. */
@@ -413,18 +453,18 @@ class BookServiceTest {
         verify(repository, never()).save(any());
     }
 
-    /** Verifies that PUT rejects a zero price. */
+    /** Verifies that PUT rejects a zero replacementCost. */
     @Test
-    void replaceBook_whenDtoHasPriceZero_shouldThrowBookValidationException() {
+    void replaceBook_whenDtoHasReplacementCostZero_shouldThrowBookValidationException() {
         BookRequestDTO invalidDto = new BookRequestDTO("Title", "Author", "Genre", BigDecimal.ZERO);
 
         assertThrows(BookValidationException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
         verify(repository, never()).save(any());
     }
 
-    /** Verifies that PUT rejects a negative price. */
+    /** Verifies that PUT rejects a negative replacementCost. */
     @Test
-    void replaceBook_whenDtoHasNegativePrice_shouldThrowBookValidationException() {
+    void replaceBook_whenDtoHasNegativeReplacementCost_shouldThrowBookValidationException() {
         BookRequestDTO invalidDto = new BookRequestDTO("Title", "Author", "Genre", new BigDecimal("-10.0"));
 
         assertThrows(BookValidationException.class, () -> bookService.replaceBook(BOOK_ID, invalidDto));
@@ -441,39 +481,39 @@ class BookServiceTest {
         verify(repository, never()).save(any());
     }
 
-    // ---------- getBooksWithinBudget ----------
+    // ---------- getBooksAtOrBelowReplacementCost ----------
     /** Verifies delegation to the inclusive less-than-or-equal budget repository query. */
     @Test
-    void getBooksWithinBudget_shouldReturnBooksWithPriceLessThanOrEqual() {
+    void getBooksAtOrBelowReplacementCost_shouldReturnBooksWithReplacementCostLessThanOrEqual() {
         List<Book> expected = Arrays.asList(sampleBook, new Book("Cheap", "Author", "Genre", new BigDecimal("10.0")));
-        when(repository.findByPriceLessThanEqual(new BigDecimal("30.0"))).thenReturn(expected);
+        when(repository.findByReplacementCostLessThanEqual(new BigDecimal("30.0"))).thenReturn(expected);
 
-        List<Book> result = bookService.getBooksWithinBudget(new BigDecimal("30.0"));
+        List<Book> result = bookService.getBooksAtOrBelowReplacementCost(new BigDecimal("30.0"));
 
         assertEquals(2, result.size());
-        verify(repository, times(1)).findByPriceLessThanEqual(new BigDecimal("30.0"));
+        verify(repository, times(1)).findByReplacementCostLessThanEqual(new BigDecimal("30.0"));
     }
 
-    /** Verifies reversed price ranges are rejected before query execution. */
+    /** Verifies reversed replacementCost ranges are rejected before query execution. */
     @Test
-    void getBooksInPriceRange_whenMinimumExceedsMaximum_shouldReject() {
+    void getBooksInReplacementCostRange_whenMinimumExceedsMaximum_shouldReject() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> bookService.getBooksInPriceRange(new BigDecimal("30.0"), new BigDecimal("10.0"))
+                () -> bookService.getBooksInReplacementCostRange(new BigDecimal("30.0"), new BigDecimal("10.0"))
         );
 
-        verify(repository, never()).findBooksByPriceBetween(any(), any());
+        verify(repository, never()).findBooksByReplacementCostBetween(any(), any());
     }
 
-    /** Verifies incomplete price ranges fail with a client-facing validation error. */
+    /** Verifies incomplete replacementCost ranges fail with a client-facing validation error. */
     @Test
-    void getBooksInPriceRange_whenBoundaryIsMissing_shouldReject() {
+    void getBooksInReplacementCostRange_whenBoundaryIsMissing_shouldReject() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> bookService.getBooksInPriceRange(null, BigDecimal.TEN)
+                () -> bookService.getBooksInReplacementCostRange(null, BigDecimal.TEN)
         );
 
-        verify(repository, never()).findBooksByPriceBetween(any(), any());
+        verify(repository, never()).findBooksByReplacementCostBetween(any(), any());
     }
 
     // ---------- searchBooks ----------
@@ -548,24 +588,24 @@ class BookServiceTest {
         verify(repository).getGenres();
     }
 
-    /** Verifies price text is converted to {@link BigDecimal} and matched exactly. */
+    /** Verifies replacementCost text is converted to {@link BigDecimal} and matched exactly. */
     @Test
-    void searchBooks_byPrice_shouldReturnBooksWithMatchingPrice() {
+    void searchBooks_byReplacementCost_shouldReturnBooksWithMatchingReplacementCost() {
         List<Book> expected = List.of(sampleBook);
         // The service uses Long.parseLong, so pass an integer string
-        when(repository.findByPrice(new BigDecimal("45"))).thenReturn(expected);
+        when(repository.findByReplacementCost(new BigDecimal("45"))).thenReturn(expected);
 
-        List<Book> result = bookService.searchBooks("price", "45");
+        List<Book> result = bookService.searchBooks("replacementCost", "45");
 
         assertEquals(expected, result);
-        verify(repository, times(1)).findByPrice(new BigDecimal("45"));
+        verify(repository, times(1)).findByReplacementCost(new BigDecimal("45"));
     }
 
-    /** Verifies malformed price text is rejected without invoking the price repository query. */
+    /** Verifies malformed replacementCost text is rejected without invoking the replacementCost repository query. */
     @Test
-    void searchBooks_byPrice_withInvalidNumber_shouldThrowIllegalArgumentException() {
-        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks("price", "not-a-number"));
-        verify(repository, never()).findByPrice(any(BigDecimal.class));
+    void searchBooks_byReplacementCost_withInvalidNumber_shouldThrowIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks("replacementCost", "not-a-number"));
+        verify(repository, never()).findByReplacementCost(any(BigDecimal.class));
     }
 
     /** Verifies unsupported search fields are rejected instead of becoming dynamic queries. */
@@ -600,12 +640,12 @@ class BookServiceTest {
     @Test
     void getBooksSortedBy_validFieldMixedCaseWithWhitespace_shouldReturnSortedList() {
         List<Book> expected = List.of(sampleBook);
-        when(repository.findAll(Sort.by("price").ascending())).thenReturn(expected);
+        when(repository.findAll(Sort.by("replacementCost").ascending())).thenReturn(expected);
 
-        List<Book> result = bookService.getBooksSortedBy("  PRICE  ");
+        List<Book> result = bookService.getBooksSortedBy("  REPLACEMENTCOST  ");
 
         assertEquals(expected, result);
-        verify(repository, times(1)).findAll(Sort.by("price").ascending());
+        verify(repository, times(1)).findAll(Sort.by("replacementCost").ascending());
     }
 
     /** Verifies the sort allowlist rejects unknown entity properties. */
@@ -641,96 +681,96 @@ class BookServiceTest {
         verify(repository, never()).findAll(any(Sort.class));
     }
 
-    // ---------- getTotalLibraryValue ----------
+    // ---------- getTotalReplacementCost ----------
     /** Verifies that a repository aggregate is returned as the total collection value. */
     @Test
-    void getTotalLibraryValue_whenBooksExist_shouldReturnSum() {
-        when(repository.sumTotalOfPrice()).thenReturn(Optional.of(new BigDecimal("150.0")));
+    void getTotalReplacementCost_whenBooksExist_shouldReturnSum() {
+        when(repository.sumTotalReplacementCost()).thenReturn(Optional.of(new BigDecimal("150.0")));
 
-        BigDecimal total = bookService.getTotalLibraryValue();
+        BigDecimal total = bookService.getTotalReplacementCost();
 
         assertEquals(0, new BigDecimal("150.0").compareTo(total));
-        verify(repository, times(1)).sumTotalOfPrice();
+        verify(repository, times(1)).sumTotalReplacementCost();
     }
 
     /** Verifies that an empty SUM result is represented as {@link BigDecimal#ZERO}. */
     @Test
-    void getTotalLibraryValue_whenNoBooks_shouldReturnZero() {
-        when(repository.sumTotalOfPrice()).thenReturn(Optional.empty());
+    void getTotalReplacementCost_whenNoBooks_shouldReturnZero() {
+        when(repository.sumTotalReplacementCost()).thenReturn(Optional.empty());
 
-        BigDecimal total = bookService.getTotalLibraryValue();
+        BigDecimal total = bookService.getTotalReplacementCost();
 
         assertEquals(0, BigDecimal.ZERO.compareTo(total));
-        verify(repository, times(1)).sumTotalOfPrice();
+        verify(repository, times(1)).sumTotalReplacementCost();
     }
 
     // ---------- getLibraryStatistics ----------
     /** Verifies that the typed aggregate is mapped into the public statistics DTO. */
     @Test
-    void getLibraryStatistics_whenBooksExist_shouldReturnTypedAggregateAndMostExpensiveBook() {
+    void getLibraryStatistics_whenBooksExist_shouldReturnTypedAggregateAndHighestReplacementCostBook() {
         LibraryAggregate aggregate = new LibraryAggregate(1L, new BigDecimal("45.00"));
-        when(repository.getCountAndTotalValue()).thenReturn(aggregate);
-        when(repository.findTopByOrderByPriceDesc()).thenReturn(sampleBook);
+        when(repository.getCountAndTotalReplacementCost()).thenReturn(aggregate);
+        when(repository.findTopByOrderByReplacementCostDesc()).thenReturn(sampleBook);
 
         var result = bookService.getLibraryStatistics();
 
         assertEquals(1L, result.totalBooks());
-        assertEquals(0, new BigDecimal("45.00").compareTo(result.totalValue()));
-        assertNotNull(result.mostExpensiveBook());
-        assertEquals(TITLE, result.mostExpensiveBook().getTitle());
-        verify(repository).getCountAndTotalValue();
-        verify(repository).findTopByOrderByPriceDesc();
+        assertEquals(0, new BigDecimal("45.00").compareTo(result.totalReplacementCost()));
+        assertNotNull(result.highestReplacementCostBook());
+        assertEquals(TITLE, result.highestReplacementCostBook().getTitle());
+        verify(repository).getCountAndTotalReplacementCost();
+        verify(repository).findTopByOrderByReplacementCostDesc();
     }
 
     /** Verifies that an empty collection preserves zero totals and no most-expensive book. */
     @Test
-    void getLibraryStatistics_whenNoBooks_shouldReturnZeroAndNullMostExpensiveBook() {
-        when(repository.getCountAndTotalValue()).thenReturn(new LibraryAggregate(0L, BigDecimal.ZERO));
-        when(repository.findTopByOrderByPriceDesc()).thenReturn(null);
+    void getLibraryStatistics_whenNoBooks_shouldReturnZeroAndNullHighestReplacementCostBook() {
+        when(repository.getCountAndTotalReplacementCost()).thenReturn(new LibraryAggregate(0L, BigDecimal.ZERO));
+        when(repository.findTopByOrderByReplacementCostDesc()).thenReturn(null);
 
         var result = bookService.getLibraryStatistics();
 
         assertEquals(0L, result.totalBooks());
-        assertEquals(BigDecimal.ZERO, result.totalValue());
-        assertNull(result.mostExpensiveBook());
+        assertEquals(BigDecimal.ZERO, result.totalReplacementCost());
+        assertNull(result.highestReplacementCostBook());
     }
 
-    // ---------- findMostExpensiveBook ----------
-    /** Verifies that the repository's highest-priced entity is returned unchanged. */
+    // ---------- findHighestReplacementCostBook ----------
+    /** Verifies that the repository's highest replacement-cost entity is returned unchanged. */
     @Test
-    void findMostExpensiveBook_shouldReturnBookWithHighestPrice() {
-        when(repository.findTopByOrderByPriceDesc()).thenReturn(sampleBook);
+    void findHighestReplacementCostBook_shouldReturnBookWithHighestReplacementCost() {
+        when(repository.findTopByOrderByReplacementCostDesc()).thenReturn(sampleBook);
 
-        Book result = bookService.findMostExpensiveBook();
+        Book result = bookService.findHighestReplacementCostBook();
 
         assertEquals(sampleBook, result);
-        verify(repository, times(1)).findTopByOrderByPriceDesc();
+        verify(repository, times(1)).findTopByOrderByReplacementCostDesc();
     }
 
     /** Verifies that a populated AVG aggregate is returned without numerical distortion. */
     @Test
-    void getAveragePrice_whenBooksExist_shouldReturnAverage() {
-        when(repository.getAveragePrice()).thenReturn(Optional.of(new BigDecimal("25.50")));
-        BigDecimal avg = bookService.getAveragePrice();
+    void getAverageReplacementCost_whenBooksExist_shouldReturnAverage() {
+        when(repository.getAverageReplacementCost()).thenReturn(Optional.of(new BigDecimal("25.50")));
+        BigDecimal avg = bookService.getAverageReplacementCost();
         assertEquals(0, new BigDecimal("25.50").compareTo(avg));
     }
 
     /** Verifies that an empty AVG result is represented as {@link BigDecimal#ZERO}. */
     @Test
-    void getAveragePrice_whenNoBooks_shouldReturnZero() {
-        when(repository.getAveragePrice()).thenReturn(Optional.empty());
-        BigDecimal avg = bookService.getAveragePrice();
+    void getAverageReplacementCost_whenNoBooks_shouldReturnZero() {
+        when(repository.getAverageReplacementCost()).thenReturn(Optional.empty());
+        BigDecimal avg = bookService.getAverageReplacementCost();
         assertEquals(BigDecimal.ZERO, avg);
     }
 
     /** Verifies that an empty collection has no most-expensive book and returns {@code null}. */
     @Test
-    void findMostExpensiveBook_whenNoBooks_shouldReturnNull() {
-        when(repository.findTopByOrderByPriceDesc()).thenReturn(null);
+    void findHighestReplacementCostBook_whenNoBooks_shouldReturnNull() {
+        when(repository.findTopByOrderByReplacementCostDesc()).thenReturn(null);
 
-        Book result = bookService.findMostExpensiveBook();
+        Book result = bookService.findHighestReplacementCostBook();
 
         assertNull(result);
-        verify(repository, times(1)).findTopByOrderByPriceDesc();
+        verify(repository, times(1)).findTopByOrderByReplacementCostDesc();
     }
 }

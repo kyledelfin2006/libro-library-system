@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -52,26 +53,31 @@ public class Book {
     @Column(nullable = false, length = 50)
     private String genre;
 
+    /** Optional catalog summary for this physical copy. */
+    @Size(max = 2000, message = "Description cannot exceed 2000 characters")
+    @Column(length = 2000)
+    private String description;
+
     /**
-     * The price of the book.
+     * The amount used to replace this physical copy.
      * <p>
-     * The {@link Positive} validation constraint ensures that the price must be
+     * The {@link Positive} validation constraint ensures that the replacement cost must be
      * strictly greater than zero. However, by default {@code @Positive} allows
      * {@code null} values (unlike {@code @NotBlank}, which only applies to strings).
-     * Since the price is a required field, the {@link NotNull} constraint is
-     * added explicitly to enforce that the price is always provided and cannot
+     * Since replacement cost is a required field, the {@link NotNull} constraint is
+     * added explicitly to enforce that the value is always provided and cannot
      * be {@code null}.
      * </p>
      * <p>
      * At the database level, the column is defined as {@code NOT NULL} with
      * a precision of 10 digits and a scale of 2 decimal places, suitable for
-     * storing monetary values.
+     * storing the recorded replacement amount. This field does not assess or collect a fee.
      * </p>
      */
-    @NotNull(message = "Price is required")
-    @Positive(message = "Price must be greater than 0")
-    @Column(nullable = false, precision = 10, scale = 2)
-    private BigDecimal price;
+    @NotNull(message = "Replacement cost is required")
+    @Positive(message = "Replacement cost must be greater than 0")
+    @Column(name = "replacement_cost", nullable = false, precision = 10, scale = 2)
+    private BigDecimal replacementCost;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "copy_status", nullable = false, length = 24)
@@ -81,18 +87,32 @@ public class Book {
     private LocalDateTime createdAt;
 
     /**
-     * Creates a new copy that is initially part of the loanable collection.
+     * Creates a new copy without an optional catalog description.
      *
      * @param title copy title
      * @param author copy author
      * @param genre copy genre
-     * @param price recorded book value
+     * @param replacementCost recorded amount used to replace this copy
      */
-    public Book(String title, String author, String genre, BigDecimal price) {
+    public Book(String title, String author, String genre, BigDecimal replacementCost) {
+        this(title, author, genre, null, replacementCost);
+    }
+
+    /**
+     * Creates a new physical copy with its catalog description and replacement amount.
+     *
+     * @param title copy title
+     * @param author author name
+     * @param genre catalog genre
+     * @param description optional catalog summary
+     * @param replacementCost recorded amount used to replace this copy
+     */
+    public Book(String title, String author, String genre, String description, BigDecimal replacementCost) {
         this.title = title;
         this.author = author;
         this.genre = genre;
-        this.price = price;
+        this.description = description;
+        this.replacementCost = replacementCost;
         this.copyStatus = BookCopyStatus.IN_COLLECTION;
     }
 

@@ -17,7 +17,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-@Schema(description = "Complete book data used when creating or replacing a book. All fields are required.")
+@Schema(description = "Complete book data used when creating or replacing a book. Title, author, genre, and replacement cost are required; description is optional.")
 public class BookRequestDTO {
 
     // @NotBlank ensures the client doesn't pass a null value, or empty strings
@@ -36,9 +36,17 @@ public class BookRequestDTO {
     @Schema(description = "Book genre. Surrounding whitespace is trimmed before persistence.", example = "Dystopian")
     private String genre;
 
-    // Added @NotNull to ensure the client doesn't pass a null price
-    @NotNull(message = "Price is required")
-    @Positive(message = "Price must be greater than 0")
-    @Schema(description = "Positive decimal price for the book.", example = "19.99")
-    private BigDecimal price;
+    @Size(max = 2000, message = "Description cannot exceed 2000 characters")
+    @Schema(description = "Optional catalog summary. Surrounding whitespace is trimmed; maximum 2,000 characters.", example = "A dystopian novel about surveillance and authoritarianism.")
+    private String description;
+
+    @NotNull(message = "Replacement cost is required")
+    @Positive(message = "Replacement cost must be greater than 0")
+    @Schema(description = "Positive decimal amount used to replace this physical copy.", example = "19.99")
+    private BigDecimal replacementCost;
+
+    /** Creates a complete book request without an optional description. */
+    public BookRequestDTO(String title, String author, String genre, BigDecimal replacementCost) {
+        this(title, author, genre, null, replacementCost);
+    }
 }

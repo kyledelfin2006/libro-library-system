@@ -35,14 +35,14 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     /**
      * Finds a page of books matching every supplied filter.
      * Text filters are case-insensitive literal substrings; an empty string matches all
-     * values for that field. Price bounds are inclusive and may be {@code null}.
+     * values for that field. Replacement-cost bounds are inclusive and may be {@code null}.
      * The service validates the bounds and sort fields before calling this method.
      *
      * @param title title substring, or an empty string for no title filter
      * @param author author substring, or an empty string for no author filter
      * @param genre genre substring, or an empty string for no genre filter
-     * @param minPrice inclusive minimum price, or {@code null} for no minimum
-     * @param maxPrice inclusive maximum price, or {@code null} for no maximum
+     * @param minReplacementCost inclusive minimum amount, or {@code null} for no minimum
+     * @param maxReplacementCost inclusive maximum amount, or {@code null} for no maximum
      * @param pageable requested page and validated sort order
      * @return matching books with page metadata and total match count
      */
@@ -51,14 +51,14 @@ public interface BookRepository extends JpaRepository<Book, Long> {
             WHERE LOCATE(LOWER(:title), LOWER(b.title)) > 0
               AND LOCATE(LOWER(:author), LOWER(b.author)) > 0
               AND LOCATE(LOWER(:genre), LOWER(b.genre)) > 0
-              AND b.price >= COALESCE(:minPrice, b.price)
-              AND b.price <= COALESCE(:maxPrice, b.price)
+              AND b.replacementCost >= COALESCE(:minReplacementCost, b.replacementCost)
+              AND b.replacementCost <= COALESCE(:maxReplacementCost, b.replacementCost)
             """)
     Page<Book> queryBooks(@Param("title") String title,
                           @Param("author") String author,
                           @Param("genre") String genre,
-                          @Param("minPrice") BigDecimal minPrice,
-                          @Param("maxPrice") BigDecimal maxPrice,
+                          @Param("minReplacementCost") BigDecimal minReplacementCost,
+                          @Param("maxReplacementCost") BigDecimal maxReplacementCost,
                           Pageable pageable);
 
     /**
@@ -97,50 +97,50 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     List<Book> findByGenreContainingIgnoreCase(String genre);
 
     /**
-     * Finds all books with a price less than or equal to the specified maximum.
+     * Finds all books whose replacement cost is less than or equal to the specified maximum.
      *
-     * @param price the maximum price (inclusive)
-     * @return a list of books whose price is ≤ {@code price}
+     * @param replacementCost the maximum amount (inclusive)
+     * @return a list of books whose replacement cost is ≤ {@code replacementCost}
      */
-    List<Book> findByPriceLessThanEqual(BigDecimal price);
+    List<Book> findByReplacementCostLessThanEqual(BigDecimal replacementCost);
 
     /**
-     * Finds all books with the exact given price.
+     * Finds all books with the exact given replacement cost.
      *
-     * @param price the exact price to match
-     * @return a list of books whose price equals {@code price}
+     * @param replacementCost the exact amount to match
+     * @return a list of books whose replacement cost equals {@code replacementCost}
      */
-    List<Book> findByPrice(BigDecimal price);
+    List<Book> findByReplacementCost(BigDecimal replacementCost);
 
     /**
-     * Finds all books whose price falls within the given inclusive range.
+     * Finds all books whose replacement cost falls within the given inclusive range.
      *
-     * @param minPrice the minimum price (inclusive)
-     * @param maxPrice the maximum price (inclusive)
-     * @return a list of books with a price between {@code minPrice} and {@code maxPrice}
+     * @param minReplacementCost the minimum amount (inclusive)
+     * @param maxReplacementCost the maximum amount (inclusive)
+     * @return a list of books with a replacement cost between the bounds
      */
-    @Query("SELECT b FROM Book b WHERE b.price BETWEEN :minPrice AND :maxPrice")
-    List<Book> findBooksByPriceBetween(@Param("minPrice") BigDecimal minPrice,
-                                       @Param("maxPrice") BigDecimal maxPrice);
+    @Query("SELECT b FROM Book b WHERE b.replacementCost BETWEEN :minReplacementCost AND :maxReplacementCost")
+    List<Book> findBooksByReplacementCostBetween(@Param("minReplacementCost") BigDecimal minReplacementCost,
+                                                 @Param("maxReplacementCost") BigDecimal maxReplacementCost);
 
     /**
-     * Retrieves the book with the highest price.
+     * Retrieves the book with the highest replacement cost.
      *
-     * <p>If multiple books share the same maximum price, only one is returned
+     * <p>If multiple books share the same maximum replacement cost, only one is returned
      * (the first encountered by the underlying query).</p>
      *
-     * @return the most expensive book, or {@code null} if no books exist
+     * @return the highest replacement-cost book, or {@code null} if no books exist
      */
-    Book findTopByOrderByPriceDesc();
+    Book findTopByOrderByReplacementCostDesc();
 
     /**
-     * Calculates the sum of all book prices in the library.
+     * Calculates the sum of all recorded replacement costs.
      *
      * @return an {@code Optional} containing the total sum, or {@code Optional.empty()}
      *         if no books exist
      */
-   @Query("SELECT SUM(b.price) FROM Book b")
-   Optional<BigDecimal> sumTotalOfPrice();
+   @Query("SELECT SUM(b.replacementCost) FROM Book b")
+   Optional<BigDecimal> sumTotalReplacementCost();
 
     /**
      * Retrieves genre distribution counts as a typed constructor projection.
@@ -162,21 +162,21 @@ public interface BookRepository extends JpaRepository<Book, Long> {
 
 
     /**
-     * Retrieves the total number of books and the total monetary value of all books.
+     * Retrieves the total number of books and the sum of their recorded replacement costs.
      *
      * <p>The aggregate row is mapped to a named projection so callers do not depend on
      * positional {@code Object[]} elements or runtime casts.</p>
      *
-     * @return a typed aggregate containing the count and total value
+     * @return a typed aggregate containing the count and total replacement cost
      */
     @Query("""
             SELECT new app.book.repository.projection.LibraryAggregate(
                 COUNT(b),
-                COALESCE(SUM(b.price), 0)
+                COALESCE(SUM(b.replacementCost), 0)
             )
             FROM Book b
             """)
-    LibraryAggregate getCountAndTotalValue(); // Used in Library Statistics
+    LibraryAggregate getCountAndTotalReplacementCost(); // Used in Library Statistics
 
     /**
      * Deletes a book by its ID using a custom JPQL query.
@@ -196,13 +196,13 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     int deleteBookById(@Param("id") Long id);
 
     /**
-     * Calculates the average price of all books in the library.
+     * Calculates the average replacement cost of all books in the library.
      *
-     * @return an {@code Optional} containing the average price, or
+     * @return an {@code Optional} containing the average replacement cost, or
      *         {@code Optional.empty()} if no books exist
      */
-    @Query("SELECT AVG(b.price) FROM Book b")
-    Optional<BigDecimal> getAveragePrice();
+    @Query("SELECT AVG(b.replacementCost) FROM Book b")
+    Optional<BigDecimal> getAverageReplacementCost();
 
 
 

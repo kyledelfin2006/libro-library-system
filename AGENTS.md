@@ -35,11 +35,12 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 - The live UserRole values are STUDENT, FACULTY, ADMINISTRATOR, and LIBRARIAN.
 - STUDENT means a student patron; FACULTY means school faculty using the library as patrons; ADMINISTRATOR means a library assistant (such as fellow faculty, student assistants, or volunteers), not a system administrator; LIBRARIAN means the library's librarian.
 - Book reads allow all four roles. Book creation, update, and deletion allow ADMINISTRATOR and LIBRARIAN.
+- A Book includes an optional description and a positive `replacementCost`; the public API uses replacement-cost names for search, sort, filtering, and statistics. The old `price` API names are removed.
 - Librarians create faculty and administrator/library-assistant accounts. Administrators can list/read/manage student and faculty accounts and delete those accounts; librarians may also manage/delete administrator accounts. Students and faculty can delete their own accounts. Staff cannot manage another librarian account; administrator and librarian accounts cannot delete themselves.
 - User account ownership and target-role rules are enforced in UserService as well as by route authorization. HTTP Basic and CSRF remain enabled.
 - No librarian account is seeded; librarian-only routes require an existing librarian account. The historical V2 administrator bootstrap remains in place.
-- Loans are implemented under HTTP Basic. Each Book row represents one physical copy; V4 adds loan history and copy status. See [Loan Implementation Guide](docs/loan.md). JWT remains planned.
-- Flyway owns schema changes; Hibernate uses ddl-auto=validate.
+- Loans are implemented under HTTP Basic. Each Book row represents one physical copy; V4 adds loan history and copy status. V5 adds optional book descriptions and renames the stored monetary value to `replacement_cost` without changing existing values. See [Loan Implementation Guide](docs/loan.md). JWT remains planned.
+- Flyway owns schema changes; Hibernate uses ddl-auto=validate. V5 is the current latest migration.
 
 These are a snapshot, not a substitute for checking the code when a task changes the relevant area.
 

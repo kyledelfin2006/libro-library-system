@@ -95,7 +95,7 @@ class BookApiMvcTest {
         mockMvc.perform(post("/app/books/add")
                         .contentType(APPLICATION_JSON)
                         .content("""
-                                {"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99}
+                                {"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A dystopian novel about surveillance.","replacementCost":19.99}
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith(APPLICATION_JSON))
@@ -105,7 +105,8 @@ class BookApiMvcTest {
                 .andExpect(jsonPath("$.data.title").value("1984"))
                 .andExpect(jsonPath("$.data.author").value("George Orwell"))
                 .andExpect(jsonPath("$.data.genre").value("Dystopian"))
-                .andExpect(jsonPath("$.data.price").value(19.99))
+                .andExpect(jsonPath("$.data.description").value("A dystopian novel about surveillance."))
+                .andExpect(jsonPath("$.data.replacementCost").value(19.99))
                 .andExpect(jsonPath("$.data.createdAt").doesNotExist())
                 .andExpect(jsonPath("$.timestamp").isNumber());
     }
@@ -115,7 +116,7 @@ class BookApiMvcTest {
         mockMvc.perform(post("/app/books/add")
                         .contentType(APPLICATION_JSON)
                         .content("""
-                                {"title":"","author":"","genre":"","price":0}
+                                {"title":"","author":"","genre":"","replacementCost":0}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(APPLICATION_JSON))
@@ -123,6 +124,20 @@ class BookApiMvcTest {
                 .andExpect(jsonPath("$.details", containsString("Title cannot be empty")))
                 .andExpect(jsonPath("$.statusCode").value(400))
                 .andExpect(jsonPath("$.timestamp").isNumber());
+
+        verify(service, never()).addBook(any());
+    }
+
+    /** Verifies descriptions above the catalog limit fail before the service is called. */
+    @Test
+    void addBook_withTooLongDescription_returnsGlobalValidationResponse() throws Exception {
+        String tooLongDescription = "x".repeat(2001);
+        String request = "{\"title\":\"1984\",\"author\":\"George Orwell\",\"genre\":\"Dystopian\",\"description\":\"%s\",\"replacementCost\":19.99}"
+                .formatted(tooLongDescription);
+
+        mockMvc.perform(post("/app/books/add").contentType(APPLICATION_JSON).content(request))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details", containsString("Description cannot exceed 2000 characters")));
 
         verify(service, never()).addBook(any());
     }
@@ -137,7 +152,8 @@ class BookApiMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.title").value("1984"))
-                .andExpect(jsonPath("$.price").value(19.99))
+                .andExpect(jsonPath("$.description").value("A dystopian novel about surveillance."))
+                .andExpect(jsonPath("$.replacementCost").value(19.99))
                 .andExpect(jsonPath("$.createdAt").doesNotExist());
     }
 
@@ -169,14 +185,14 @@ class BookApiMvcTest {
     void listBooks_bindsPaginationAndSortQueryParameters() throws Exception {
         Book book = book(1L);
         when(service.getBooks(any(Pageable.class))).thenReturn(
-                new PageImpl<>(List.of(book), PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "price")), 5)
+                new PageImpl<>(List.of(book), PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "replacementCost")), 5)
         );
         when(mapper.toResponseDTO(book)).thenReturn(response(1L));
 
         mockMvc.perform(get("/app/books/all")
                         .queryParam("page", "1")
                         .queryParam("size", "2")
-                        .queryParam("sort", "price,desc"))
+                        .queryParam("sort", "replacementCost,desc"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(1))
                 .andExpect(jsonPath("$.content[0].title").value("1984"))
@@ -190,7 +206,7 @@ class BookApiMvcTest {
         Pageable actual = pageable.getValue();
         org.junit.jupiter.api.Assertions.assertEquals(1, actual.getPageNumber());
         org.junit.jupiter.api.Assertions.assertEquals(2, actual.getPageSize());
-        org.junit.jupiter.api.Assertions.assertEquals(Sort.Direction.DESC, actual.getSort().getOrderFor("price").getDirection());
+        org.junit.jupiter.api.Assertions.assertEquals(Sort.Direction.DESC, actual.getSort().getOrderFor("replacementCost").getDirection());
     }
 
     @Test
@@ -204,11 +220,11 @@ class BookApiMvcTest {
                         .queryParam("title", "farm")
                         .queryParam("author", "orwell")
                         .queryParam("genre", "satire")
-                        .queryParam("minPrice", "10.00")
-                        .queryParam("maxPrice", "25.00")
+                        .queryParam("minReplacementCost", "10.00")
+                        .queryParam("maxReplacementCost", "25.00")
                         .queryParam("page", "1")
                         .queryParam("size", "2")
-                        .queryParam("sort", "price,desc"))
+                        .queryParam("sort", "replacementCost,desc"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(1))
                 .andExpect(jsonPath("$.totalElements").value(5))
@@ -221,12 +237,12 @@ class BookApiMvcTest {
         org.junit.jupiter.api.Assertions.assertEquals(1, page.getValue().getPageNumber());
         org.junit.jupiter.api.Assertions.assertEquals(2, page.getValue().getPageSize());
         org.junit.jupiter.api.Assertions.assertEquals(Sort.Direction.DESC,
-                page.getValue().getSort().getOrderFor("price").getDirection());
+                page.getValue().getSort().getOrderFor("replacementCost").getDirection());
     }
 
     @Test
-    void queryBooks_rejectsMalformedPriceBeforeService() throws Exception {
-        mockMvc.perform(get("/app/books/query").queryParam("minPrice", "invalid"))
+    void queryBooks_rejectsMalformedReplacementCostBeforeService() throws Exception {
+        mockMvc.perform(get("/app/books/query").queryParam("minReplacementCost", "invalid"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.statusCode").value(400));
         verify(service, never()).queryBooks(any(), any(), any(), any(), any(), any());
@@ -248,10 +264,10 @@ class BookApiMvcTest {
                 page.getValue().getSort().getOrderFor("id").getDirection());
 
         when(service.queryBooks(any(), any(), any(), any(), any(), any(Pageable.class)))
-                .thenThrow(new IllegalArgumentException("minPrice must be less than or equal to maxPrice"));
+                .thenThrow(new IllegalArgumentException("minReplacementCost must be less than or equal to maxReplacementCost"));
         mockMvc.perform(get("/app/books/query")
-                        .queryParam("minPrice", "20")
-                        .queryParam("maxPrice", "10"))
+                        .queryParam("minReplacementCost", "20")
+                        .queryParam("maxReplacementCost", "10"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.statusCode").value(400));
     }
@@ -273,18 +289,18 @@ class BookApiMvcTest {
     }
 
     @Test
-    void priceFilter_bindsDecimalQueryParameters() throws Exception {
-        when(service.getBooksInPriceRange(new BigDecimal("10.00"), new BigDecimal("25.00")))
+    void replacementCostFilter_bindsDecimalQueryParameters() throws Exception {
+        when(service.getBooksInReplacementCostRange(new BigDecimal("10.00"), new BigDecimal("25.00")))
                 .thenReturn(List.of());
         when(mapper.toResponseDTOList(List.of())).thenReturn(List.of());
 
-        mockMvc.perform(get("/app/books/price")
-                        .queryParam("minPrice", "10.00")
-                        .queryParam("maxPrice", "25.00"))
+        mockMvc.perform(get("/app/books/replacement-cost")
+                        .queryParam("minReplacementCost", "10.00")
+                        .queryParam("maxReplacementCost", "25.00"))
                 .andExpect(status().isOk())
                 .andExpect(content().json("[]"));
 
-        verify(service).getBooksInPriceRange(new BigDecimal("10.00"), new BigDecimal("25.00"));
+        verify(service).getBooksInReplacementCostRange(new BigDecimal("10.00"), new BigDecimal("25.00"));
     }
 
     @Test
@@ -300,16 +316,16 @@ class BookApiMvcTest {
     }
 
     @Test
-    void priceFilter_withNonNumericBoundary_returnsGlobalTypeMismatchResponse() throws Exception {
-        mockMvc.perform(get("/app/books/price")
-                        .queryParam("minPrice", "cheap")
-                        .queryParam("maxPrice", "25"))
+    void replacementCostFilter_withNonNumericBoundary_returnsGlobalTypeMismatchResponse() throws Exception {
+        mockMvc.perform(get("/app/books/replacement-cost")
+                        .queryParam("minReplacementCost", "cheap")
+                        .queryParam("maxReplacementCost", "25"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Invalid parameter"))
-                .andExpect(jsonPath("$.details", containsString("minPrice")))
+                .andExpect(jsonPath("$.details", containsString("minReplacementCost")))
                 .andExpect(jsonPath("$.statusCode").value(400));
 
-        verify(service, never()).getBooksInPriceRange(any(), any());
+        verify(service, never()).getBooksInReplacementCostRange(any(), any());
     }
 
     @Test
@@ -332,17 +348,21 @@ class BookApiMvcTest {
         mockMvc.perform(get("/app/books/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalBooks").value(6))
-                .andExpect(jsonPath("$.totalValue").value(123.45))
-                .andExpect(jsonPath("$.mostExpensiveBook.id").value(4));
+                .andExpect(jsonPath("$.totalReplacementCost").value(123.45))
+                .andExpect(jsonPath("$.highestReplacementCostBook.id").value(4));
     }
 
     private Book book(Long id) {
-        Book book = new Book("1984", "George Orwell", "Dystopian", new BigDecimal("19.99"));
+        Book book = new Book("1984", "George Orwell", "Dystopian",
+                "A dystopian novel about surveillance.", new BigDecimal("19.99"));
         book.setId(id);
         return book;
     }
 
     private BookResponseDTO response(Long id) {
-        return new BookResponseDTO(id, "1984", "George Orwell", "Dystopian", new BigDecimal("19.99"));
+        BookResponseDTO response = new BookResponseDTO(
+                id, "1984", "George Orwell", "Dystopian", new BigDecimal("19.99"));
+        response.setDescription("A dystopian novel about surveillance.");
+        return response;
     }
 }

@@ -102,7 +102,8 @@ library-api-system/
     |           |-- V1__create_books_table.sql
     |           |-- V2__create_users_table.sql
     |           |-- V3__add_librarian_role.sql
-    |           `-- V4__add_loans_and_copy_status.sql
+    |           |-- V4__add_loans_and_copy_status.sql
+    |           `-- V5__describe_books_and_rename_price_to_replacement_cost.sql
     `-- test/
         |-- java/unit/auth/
         |   `-- SecurityFlowMvcTest.java
@@ -211,30 +212,30 @@ The book controller distinguishes full replacement (PUT) from partial updates (P
 
 - **PUT (`replaceBook`)**: The controller annotates the request body with `@Valid @RequestBody BookRequestDTO`. This activates all DTO annotations (`@NotBlank`, `@Size`, `@Positive`, `@NotNull`) on every invocation, enforcing a complete, valid payload. The service method (`replaceBook`) additionally performs manual checks as defense-in-depth, protecting callers that bypass the controller's `@Valid` (e.g., scheduled jobs, internal consumers). The mapper's `updateBookFromDto` overwrites every mutable field onto the fetched managed entity.
 
-- **PATCH (`patchBook`)**: The controller accepts `BookPatchRequestDTO` without `@Valid`. Its optional schema fields match the partial-update contract: omitted or `null` values and blank text are ignored; a supplied price must be positive. The service applies field-level conditional logic and validates the resulting managed entity.
+- **PATCH (`patchBook`)**: The controller accepts `BookPatchRequestDTO` without `@Valid`. Its optional schema fields match the partial-update contract: omitted or `null` values and blank text are ignored; a supplied replacement cost must be positive. The service applies field-level conditional logic and validates the resulting managed entity.
 
 This design solves a problem solved by many implementations incorrectly:
 
-- **Applying PUT rules to PATCH**: If `@Valid` were on PATCH, sending `{"price": 15.00}` would fail because `title`, `author`, and `genre` are `null` and violate `@NotBlank`. This breaks partial updates entirely.
+- **Applying PUT rules to PATCH**: If `@Valid` were on PATCH, sending `{"replacementCost": 15.00}` would fail because `title`, `author`, and `genre` are `null` and violate `@NotBlank`. This breaks partial updates entirely.
 - **Applying PATCH rules to PUT**: If PUT used the same `hasText()` skip logic, a client could PUT `{"title": null, "author": "Orwell", ...}` and the `null` title would be silently ignored, leaving the old title in place — violating the "complete replacement" contract of PUT.
 
 The `hasText()` method (`s != null && !s.trim().isEmpty()`) also correctly handles the edge case where a client sends `"title": ""` or `"title": "   "` — these are treated as "no update" rather than as an attempt to blank the field. This preserves existing data rather than corrupting it with empty strings.
 
-Read methods handle pagination, field-restricted sorting, searches, price ranges, genre distribution, and aggregate statistics. Keep input allowlists in the service; never pass arbitrary client field names directly to JPA sorting or query construction.
+Read methods handle pagination, field-restricted sorting, searches, replacement cost ranges, genre distribution, and aggregate statistics. Keep input allowlists in the service; never pass arbitrary client field names directly to JPA sorting or query construction.
 
-`GET /app/books/query` combines optional title, author, genre, and inclusive price bounds in one database-paged query. The service validates price bounds and sort properties before repository access, and adds `id` as a tie-breaker for stable pages. Missing text filters match all books; supplied text is matched as a case-insensitive literal substring. Existing unpaginated list routes keep their current contracts.
+`GET /app/books/query` combines optional title, author, genre, and inclusive replacement-cost bounds in one database-paged query. The service validates replacement-cost bounds and sort properties before repository access, and adds `id` as a tie-breaker for stable pages. Missing text filters match all books; supplied text is matched as a case-insensitive literal substring. The list route paths remain stable, while book responses expose the renamed `replacementCost` and new optional `description` fields.
 
 ### Repository layer
 
 `BookRepository` extends `JpaRepository<Book, Long>`, gaining standard CRUD, pagination, sorting, and count operations. Its custom methods use three Spring Data styles:
 
-- Derived queries, such as `findByTitleContainingIgnoreCase` and `findTopByOrderByPriceDesc`.
+- Derived queries, such as `findByTitleContainingIgnoreCase` and `findTopByOrderByReplacementCostDesc`.
 - JPQL aggregate/select queries for ranges, totals, averages, and genre distribution.
 - A modifying JPQL delete returning the affected row count.
 
 `deleteBookById` uses `@Modifying(clearAutomatically = true)` because bulk JPQL bypasses normal entity lifecycle synchronization. If more bulk updates are introduced, account for stale persistence-context state in the same way.
 
-The count-and-total-value aggregate uses the typed `LibraryAggregate` constructor projection under `app.book.repository.projection`; the service maps that internal projection into the public `LibraryStatisticsDTO`. Genre distribution follows the same pattern through the typed `GenreCount` constructor projection, which the service maps into the existing `Map<String, Long>` response. These records are internal persistence projections, not public DTOs. Prefer typed projections for future complex aggregations when they improve safety without adding unnecessary abstraction.
+The count-and-total-replacement-cost aggregate uses the typed `LibraryAggregate` constructor projection under `app.book.repository.projection`; the service maps that internal projection into the public `LibraryStatisticsDTO`. Genre distribution follows the same pattern through the typed `GenreCount` constructor projection, which the service maps into the existing `Map<String, Long>` response. These records are internal persistence projections, not public DTOs. Prefer typed projections for future complex aggregations when they improve safety without adding unnecessary abstraction.
 
 ### User-domain status
 
@@ -256,7 +257,8 @@ The current domain decision is that one `Book` entity represents one physical bo
 | `title` | `String` | `VARCHAR(100)` | Nonblank, not null |
 | `author` | `String` | `VARCHAR(50)` | Nonblank, not null |
 | `genre` | `String` | `VARCHAR(50)` | Nonblank, not null |
-| `price` | `BigDecimal` | `DECIMAL(10,2)` | Not null, positive at application boundary |
+| `description` | `String` | `VARCHAR(2000)` | Optional catalog summary |
+| `replacementCost` | `BigDecimal` | `books.replacement_cost DECIMAL(10,2)` | Not null, positive at application boundary |
 | `copyStatus` | `BookCopyStatus` | `VARCHAR(24)` | `IN_COLLECTION` or `LOST`; defaults to `IN_COLLECTION` |
 | `createdAt` | `LocalDateTime` | `TIMESTAMP` | Not null, set on insert, immutable after creation, omitted from response DTOs |
 
@@ -264,13 +266,13 @@ The current domain decision is that one `Book` entity represents one physical bo
 
 Use `BigDecimal` for all money-related values and comparisons. Do not replace it with `double` or `float`. Use `compareTo` for numerical equality in tests because `BigDecimal.equals` also compares scale.
 
-The V1 migration creates indexes on title, author, genre, and price. PostgreSQL may not fully exploit ordinary B-tree indexes for every case-insensitive contains query (`%term%`), so benchmark before claiming those indexes optimize substring search.
+V1 created indexes on title, author, genre, and the original monetary column. V5 renames that column to `replacement_cost` and renames its index. PostgreSQL may not fully exploit ordinary B-tree indexes for every case-insensitive contains query (`%term%`), so benchmark before claiming those indexes optimize substring search.
 
 ### DTO and mapper boundary
 
-`BookRequestDTO` is the complete inbound contract for create and PUT; it validates required text lengths and positive, non-null prices. `BookPatchRequestDTO` is the partial-update contract; all fields are optional and service logic validates supplied values. Unknown JSON fields are ignored by Jackson.
+`BookRequestDTO` is the complete inbound contract for create and PUT; title, author, genre, and positive `replacementCost` are required. `description` is optional and limited to 2,000 characters. `BookPatchRequestDTO` is the partial-update contract; fields are optional, null and blank text values are ignored, and service logic validates supplied values. Unknown JSON fields are ignored by Jackson.
 
-`BookResponseDTO` is the regular outbound book shape and intentionally omits the internal `createdAt` timestamp. `LibraryStatisticsDTO` is an immutable Java record containing total count, total value, and the most expensive book response.
+`BookResponseDTO` is the regular outbound book shape and intentionally omits the internal `createdAt` timestamp. Its `replacementCost` field records the value used to replace one physical copy; it does not assess or collect a fee. `LibraryStatisticsDTO` is an immutable Java record containing the total count, sum of replacement costs, and the copy with the highest replacement cost.
 
 `BookMapper` centralizes:
 
@@ -290,11 +292,11 @@ Do not expose `Book` directly from new endpoints. Entity exposure couples client
 ```json
 {
   "error": "Validation failed",
-  "details": "Price must be greater than 0",
+  "details": "Replacement cost must be greater than 0",
   "timestamp": 0,
   "statusCode": 400,
   "fieldErrors": {
-    "price": "Price must be greater than 0"
+    "replacementCost": "Replacement cost must be greater than 0"
   }
 }
 ```
@@ -327,16 +329,16 @@ Book routes use `/app/books`; user routes use `/app/users`; loan routes use `/ap
 | Method | Path | Purpose | Response shape |
 |---|---|---|---|
 | GET | `/health` | API and database reachability | `ApiResponse<Map<String, Boolean>>` |
-| GET | `/stats` | Count, total value, most expensive book | `LibraryStatisticsDTO` |
-| GET | `/stats/average-price` | Average collection price | `ApiResponse<BigDecimal>` |
+| GET | `/stats` | Count, total replacement cost, highest replacement-cost copy | `LibraryStatisticsDTO` |
+| GET | `/stats/average-replacement-cost` | Average collection replacement cost | `ApiResponse<BigDecimal>` |
 | GET | `/stats/count` | Number of books | `ApiResponse<Long>` |
-| GET | `/search?type=...&value=...` | Search by author, title, genre, or exact price | List of `BookResponseDTO` |
-| GET | `/budget?maxPrice=...` | Books at or below a maximum price | List of `BookResponseDTO` |
+| GET | `/search?type=...&value=...` | Search by author, title, genre, or exact replacement cost | List of `BookResponseDTO` |
+| GET | `/budget?maxReplacementCost=...` | Books at or below a maximum replacement cost | List of `BookResponseDTO` |
 | GET | `/all?page=...&size=...&sort=...` | Paginated collection | Spring `Page<BookResponseDTO>` |
-| GET | `/query?title=...&author=...&genre=...&minPrice=...&maxPrice=...` | Paginated book query with optional combined filters and sorting | Spring `Page<BookResponseDTO>` |
+| GET | `/query?title=...&author=...&genre=...&minReplacementCost=...&maxReplacementCost=...` | Paginated book query with optional combined filters and sorting | Spring `Page<BookResponseDTO>` |
 | GET | `/sorted?category=...` | Ascending sort by an allowed field | List of `BookResponseDTO` |
 | GET | `/genre` | Count grouped by genre | Map of genre to count |
-| GET | `/price?minPrice=...&maxPrice=...` | Inclusive price range | List of `BookResponseDTO` |
+| GET | `/replacement-cost?minReplacementCost=...&maxReplacementCost=...` | Inclusive replacement cost range | List of `BookResponseDTO` |
 | GET | `/{id}` | Retrieve one book | `BookResponseDTO` |
 | POST | `/add` | Create a validated book | `ApiResponse<BookResponseDTO>`, HTTP 201 |
 | PATCH | `/{id}` | Partially update supplied fields | `ApiResponse<BookResponseDTO>` |
@@ -403,7 +405,7 @@ An in-memory database driver declared at runtime for development/testing. The cu
 
 `spring-boot-starter-flyway` supplies the Boot 4 migration auto-configuration. Flyway 13.3.0 discovers versioned scripts in `classpath:db/migration`, records applied versions in `flyway_schema_history`, and migrates the database before JPA validation. The PostgreSQL module supplies database-specific Flyway support.
 
-Never edit a migration that may have been applied to a shared or persistent database. Add the next versioned migration (`V4__description.sql`, and so on). Migration filenames use Flyway's required double underscore between version and description; verify discovery during startup.
+Never edit a migration that may have been applied to a shared or persistent database. Add the next versioned migration (V6 or later for schema changes after the current V5). Migration filenames use Flyway's required double underscore between version and description; verify discovery during startup.
 
 ### Lombok
 
@@ -451,7 +453,7 @@ Important persistence settings:
 
 ## Database Migration Rules
 
-`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` creates `users` with identity, role, course, major, uniqueness, format, and cross-field constraints, then inserts the historical bootstrap administrator/library assistant using the configured BCrypt hash. V3 adds the LIBRARIAN role and matching staff academic-field constraints. V4 adds `books.copy_status` and the `loans` table with state checks, foreign-key delete restrictions, borrower-history indexes, and the one-active-loan-per-copy index. No librarian or loan data is seeded. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
+`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` creates `users` with identity, role, course, major, uniqueness, format, and cross-field constraints, then inserts the historical bootstrap administrator/library assistant using the configured BCrypt hash. V3 adds the LIBRARIAN role and matching staff academic-field constraints. V4 adds `books.copy_status` and the `loans` table with state checks, foreign-key delete restrictions, borrower-history indexes, and the one-active-loan-per-copy index. V5 adds optional `books.description` and renames `price` to `replacement_cost` while preserving stored amounts. No librarian or loan data is seeded. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
 
 For every schema change:
 
@@ -552,7 +554,7 @@ Test sources are grouped by scope and feature: security MVC tests live in `src/t
 - `UserServiceTest`: Mockito-based service unit tests for partial-update normalization, validation, password verification and encoding, password-length bounds, unchanged-email handling, duplicate-email rejection, missing-user handling, and dirty-checking expectations.
 - `LoanServiceTest`: Mockito-based service tests for student/faculty checkout, overdue and three-active-loan limits, copy availability, return ownership and terminal state, staff lost-resolution scope, history access, sorting, and page-size bounds.
 
-- `BookServiceTest`: Mockito-based service unit tests for CRUD rules, text normalization, entity-validation enforcement, price-range validation, dirty-checking expectations, search, sorting, pricing, typed statistics projections, genre distribution, and other aggregate behavior.
+- `BookServiceTest`: Mockito-based service unit tests for CRUD rules, text normalization, entity-validation enforcement, replacement-cost range validation, dirty-checking expectations, search, sorting, replacement-cost statistics, typed projections, genre distribution, and other aggregate behavior.
 - `BookTest`: entity-construction, lifecycle, and direct Jakarta Validator tests for request DTO and entity constraints.
 - `BookMapperTest`: focused tests for entity-to-DTO mapping, null inputs, and list mapping.
 - `GlobalExceptionHandlerTest`: direct unit tests for exception handlers, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
@@ -642,7 +644,7 @@ Treat these as breaking changes unless explicitly requested:
 - Tightening validation in a way that rejects previously accepted requests.
 - Changing PATCH null/blank semantics.
 - Altering pagination defaults or maximum size.
-- Changing price precision, scale, or inclusive range behavior.
+- Changing replacement cost precision, scale, or inclusive range behavior.
 - Replacing permit-all security with required authentication.
 
 When a breaking change is intended, document migration guidance and update all examples and tests in the same contribution.
@@ -655,13 +657,14 @@ When a breaking change is intended, document migration guidance and update all e
 - The Docker image requires a prebuilt JAR and does not build source itself.
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
 - Signup always creates a student; librarians create faculty and library assistants; students/faculty may delete themselves, administrators may delete student/faculty accounts, and librarians may also delete library assistant accounts.
-- Loan routes and V4 are implemented. `LoanServiceTest` and `LoanSecurityMvcTest` cover key service rules and route gates; `BookPersistenceIT` and `LoanPersistenceIT` cover V4, the lost-status/catalog-edit lock interaction, loan history constraints, and terminal return persistence. Concurrent borrower-limit checkout attempts still need a dedicated PostgreSQL test. User routes have MVC contract, PostgreSQL integration, and HTTP Basic security-flow coverage; the security MVC tests mock the user repository.
-- `BookPersistenceIT` verifies a fresh PostgreSQL database migrates through V4 and passes Hibernate schema validation. The V3-to-V4 upgrade path for an existing database still needs explicit verification; running the integration profile requires Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH`.
+- Loan routes and V4 are implemented. `LoanServiceTest` and `LoanSecurityMvcTest` cover key service rules and route gates; `BookPersistenceIT` and `LoanPersistenceIT` cover the current schema, the lost-status/catalog-edit lock interaction, loan history constraints, and terminal return persistence. Concurrent borrower-limit checkout attempts still need a dedicated PostgreSQL test. User routes have MVC contract, PostgreSQL integration, and HTTP Basic security-flow coverage; the security MVC tests mock the user repository.
+- `BookPersistenceIT` verifies a fresh PostgreSQL database migrates through V5 and passes Hibernate schema validation. It also migrates an isolated V4 schema to V5 and checks that stored monetary values remain intact; running the integration profile requires Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH`.
 - Success response shapes are inconsistent across endpoints.
 - API envelope and error `timestamp` fields are epoch milliseconds rather than ISO-8601 values. Loan date-time fields use `LocalDateTime` and are serialized without a timezone offset; the loan contract treats them as Asia/Manila local time.
 - The book health endpoint runs a lightweight database ping but is not integrated with Spring Boot Actuator or container health checks.
 - Ordinary indexes may not accelerate case-insensitive substring searches as expected.
-- The database enforces `NOT NULL` for price but not a positive-value check; application validation is the current positive-price guard.
+- The database enforces `NOT NULL` for replacement cost but not a positive-value check; application validation is the current positive-value guard.
+- Book API clients must send/read `replacementCost` and use replacement-cost query names. V5 preserves stored values during the column rename. The old `price` field, search value, sort key, and range route are removed, so existing clients must update.
 
 Address these in focused, tested contributions. Do not bundle opportunistic fixes into unrelated work.
 

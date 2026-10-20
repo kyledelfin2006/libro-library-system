@@ -47,7 +47,7 @@ import java.util.stream.Collectors;
 @Service
 public class BookService {
 
-    private static final Set<String> SORTABLE_BOOK_FIELDS = Set.of("id", "title", "author", "genre", "price");
+    private static final Set<String> SORTABLE_BOOK_FIELDS = Set.of("id", "title", "author", "genre", "replacementCost");
 
     /**
      *  repository the data access object for book entities
@@ -74,12 +74,25 @@ public class BookService {
      * A final {@code id} order keeps page boundaries deterministic when books
      * share the requested sort value.
      */
+    /**
+     * Filters books by text and optional inclusive replacement-cost bounds before applying a stable page sort.
+     *
+     * @param title optional title substring
+     * @param author optional author substring
+     * @param genre optional genre substring
+     * @param minReplacementCost optional inclusive lower bound
+     * @param maxReplacementCost optional inclusive upper bound
+     * @param pageable requested page and allowlisted sort order
+     * @return the matching page of physical copies
+     * @throws IllegalArgumentException if the replacement-cost range or sort order is invalid
+     */
     @Transactional(readOnly = true)
     public Page<Book> queryBooks(String title, String author, String genre,
-                                 BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {
+                                 BigDecimal minReplacementCost, BigDecimal maxReplacementCost, Pageable pageable) {
         validateBookSort(pageable);
-        if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
-            throw new IllegalArgumentException("minPrice must be less than or equal to maxPrice");
+        if (minReplacementCost != null && maxReplacementCost != null
+                && minReplacementCost.compareTo(maxReplacementCost) > 0) {
+            throw new IllegalArgumentException("minReplacementCost must be less than or equal to maxReplacementCost");
         }
         Sort sort = pageable.getSort();
         if (sort.getOrderFor("id") == null) {
@@ -89,12 +102,12 @@ public class BookService {
         return repository.queryBooks(title == null ? "" : title,
                 author == null ? "" : author,
                 genre == null ? "" : genre,
-                minPrice, maxPrice, stablePage);
+                minReplacementCost, maxReplacementCost, stablePage);
     }
 
     private void validateBookSort(Pageable pageable) {
         if (pageable.getSort().stream().anyMatch(order -> !SORTABLE_BOOK_FIELDS.contains(order.getProperty()))) {
-            throw new IllegalArgumentException("Unsupported book sort field. Allowed fields: id, title, author, genre, price");
+            throw new IllegalArgumentException("Unsupported book sort field. Allowed fields: id, title, author, genre, replacementCost");
         }
     }
 
@@ -181,14 +194,14 @@ public class BookService {
      * Only fields that are non-{@code null} and have text (for strings) are updated.
      * The physical-copy row is write-locked before loading so a concurrent lost resolution
      * cannot have its copy status overwritten by a stale managed entity.
-     * Price updates must be positive; otherwise, an exception is thrown.
+     * Replacement-cost updates must be positive; otherwise, an exception is thrown.
      * </p>
      *
      * @param id      the ID of the book to update
      * @param updates the DTO containing the fields to update (others remain unchanged)
      * @return the updated {@link Book} entity (managed, persisted by dirty checking)
      * @throws BookNotFoundException      if the book does not exist
-     * @throws BookValidationException if the provided price is ≤ 0
+     * @throws BookValidationException if the supplied replacement cost is ≤ 0
      */
     // Partial updates
     @Transactional
@@ -211,11 +224,19 @@ public class BookService {
         if (hasText(updates.genre())) {
             existingBook.setGenre(updates.genre().trim());
         }
-        if (updates.price() != null) {
-            if (updates.price().compareTo(BigDecimal.ZERO) <= 0) {
-                throw new BookValidationException("Price must be greater than 0");
+        // Blank descriptions mean "leave unchanged" in PATCH; full replacement can clear them.
+        if (hasText(updates.description())) {
+            // Reject overlong input before changing the managed entity so callers get a clear catalog error.
+            if (updates.description().length() > 2000) {
+                throw new BookValidationException("Description cannot exceed 2000 characters");
             }
-            existingBook.setPrice(updates.price());
+            existingBook.setDescription(updates.description().trim());
+        }
+        if (updates.replacementCost() != null) {
+            if (updates.replacementCost().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BookValidationException("Replacement cost must be greater than 0");
+            }
+            existingBook.setReplacementCost(updates.replacementCost());
         }
 
         validateEntity(existingBook);
@@ -239,7 +260,7 @@ public class BookService {
      * @return the updated {@link Book} entity (managed)
      * @throws BookNotFoundException    if the book does not exist
      * @throws BookValidationException if the DTO is {@code null} or contains invalid data
-     *                                 (e.g., blank title, negative price)
+     *                                 (e.g., blank title, negative replacement cost)
      */
     @Transactional
     public Book replaceBook(Long id, BookRequestDTO updates) {
@@ -256,8 +277,8 @@ public class BookService {
         if (!hasText(updates.getGenre())) {
             throw new BookValidationException("Genre must not be blank");
         }
-        if (updates.getPrice() == null || updates.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BookValidationException("Price must be greater than 0");
+        if (updates.getReplacementCost() == null || updates.getReplacementCost().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BookValidationException("Replacement cost must be greater than 0");
         }
 
         // 2. Lock and fetch the copy so a concurrent lost resolution cannot be overwritten.
@@ -289,45 +310,45 @@ public class BookService {
     }
 
     /**
-     * Retrieves all books whose price is less than or equal to the specified maximum.
+     * Retrieves all books whose replacement cost is at or below the specified maximum.
      *
-     * @param maxPrice the maximum price (inclusive)
-     * @return a list of books within the budget
+     * @param maxReplacementCost the maximum replacement amount (inclusive)
+     * @return a list of copies at or below the specified replacement amount
      */
-    public List<Book> getBooksWithinBudget(BigDecimal maxPrice) {
-        return repository.findByPriceLessThanEqual(maxPrice);
+    public List<Book> getBooksAtOrBelowReplacementCost(BigDecimal maxReplacementCost) {
+        return repository.findByReplacementCostLessThanEqual(maxReplacementCost);
     }
 
     /**
-     * Retrieves all books whose price falls within the given range (inclusive).
+     * Retrieves all books whose replacement cost falls within the given range (inclusive).
      *
-     * @param min the minimum price (must be ≤ max)
-     * @param max the maximum price (must be ≥ min)
-     * @return a list of books in the price range
+     * @param minReplacementCost the minimum amount (must be ≤ max)
+     * @param maxReplacementCost the maximum amount (must be ≥ min)
+     * @return a list of books in the replacement-cost range
      * @throws IllegalArgumentException if min > max
      */
-    public List<Book> getBooksInPriceRange(BigDecimal min, BigDecimal max) {
-        if (min == null || max == null) {
-            throw new IllegalArgumentException("minPrice and maxPrice are required");
+    public List<Book> getBooksInReplacementCostRange(BigDecimal minReplacementCost, BigDecimal maxReplacementCost) {
+        if (minReplacementCost == null || maxReplacementCost == null) {
+            throw new IllegalArgumentException("minReplacementCost and maxReplacementCost are required");
         }
-        if (min.compareTo(max) > 0) {
-            throw new IllegalArgumentException("minPrice must be less than or equal to maxPrice");
+        if (minReplacementCost.compareTo(maxReplacementCost) > 0) {
+            throw new IllegalArgumentException("minReplacementCost must be less than or equal to maxReplacementCost");
         }
-        return repository.findBooksByPriceBetween(min, max);
+        return repository.findBooksByReplacementCostBetween(minReplacementCost, maxReplacementCost);
     }
 
     /**
      * Searches for books by a specific field type and value.
      * <p>
-     * Supported search types: {@code author}, {@code title}, {@code genre}, {@code price}.
-     * For price, the value must be a valid numeric string.
+     * Supported search types: {@code author}, {@code title}, {@code genre}, {@code replacementCost}.
+     * For replacement cost, the value must be a valid numeric string.
      * </p>
      *
      * @param type  the field to search on (case-insensitive, trimmed)
      * @param value the search term (case-insensitive for text fields)
      * @return a list of matching books
      * @throws IllegalArgumentException if the search type is unsupported or
-     *                                  the price value is not a valid number
+     *                                  the replacement-cost value is not a valid number
      */
     public List<Book> searchBooks(String type, String value) {
         if (type == null || type.isBlank()) {
@@ -346,15 +367,15 @@ public class BookService {
                 return repository.findByTitleContainingIgnoreCase(value);
             case "genre":
                 return repository.findByGenreContainingIgnoreCase(value);
-            case "price":
+            case "replacementcost":
                 try {
-                    BigDecimal price = new BigDecimal(value);
-                    return repository.findByPrice(price);
+                    BigDecimal replacementCost = new BigDecimal(value);
+                    return repository.findByReplacementCost(replacementCost);
                 } catch (NumberFormatException e) {
-                    throw new IllegalArgumentException("Invalid price format value: " + value);
+                    throw new IllegalArgumentException("Invalid replacement-cost format value: " + value);
                 }
             default: // Handler for invalid types
-                throw new IllegalArgumentException("Invalid search type: " + type + ". Valid types: author, title, genre, price");
+                throw new IllegalArgumentException("Invalid search type: " + type + ". Valid types: author, title, genre, replacementCost");
         }
     }
 
@@ -376,7 +397,7 @@ public class BookService {
     /**
      * Retrieves all books sorted by the specified field in ascending order.
      * <p>
-     * Allowed sort fields are: {@code title}, {@code author}, {@code id}, {@code price}, {@code genre}.
+     * Allowed sort fields are: {@code title}, {@code author}, {@code id}, {@code replacementCost}, {@code genre}.
      * If the provided field is {@code null} or empty, the list is returned unsorted.
      * </p>
      *
@@ -389,8 +410,10 @@ public class BookService {
             return repository.findAll();
         }
 
-        // Clean the field name
-        String fieldName = field.trim().toLowerCase();
+        // Normalize ordinary fields to lowercase, but keep the JPA camel-case property spelling.
+        String normalizedFieldName = field.trim().toLowerCase(Locale.ROOT);
+        String fieldName = normalizedFieldName.equals("replacementcost")
+                ? "replacementCost" : normalizedFieldName;
 
         // Validate allowed fields to avoid SQL injection through Sort.by()
         // If not allowed throw exception
@@ -403,67 +426,68 @@ public class BookService {
     }
 
     /**
-     * Returns library statistics as a DTO containing total books, total value,
-     * and the most expensive book (converted to {@link BookResponseDTO}).
+     * Returns library statistics with total replacement cost and the copy with the highest
+     * replacement cost (converted to {@link BookResponseDTO}).
      * <p>
      * This method combines two repository calls:
-     * - One for COUNT and SUM (using {@code getCountAndTotalValue()})
-     * - One for the most expensive book (using {@code findTopByOrderByPriceDesc()})
+     * - One for COUNT and SUM of replacement costs.
+     * - One for the copy with the highest replacement cost.
      * </p>
      *
      * @return a fully populated {@link LibraryStatisticsDTO}
      */
     public LibraryStatisticsDTO getLibraryStatistics() {
-        LibraryAggregate aggregate = repository.getCountAndTotalValue();
+        LibraryAggregate aggregate = repository.getCountAndTotalReplacementCost();
 
-        Book mostExpensive = repository.findTopByOrderByPriceDesc();
+        Book highestReplacementCost = repository.findTopByOrderByReplacementCostDesc();
 
-        BookResponseDTO mostExpensiveDTO = (mostExpensive != null) ? mapper.toResponseDTO(mostExpensive) : null;
+        BookResponseDTO highestReplacementCostDTO = (highestReplacementCost != null)
+                ? mapper.toResponseDTO(highestReplacementCost) : null;
 
         return new LibraryStatisticsDTO(
                 aggregate.totalBooks(),
-                aggregate.totalValue(),
-                mostExpensiveDTO
+                aggregate.totalReplacementCost(),
+                highestReplacementCostDTO
         );
     }
 
     /**
-     * Calculates the average price of all books in the library.
+     * Calculates the average replacement cost of all copies in the library.
      *
-     * @return the average price as a {@link BigDecimal}, or {@link BigDecimal#ZERO}
+     * @return the average replacement cost as a {@link BigDecimal}, or {@link BigDecimal#ZERO}
      *         if no books exist
      */
-    public BigDecimal getAveragePrice(){
-        Optional<BigDecimal> averagePrice = repository.getAveragePrice();
-        return averagePrice.orElse(BigDecimal.ZERO);
+    public BigDecimal getAverageReplacementCost(){
+        Optional<BigDecimal> averageReplacementCost = repository.getAverageReplacementCost();
+        return averageReplacementCost.orElse(BigDecimal.ZERO);
     }
 
     // ---------------------- Individual statistics (used elsewhere) ----------------------
 
     /**
-     * Computes the total monetary value of all books in the library.
+     * Computes the sum of recorded replacement costs for all copies.
      * <p>
      * This method is primarily used for unit testing.
      * </p>
      *
-     * @return the sum of all book prices, or {@link BigDecimal#ZERO} if the library is empty
+     * @return the sum of all replacement costs, or {@link BigDecimal#ZERO} if the library is empty
      */
     // Mainly used by Unit Testing
-    public BigDecimal getTotalLibraryValue() {
-        return repository.sumTotalOfPrice().orElse(BigDecimal.ZERO);
+    public BigDecimal getTotalReplacementCost() {
+        return repository.sumTotalReplacementCost().orElse(BigDecimal.ZERO);
     }
 
     /**
-     * Finds the most expensive book in the library.
+     * Finds the copy with the highest replacement cost in the library.
      * <p>
      * This method is primarily used for unit testing.
      * </p>
      *
-     * @return the book with the highest price, or {@code null} if the library is empty
+     * @return the copy with the highest replacement cost, or {@code null} if the library is empty
      */
     // Mainly used by Unit Testing
-    public Book findMostExpensiveBook() {
-        return repository.findTopByOrderByPriceDesc();
+    public Book findHighestReplacementCostBook() {
+        return repository.findTopByOrderByReplacementCostDesc();
     }
 
     /**

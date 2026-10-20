@@ -6,7 +6,7 @@ This is the working implementation roadmap. It is not the public project overvie
 
 | Area | Implemented now |
 | --- | --- |
-| Books | CRUD, search, pagination, sorting, filtering, statistics, DTO validation |
+| Books | CRUD, optional description, replacement-cost tracking, search, pagination, sorting, filtering, statistics, DTO validation (V5) |
 | Accounts | Student signup; librarian-created faculty/library assistants; role-scoped directory, profile/password management, and deletion |
 | Roles in Java and the current schema | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN (Flyway V3) |
 | Authentication | HTTP Basic using university ID, UserDetailsService, and BCrypt |
@@ -42,8 +42,8 @@ See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-
 - [x] Add loan MVC/security tests for route roles, authenticated identity, and CSRF enforcement.
 - [x] Add PostgreSQL tests for returned history, the one-active-loan index, and protected deletion.
 - [ ] Add a concurrent checkout test proving the three-active-loan borrower limit cannot be exceeded.
-- [x] Verify fresh V1-to-V4 startup through the PostgreSQL integration profile.
-- [ ] Verify upgrade from a database already migrated through V3.
+- [x] Verify fresh V1-to-V5 startup through the PostgreSQL integration profile.
+- [x] Verify the V4-to-V5 upgrade path preserves existing replacement-cost values and schema validation.
 
 ### 3. Replace HTTP Basic with local JWT authentication
 

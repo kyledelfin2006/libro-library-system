@@ -3,18 +3,12 @@ package app.book.dto;
 import java.math.BigDecimal;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-//This DTO is only used as a response – serialized to JSON, never deserialize from JSON.
-//
-//It has exactly three fields – all mandatory, no optional/nullable values.
-//
-//You never need to modify it – it's a read‑only snapshot of library statistics.
-//
-//No JPA or Spring‑specific behavior – it's a pure data object.
+// This response DTO is a read-only snapshot; the highest-cost book is null for an empty collection.
 
 
 public record LibraryStatisticsDTO(
         @Schema(description = "Number of books in the collection.", example = "6") long totalBooks,
-        @Schema(description = "Sum of all stored decimal book prices.", example = "123.45") BigDecimal totalValue,
-        @Schema(description = "Most expensive book, or null when the collection is empty.") BookResponseDTO mostExpensiveBook
+        @Schema(description = "Sum of recorded replacement costs.", example = "123.45") BigDecimal totalReplacementCost,
+        @Schema(description = "Book with the highest replacement cost, or null when the collection is empty.") BookResponseDTO highestReplacementCostBook
 ) {
 }

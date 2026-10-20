@@ -14,8 +14,8 @@ Libro is a library management system built with Spring Boot. It helps manage a l
 ### Features
 
 - 📚 **Books:** create, view, replace, partially update, and delete physical-copy records.
-- 🔎 **Search:** find books by title, author, genre, or exact price; combine filters, sort, paginate, and filter by price or budget.
-- 📊 **Insights:** view book counts, total and average value, the most expensive book, and genre counts.
+- 🔎 **Search:** find books by title, author, genre, or exact replacement cost; combine filters, sort, paginate, and filter by replacement cost or budget.
+- 📊 **Insights:** view book counts, total and average replacement cost, the copy with the highest replacement cost, and genre counts.
 - 👥 **Accounts:** sign up, browse permitted listings, look up profiles, update details, change passwords, and delete accounts. Staff access follows role permissions.
 - 🔄 **Loans:** students and faculty borrow and return physical copies; staff can review permitted histories and mark lost copies.
 - 🛠️ **Built for development:** Docker, PostgreSQL 18, Flyway migrations, request validation, and consistent error responses.
@@ -108,7 +108,7 @@ flowchart LR
         Security -->|load account for Basic authentication| UserDetails["LibroUserDetailsService<br/>lookup by university ID · map role"]
         UserDetails -->|findByUniversityId| UserRepo
         UserRepo --> ORM
-        Flyway["Flyway migrations<br/>V1 books · V2 users · V3 librarian role · V4 loans"]
+        Flyway["Flyway migrations<br/>V1 books · V2 users · V3 librarian role · V4 loans · V5 catalog fields"]
         Shared["Shared concerns<br/>DTOs · mappers · validation<br/>GlobalExceptionHandler · OpenAPI"]
         Security -->|authorized request| API
         Security -->|authorized request| UserAPI
@@ -230,7 +230,8 @@ erDiagram
         VARCHAR title
         VARCHAR author
         VARCHAR genre
-        DECIMAL price
+        VARCHAR(2000) description
+        DECIMAL replacement_cost
         VARCHAR copy_status
         TIMESTAMP created_at
     }
@@ -355,6 +356,7 @@ src/main/resources/
       V2__create_users_table.sql
       V3__add_librarian_role.sql
       V4__add_loans_and_copy_status.sql
+      V5__describe_books_and_rename_price_to_replacement_cost.sql
 
 src/test/java/
   unit/
@@ -422,7 +424,7 @@ The application never exposes `Book` (or future entity) objects directly to clie
    Response DTOs explicitly choose which fields are exposed. Sensitive or internal fields never appear in JSON unless intentionally added to the response DTO.
 
 4. **Enforces request validation at the boundary**
-   `BookRequestDTO` carries Jakarta Validation annotations (`@NotBlank`, `@Size`, `@NotNull`, `@Positive`). `@Valid` triggers them for create and PUT. PATCH uses a separate optional `BookPatchRequestDTO`; service logic validates supplied values without marking omitted fields as required in OpenAPI.
+   `BookRequestDTO` validates required title, author, genre, and positive replacement cost; description is optional and limited to 2,000 characters. `@Valid` triggers request checks for create and PUT. PATCH uses a separate optional `BookPatchRequestDTO`; service logic validates supplied values without marking omitted fields as required in OpenAPI.
 
 5. **Allows response customization**
    Response DTOs can reshape, rename, compute, or omit fields without changing the entity. For example, `LibraryStatisticsDTO` aggregates data from multiple repository calls into a single read-only snapshot.
@@ -444,10 +446,10 @@ public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody 
 - CRUD operations for books.
 - Each `Book` represents one physical borrowable copy. Duplicate titles and authors are allowed because separate copies have separate generated IDs; the model does not yet include an ISBN or edition key.
 - Pagination and sorting through `GET /app/books/all` and paginated filtering through `GET /app/books/query`.
-- Advanced search by title, author, genre, or price.
-- Price range filtering through `GET /app/books/price`.
+- Advanced search by title, author, genre, or replacement cost.
+- Replacement cost range filtering through `GET /app/books/replacement-cost`.
 - Budget filtering through `GET /app/books/budget`.
-- Statistics endpoints for total books, total library value, average price, and the most expensive book.
+- Statistics endpoints for total books, total replacement cost, average replacement cost, and the copy with the highest replacement cost.
 - Genre distribution endpoint.
 - User-domain API for account creation, profile lookup and updates, password changes, and deletion; the service applies duplicate checks, academic business rules, and BCrypt password hashing.
 - OpenAPI 3 documentation through Springdoc Swagger UI and `/v3/api-docs`, with operation-specific behavior, DTO schemas, and expected error responses.
@@ -517,8 +519,8 @@ Separate request types make the OpenAPI schema match each contract:
 
 | PUT (replacement) | PATCH (partial update) |
 | --- | --- |
-| `BookRequestDTO`; every field is required and validated. | `BookPatchRequestDTO`; every field is optional. Omitted/null fields and blank text values are ignored. |
-| Replaces all mutable fields. | Changes only supplied fields; a supplied price must be positive. |
+| `BookRequestDTO`; title, author, genre, and replacement cost are required. Description is optional. | `BookPatchRequestDTO`; every field is optional. Omitted/null fields and blank text values are ignored. |
+| Replaces all mutable fields; optional description may be set to null. | Changes only supplied fields; a supplied replacement cost must be positive. Null or blank description values are ignored. |
 
 Both service operations update a managed entity inside a transaction; Hibernate dirty checking persists the change.
 ### Centralized API errors
@@ -550,18 +552,19 @@ public ResponseEntity<ErrorResponse> handleBookNotFound(BookNotFoundException ex
 
 ```java
 public LibraryStatisticsDTO getLibraryStatistics() {
-    LibraryAggregate aggregate = repository.getCountAndTotalValue();
-    Book mostExpensive = repository.findTopByOrderByPriceDesc();
-    BookResponseDTO mostExpensiveDTO = (mostExpensive != null) ? mapper.toResponseDTO(mostExpensive) : null;
+    LibraryAggregate aggregate = repository.getCountAndTotalReplacementCost();
+    Book highestReplacementCostBook = repository.findTopByOrderByReplacementCostDesc();
+    BookResponseDTO highestReplacementCostDTO = (highestReplacementCostBook != null)
+            ? mapper.toResponseDTO(highestReplacementCostBook) : null;
     return new LibraryStatisticsDTO(
             aggregate.totalBooks(),
-            aggregate.totalValue(),
-            mostExpensiveDTO
+            aggregate.totalReplacementCost(),
+            highestReplacementCostDTO
     );
 }
 ```
 
-`LibraryAggregate` and `GenreCount` are internal immutable repository projections. They keep count, total-value, and genre-distribution queries type-safe while `LibraryStatisticsDTO` and the genre endpoint's `Map<String, Long>` remain the public API response models.
+`LibraryAggregate` and `GenreCount` are internal immutable repository projections. They keep book counts, total replacement cost, and genre-distribution queries type-safe while `LibraryStatisticsDTO` and the genre endpoint's `Map<String, Long>` remain the public API response models.
 
 ## API Endpoints
 
@@ -570,23 +573,23 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 | Method | Path | Description | Example Request | Example Response |
 | --- | --- | --- | --- | --- |
 | `GET` | `/app/books/health` | Health check for the API | `GET /app/books/health` | `{"success":true,"message":"Health check","data":{"api":true,"database":true},"timestamp":172...}` |
-| `GET` | `/app/books/all` | Returns a paginated list of books | `GET /app/books/all?page=0&size=12&sort=id,asc` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99}],"pageable":{...}}` |
-| `GET` | `/app/books/query` | Paginates books with optional title, author, genre, and inclusive price filters | `GET /app/books/query?author=orwell&minPrice=10&sort=price,desc&page=0&size=12` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99}],"totalElements":1,"totalPages":1,...}` |
-| `GET` | `/app/books/{id}` | Fetches a single book by ID | `GET /app/books/1` | `{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99}` |
-| `POST` | `/app/books/add` | Creates a new book using `BookRequestDTO` validation | `POST /app/books/add` with `{"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99}` | `{"success":true,"message":"Book Added Successfully","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99},"timestamp":172...}` |
-| `PATCH` | `/app/books/{id}` | Partially updates a book | `PATCH /app/books/1` with `{"price":15.99}` | `{"success":true,"message":"Book updated successfully","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":15.99},"timestamp":172...}` |
-| `PUT` | `/app/books/{id}` | Replaces a book completely | `PUT /app/books/1` with full DTO payload | `{"success":true,"message":"Book updated successfully","data":{"id":1,"title":"Animal Farm","author":"George Orwell","genre":"Political Satire","price":12.99},"timestamp":172...}` |
+| `GET` | `/app/books/all` | Returns a paginated list of books | `GET /app/books/all?page=0&size=12&sort=id,asc` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}],"pageable":{...}}` |
+| `GET` | `/app/books/query` | Paginates books with optional title, author, genre, and inclusive replacement cost filters | `GET /app/books/query?author=orwell&minReplacementCost=10&sort=replacementCost,desc&page=0&size=12` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}],"totalElements":1,"totalPages":1,...}` |
+| `GET` | `/app/books/{id}` | Fetches a single book by ID | `GET /app/books/1` | `{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}` |
+| `POST` | `/app/books/add` | Creates a new book using `BookRequestDTO` validation | `POST /app/books/add` with `{"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}` | `{"success":true,"message":"Book Added Successfully","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99},"timestamp":172...}` |
+| `PATCH` | `/app/books/{id}` | Partially updates a book | `PATCH /app/books/1` with `{"replacementCost":15.99}` | `{"success":true,"message":"Book updated successfully","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":15.99},"timestamp":172...}` |
+| `PUT` | `/app/books/{id}` | Replaces a book completely | `PUT /app/books/1` with full DTO payload | `{"success":true,"message":"Book updated successfully","data":{"id":1,"title":"Animal Farm","author":"George Orwell","genre":"Political Satire","description":"A farmyard allegory.","replacementCost":12.99},"timestamp":172...}` |
 | `DELETE` | `/app/books/{id}` | Deletes a book by ID | `DELETE /app/books/1` | `{"success":true,"message":"Book deleted successfully","timestamp":172...}` |
-| `GET` | `/app/books/search?type=title&value=orwell` | Searches by title, author, genre, or price | `GET /app/books/search?type=author&value=orwell` | `[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99}]` |
-| `GET` | `/app/books/budget?maxPrice=20` | Returns books priced at or below the given value | `GET /app/books/budget?maxPrice=20` | `[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99}]` |
-| `GET` | `/app/books/sorted?category=title` | Returns books sorted by title, author, genre, price, or id | `GET /app/books/sorted?category=price` | `[{"id":2,"title":"Animal Farm","author":"George Orwell","genre":"Political Satire","price":12.99}]` |
+| `GET` | `/app/books/search?type=title&value=orwell` | Searches by title, author, genre, or replacement cost | `GET /app/books/search?type=author&value=orwell` | `[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}]` |
+| `GET` | `/app/books/budget?maxReplacementCost=20` | Returns copies with a replacement cost at or below the given value | `GET /app/books/budget?maxReplacementCost=20` | `[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}]` |
+| `GET` | `/app/books/sorted?category=title` | Returns books sorted by title, author, genre, replacement cost, or id | `GET /app/books/sorted?category=replacementCost` | `[{"id":2,"title":"Animal Farm","author":"George Orwell","genre":"Political Satire","description":"A farmyard allegory.","replacementCost":12.99}]` |
 | `GET` | `/app/books/genre` | Returns genre distribution counts | `GET /app/books/genre` | `{"Fiction":3,"Fantasy":2,"Dystopian":1}` |
-| `GET` | `/app/books/price?minPrice=10&maxPrice=25` | Returns books within a price range | `GET /app/books/price?minPrice=10&maxPrice=25` | `[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","price":19.99}]` |
-| `GET` | `/app/books/stats` | Returns total books, total value, and the most expensive book | `GET /app/books/stats` | `{"totalBooks":6,"totalValue":123.45,"mostExpensiveBook":{"id":4,"title":"...","author":"...","genre":"...","price":49.99}}` |
-| `GET` | `/app/books/stats/average-price` | Returns the average price of all books | `GET /app/books/stats/average-price` | `{"success":true,"message":"Average Price of Collection: ","data":20.50,"timestamp":172...}` |
+| `GET` | `/app/books/replacement-cost?minReplacementCost=10&maxReplacementCost=25` | Returns books within a replacement cost range | `GET /app/books/replacement-cost?minReplacementCost=10&maxReplacementCost=25` | `[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}]` |
+| `GET` | `/app/books/stats` | Returns total books, total replacement cost, and the copy with the highest replacement cost | `GET /app/books/stats` | `{"totalBooks":6,"totalReplacementCost":123.45,"highestReplacementCostBook":{"id":4,"title":"...","author":"...","genre":"...","replacementCost":49.99}}` |
+| `GET` | `/app/books/stats/average-replacement-cost` | Returns the average replacement cost of all books | `GET /app/books/stats/average-replacement-cost` | `{"success":true,"message":"Average replacement cost of collection","data":20.50,"timestamp":172...}` |
 | `GET` | `/app/books/stats/count` | Returns the total number of books | `GET /app/books/stats/count` | `{"success":true,"message":"Book Collection Count","data":6,"timestamp":172...}` |
 
-`/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minPrice` and `maxPrice` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `price`; invalid ranges, decimals, or sort fields return HTTP 400. Existing list routes retain their response shapes. `BookResponseDTO` also includes `copyStatus` (`IN_COLLECTION` or `LOST`); the compact book examples above omit it for readability.
+`/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minReplacementCost` and `maxReplacementCost` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `replacementCost`; invalid ranges, decimals, or sort fields return HTTP 400. The `replacementCost` JSON field is the recorded amount used to replace one physical copy; it does not trigger a charge. `description` is optional and limited to 2,000 characters. Existing list routes retain their response shapes apart from the renamed and added book fields. `BookResponseDTO` also includes `copyStatus` (`IN_COLLECTION` or `LOST`); the compact book examples above omit it for readability.
 
 ### User API
 
@@ -668,10 +671,10 @@ If you prefer to run the application directly on the host machine, start only Po
 | Symptom | Likely Cause | Fix |
 | --- | --- | --- |
 | App fails to start with datasource errors | Missing or incorrect `SPRING_DATASOURCE_*` variables | Check `.env` and Docker Compose values |
-| `400 Bad Request` on create or replace | Validation failed in `BookRequestDTO` | Make sure `title`, `author`, `genre`, and `price` are valid |
+| `400 Bad Request` on create or replace | Validation failed in `BookRequestDTO` | Make sure `title`, `author`, `genre`, and `replacement cost` are valid |
 | `Invalid JSON format in request body` | Malformed request payload | Send valid JSON and set `Content-Type: application/json` |
 | `Book not found` | The requested ID does not exist | Verify the ID with `GET /app/books/all` |
-| `Invalid Number Format` | Non-numeric values were sent to a numeric endpoint | Use numeric values for `price`, `minPrice`, `maxPrice`, and similar fields |
+| `Invalid Number Format` | Non-numeric values were sent to a numeric endpoint | Use numeric values for `replacement cost`, `minReplacementCost`, `maxReplacementCost`, and similar fields |
 | `Method not allowed` | Wrong HTTP verb was used | Match the method listed in the endpoint table |
 | Docker app container fails to start | The jar was not built before `docker compose up --build` | Run `mvn clean package` first |
 | Swagger UI loads but API calls fail, or `library-app` keeps restarting | Inspect `docker compose logs app`; an old development volume may have `books.id` as `INTEGER` while Hibernate expects `BIGINT` | If the volume contains only disposable development data, back up anything needed and intentionally remove it with `docker compose down -v`; otherwise preserve the volume and resolve the schema through a forward migration. Then rebuild with `docker compose up -d --build` |
@@ -694,6 +697,7 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
   - `V2__create_users_table.sql` creates the users table with role, course, major, identity-format, uniqueness, and relationship constraints, then seeds the historical bootstrap library assistant from `LIBRO_ADMIN_PASSWORD_HASH`.
   - `V3__add_librarian_role.sql` adds `LIBRARIAN` to the accepted database roles and applies the staff academic-field rules.
   - `V4__add_loans_and_copy_status.sql` adds physical-copy status, loan history, state constraints, deletion restrictions, and the one-active-loan-per-copy index.
+  - `V5__describe_books_and_rename_price_to_replacement_cost.sql` adds optional descriptions and renames stored values to replacement costs without changing the amounts.
 - Compose no longer mounts SQL into PostgreSQL's init directory; Flyway is the only schema owner.
 - V1 uses `BIGSERIAL`, matching the entity's Java `Long`/SQL `BIGINT` mapping from the first migration.
 - The app uses JPA and Hibernate for entity persistence with `ddl-auto=validate`.
@@ -722,7 +726,7 @@ Tests are grouped by test scope and domain: `src/test/java/unit/auth`, `src/test
 - `OpenApiMvcTest` generates `/v3/api-docs` in an MVC slice and checks representative routes, response codes, write-only password inputs, absence of password fields in public responses, and loan-history pagination/sort documentation without Docker.
 - `GlobalExceptionHandlerTest` directly invokes the exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
 - `UserServiceTest` verifies partial-update normalization, DTO and business validation, password verification and encoding, unchanged-email handling, duplicate-email rejection, and dirty-checking expectations. Academic combinations still need focused coverage; `UserPersistenceIT` covers selected real-database paths.
-- `BookPersistenceIT` runs only with the `integration` profile and Docker. It checks all four migrations/schema validation, PostgreSQL book queries and projections, committed PATCH/PUT updates, and that an edit waiting for a concurrent lost-loan resolution preserves the copy's `LOST` status.
+- `BookPersistenceIT` runs only with the `integration` profile and Docker. It checks fresh V1-to-V5 migration/schema validation, the V4-to-V5 value-preserving upgrade, PostgreSQL book queries and projections, committed PATCH/PUT updates, and that an edit waiting for a concurrent lost-loan resolution preserves the copy's `LOST` status.
 - `LoanPersistenceIT` checks returned history persistence, the one-active-loan-per-copy database index, and deletion restrictions for borrowers and copies with history.
 - `UserPersistenceIT` checks normalized user creation, stored password hashes, committed profile/password changes, and PostgreSQL uniqueness and ID-format constraints. All three integration classes share a PostgreSQL 18 container and serialize access to it; running them requires Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH`.
 
@@ -782,12 +786,12 @@ Validation failures retain the `error`, `details`, `timestamp`, and `statusCode`
 ```json
 {
   "error": "Validation failed",
-  "details": "Title cannot be empty, Price must be greater than 0",
+  "details": "Title cannot be empty, Replacement cost must be greater than 0",
   "timestamp": 1720000000000,
   "statusCode": 400,
   "fieldErrors": {
     "title": "Title cannot be empty",
-    "price": "Price must be greater than 0"
+    "replacementCost": "Replacement cost must be greater than 0"
   }
 }
 ```
@@ -800,7 +804,7 @@ I worked through problems at several boundaries of the system and fixed them whe
 - **Unreliable container startup:** added PostgreSQL health checks and made the application wait for the database to become ready.
 - **Create, replace, and partial-update validation:** separated PUT's full-replacement rules from PATCH's optional-field behavior, with service-level validation as a second boundary.
 - **Fragile aggregate results:** replaced positional query results with typed projections for collection statistics and genre counts.
-- **Unbounded filtered results:** added a paginated query that combines text and price filters while validating sort fields.
+- **Unbounded filtered results:** added a paginated query that combines text and replacement cost filters while validating sort fields.
 - **Account and credential safety:** normalized institutional IDs and emails, enforced account rules, stored BCrypt hashes, and kept password data out of response DTOs.
 
 The [Development Problems Solved](docs/development-problems-solved.md) write-up gives the symptoms, reasoning, fixes, and verification details for these problems. It also distinguishes unit/MVC evidence from PostgreSQL integration checks that still require Docker.

@@ -19,6 +19,7 @@ import app.user.entity.enums.UserRole;
 import app.user.repository.UserRepository;
 import integration.PostgresTestConfig;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +36,8 @@ import org.springframework.data.domain.Sort;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -42,6 +45,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** PostgreSQL integration coverage for Flyway, repository queries, and service transactions. */
@@ -76,7 +80,7 @@ class BookPersistenceIT {
 
     @Test
     void applicationStartupAppliesMigrationsAndValidatesSchema() {
-        assertEquals(4, flyway.info().applied().length);
+        assertEquals(5, flyway.info().applied().length);
         assertEquals(1, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'books'",
                 Integer.class));
@@ -90,24 +94,82 @@ class BookPersistenceIT {
                 "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' " +
                         "AND table_name = 'books' AND column_name = 'copy_status'",
                 Integer.class));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' " +
+                        "AND table_name = 'books' AND column_name = 'replacement_cost'",
+                Integer.class));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' " +
+                        "AND table_name = 'books' AND column_name = 'description'",
+                Integer.class));
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' " +
+                        "AND table_name = 'books' AND column_name = 'price'",
+                Integer.class));
+    }
+
+    /** Verifies V5 upgrades an existing V4 schema without changing stored replacement amounts. */
+    @Test
+    void v4UpgradeRenamesReplacementAmountAndAddsEmptyDescription() {
+        String schemaName = "book_v5_upgrade_" + UUID.randomUUID().toString().replace("-", "");
+        var dataSource = java.util.Objects.requireNonNull(jdbcTemplate.getDataSource());
+        Map<String, String> placeholders = flyway.getConfiguration().getPlaceholders();
+        Flyway v4Flyway = Flyway.configure()
+                .dataSource(dataSource)
+                .schemas(schemaName)
+                .defaultSchema(schemaName)
+                .target(MigrationVersion.fromVersion("4"))
+                .placeholders(placeholders)
+                .load();
+        Flyway latestFlyway = Flyway.configure()
+                .dataSource(dataSource)
+                .schemas(schemaName)
+                .defaultSchema(schemaName)
+                .placeholders(placeholders)
+                .load();
+
+        try {
+            // Build a separate pre-V5 schema and seed the old column before applying the rename.
+            v4Flyway.migrate();
+            jdbcTemplate.update("INSERT INTO " + schemaName + ".books (title, author, genre, price) VALUES (?, ?, ?, ?)",
+                    "Existing copy", "Test author", "Fiction", new BigDecimal("19.99"));
+            latestFlyway.migrate();
+
+            BigDecimal replacementCost = jdbcTemplate.queryForObject(
+                    "SELECT replacement_cost FROM " + schemaName + ".books WHERE title = ?",
+                    BigDecimal.class, "Existing copy");
+            String description = jdbcTemplate.queryForObject(
+                    "SELECT description FROM " + schemaName + ".books WHERE title = ?",
+                    String.class, "Existing copy");
+
+            assertEquals(0, new BigDecimal("19.99").compareTo(replacementCost));
+            assertNull(description);
+        } finally {
+            // Remove only this test's isolated schema after both migration paths finish.
+            jdbcTemplate.execute("DROP SCHEMA IF EXISTS " + schemaName + " CASCADE");
+        }
     }
 
     @Test
     @Transactional
     void repositoryQueriesAndTypedProjectionsWorkOnPostgres() {
         bookRepository.saveAllAndFlush(List.of(
-                new Book("Animal Farm", "George Orwell", "Satire", new BigDecimal("12.00")),
+                new Book("Animal Farm", "George Orwell", "Satire", "A political allegory.", new BigDecimal("12.00")),
                 new Book("1984", "George Orwell", "Dystopian", new BigDecimal("18.00")),
                 new Book("The Hobbit", "J. R. R. Tolkien", "Fantasy", new BigDecimal("24.00"))
         ));
 
         assertEquals(2, bookRepository.findByAuthorContainingIgnoreCase("ORWELL").size());
-        assertEquals(2, bookRepository.findBooksByPriceBetween(
+        assertEquals(2, bookRepository.findBooksByReplacementCostBetween(
                 new BigDecimal("12.00"), new BigDecimal("18.00")).size());
 
-        LibraryAggregate aggregate = bookRepository.getCountAndTotalValue();
+        Book described = bookRepository.findByTitleContainingIgnoreCase("Animal Farm").getFirst();
+        assertEquals("A political allegory.", described.getDescription());
+        assertEquals(0, new BigDecimal("12.00").compareTo(described.getReplacementCost()));
+
+        LibraryAggregate aggregate = bookRepository.getCountAndTotalReplacementCost();
         assertEquals(3L, aggregate.totalBooks());
-        assertEquals(0, new BigDecimal("54.00").compareTo(aggregate.totalValue()));
+        assertEquals(0, new BigDecimal("54.00").compareTo(aggregate.totalReplacementCost()));
 
         List<GenreCount> genres = bookRepository.getGenres();
         assertEquals(3, genres.size());
@@ -126,10 +188,10 @@ class BookPersistenceIT {
 
         Page<Book> first = bookService.queryBooks("farm", "ORWELL", "satire",
                 new BigDecimal("12.00"), new BigDecimal("18.00"),
-                PageRequest.of(0, 1, Sort.by("price")));
+                PageRequest.of(0, 1, Sort.by("replacementCost")));
         Page<Book> second = bookService.queryBooks("farm", "ORWELL", "satire",
                 new BigDecimal("12.00"), new BigDecimal("18.00"),
-                PageRequest.of(1, 1, Sort.by("price")));
+                PageRequest.of(1, 1, Sort.by("replacementCost")));
 
         assertEquals(2, first.getTotalElements());
         assertEquals(2, first.getTotalPages());
@@ -149,21 +211,23 @@ class BookPersistenceIT {
                 new Book("Old title", "Old author", "Old genre", new BigDecimal("10.00")));
         try {
             bookService.patchBook(saved.getId(), new BookPatchRequestDTO(
-                    "Patched title", null, null, new BigDecimal("11.00")));
+                    "Patched title", null, null, "Patched summary", new BigDecimal("11.00")));
 
             Book patched = bookRepository.findById(saved.getId()).orElseThrow();
             assertEquals("Patched title", patched.getTitle());
             assertEquals("Old author", patched.getAuthor());
-            assertEquals(0, new BigDecimal("11.00").compareTo(patched.getPrice()));
+            assertEquals("Patched summary", patched.getDescription());
+            assertEquals(0, new BigDecimal("11.00").compareTo(patched.getReplacementCost()));
 
             bookService.replaceBook(saved.getId(), new BookRequestDTO(
-                    "Replacement title", "Replacement author", "New genre", new BigDecimal("15.00")));
+                    "Replacement title", "Replacement author", "New genre", "Replacement summary", new BigDecimal("15.00")));
 
             Book replaced = bookRepository.findById(saved.getId()).orElseThrow();
             assertEquals("Replacement title", replaced.getTitle());
             assertEquals("Replacement author", replaced.getAuthor());
             assertEquals("New genre", replaced.getGenre());
-            assertEquals(0, new BigDecimal("15.00").compareTo(replaced.getPrice()));
+            assertEquals("Replacement summary", replaced.getDescription());
+            assertEquals(0, new BigDecimal("15.00").compareTo(replaced.getReplacementCost()));
         } finally {
             bookRepository.deleteById(saved.getId());
         }

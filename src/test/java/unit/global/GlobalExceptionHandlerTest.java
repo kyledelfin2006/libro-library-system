@@ -49,11 +49,11 @@ class GlobalExceptionHandlerTest {
     /** Verifies that invalid business arguments become a descriptive HTTP 400 response. */
     @Test
     void shouldReturnBadRequestWhenIllegalArgumentExceptionThrown() {
-        IllegalArgumentException exception = new IllegalArgumentException("Price must be greater than 0");
+        IllegalArgumentException exception = new IllegalArgumentException("Replacement cost must be greater than 0");
 
         ResponseEntity<ErrorResponse> response = handler.handleIllegalArgument(exception);
 
-        assertError(response, HttpStatus.BAD_REQUEST, "Validation failed", "Price must be greater than 0");
+        assertError(response, HttpStatus.BAD_REQUEST, "Validation failed", "Replacement cost must be greater than 0");
     }
 
     /** Verifies numeric parsing failures return a safe message without echoing parser input. */
@@ -92,7 +92,7 @@ class GlobalExceptionHandlerTest {
     void shouldReturnBadRequestWithCombinedMessagesWhenMethodArgumentValidationFails() throws NoSuchMethodException {
         BeanPropertyBindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "bookRequest");
         bindingResult.addError(new FieldError("bookRequest", "title", "Title cannot be empty"));
-        bindingResult.addError(new FieldError("bookRequest", "price", "Price must be greater than 0"));
+        bindingResult.addError(new FieldError("bookRequest", "replacementCost", "Replacement cost must be greater than 0"));
         MethodParameter parameter = new MethodParameter(
                 GlobalExceptionHandlerTest.class.getDeclaredMethod("validationTarget", Object.class), 0);
         MethodArgumentNotValidException exception = new MethodArgumentNotValidException(parameter, bindingResult);
@@ -100,21 +100,21 @@ class GlobalExceptionHandlerTest {
         ResponseEntity<ErrorResponse> response = handler.handleValidationFailures(exception);
 
         assertError(response, HttpStatus.BAD_REQUEST, "Validation failed",
-                "Title cannot be empty, Price must be greater than 0");
+                "Title cannot be empty, Replacement cost must be greater than 0");
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getFieldErrors())
                 .containsEntry("title", "Title cannot be empty")
-                .containsEntry("price", "Price must be greater than 0");
+                .containsEntry("replacementCost", "Replacement cost must be greater than 0");
     }
 
     /** Verifies book business validation has its own HTTP 400 handler. */
     @Test
     void shouldReturnBadRequestWhenBookValidationExceptionThrown() {
-        BookValidationException exception = new BookValidationException("Price must be greater than 0");
+        BookValidationException exception = new BookValidationException("Replacement cost must be greater than 0");
 
         ResponseEntity<ErrorResponse> response = handler.handleBookValidation(exception);
 
-        assertError(response, HttpStatus.BAD_REQUEST, "Validation failed", "Price must be greater than 0");
+        assertError(response, HttpStatus.BAD_REQUEST, "Validation failed", "Replacement cost must be greater than 0");
     }
 
     /** Verifies service-layer entity violations use the standard validation response contract. */
@@ -238,12 +238,12 @@ class GlobalExceptionHandlerTest {
         MethodParameter parameter = new MethodParameter(
                 GlobalExceptionHandlerTest.class.getDeclaredMethod("validationTarget", Object.class), 0);
         MethodArgumentTypeMismatchException exception = new MethodArgumentTypeMismatchException(
-                "not-a-number", Number.class, "maxPrice", parameter, null);
+                "not-a-number", Number.class, "maxReplacementCost", parameter, null);
 
         ResponseEntity<ErrorResponse> response = handler.handleTypeMismatch(exception);
 
         assertError(response, HttpStatus.BAD_REQUEST, "Invalid parameter",
-                "Invalid value 'not-a-number' for parameter 'maxPrice'");
+                "Invalid value 'not-a-number' for parameter 'maxReplacementCost'");
     }
 
     /** Verifies the catch-all response hides the original exception's implementation detail. */

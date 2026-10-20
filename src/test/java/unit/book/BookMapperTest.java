@@ -18,7 +18,7 @@ class BookMapperTest {
 
     @Test
     void mapsBookFieldsAndOmitsCreatedAtFromResponseDto() {
-        Book book = new Book("The Hobbit", "J.R.R. Tolkien", "Fantasy", new BigDecimal("12.99"));
+        Book book = new Book("The Hobbit", "J.R.R. Tolkien", "Fantasy", "A hobbit's journey to reclaim treasure.", new BigDecimal("12.99"));
         book.setId(1L);
         book.prePersist();
 
@@ -28,9 +28,25 @@ class BookMapperTest {
         assertEquals("The Hobbit", response.getTitle());
         assertEquals("J.R.R. Tolkien", response.getAuthor());
         assertEquals("Fantasy", response.getGenre());
-        assertEquals(new BigDecimal("12.99"), response.getPrice());
+        assertEquals("A hobbit's journey to reclaim treasure.", response.getDescription());
+        assertEquals(new BigDecimal("12.99"), response.getReplacementCost());
         assertFalse(Arrays.stream(BookResponseDTO.class.getDeclaredFields())
                 .anyMatch(field -> field.getName().equals("createdAt")));
+    }
+
+    /** Verifies request descriptions are trimmed and blank optional descriptions are stored as null. */
+    @Test
+    void mapsRequestDescriptionAndReplacementCostToEntity() {
+        BookMapper mapper = new BookMapper();
+
+        Book described = mapper.toEntity(new app.book.dto.BookRequestDTO(
+                "The Hobbit", "J.R.R. Tolkien", "Fantasy", "  A hobbit's journey.  ", new BigDecimal("12.99")));
+        Book blankDescription = mapper.toEntity(new app.book.dto.BookRequestDTO(
+                "The Hobbit", "J.R.R. Tolkien", "Fantasy", "  ", new BigDecimal("12.99")));
+
+        assertEquals("A hobbit's journey.", described.getDescription());
+        assertEquals(new BigDecimal("12.99"), described.getReplacementCost());
+        assertNull(blankDescription.getDescription());
     }
 
     @Test
