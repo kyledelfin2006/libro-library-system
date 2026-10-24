@@ -1,37 +1,61 @@
+# Quick start from the repository root:
+#   Copy-Item envFileExample .env   (PowerShell)
+#   mvn clean package              (builds target/*.jar for the Dockerfile)
+#   docker compose up --build
+# Docker Compose reads variables from the root .env file automatically.
+# Fill every value in that file before starting; these substitutions have no defaults.
 services:
-  db: # PostgreSQL database service
-    image: postgres:18-alpine # Uses the official postgres docker image
+  # PostgreSQL stores the library data. Its named volume survives container
+  # recreation and ordinary `docker compose down`; removing it with
+  # `docker compose down -v` permanently deletes the local database contents.
+  db:
+    image: postgres:18-alpine # Official PostgreSQL image; keep its major version intentional.
     container_name: library-postgres
-    environment: # Values injected from the .env file
+    environment:
+      # Compose substitutes these values from .env. Use local development
+      # credentials here and keep the .env file out of source control.
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432" # Maps host port 5432 to container port 5432
+      # Lets tools on your computer connect to PostgreSQL at localhost:5432.
+      # The app container connects over Compose's private network using `db:5432`.
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql # Persistent data volume
+      # PostgreSQL 18 uses /var/lib/postgresql as its data-volume root.
+      - postgres_data:/var/lib/postgresql
     healthcheck:
+      # `healthy` means PostgreSQL accepts connections with the configured DB/user.
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 5s
+    # Restart after a crash or Docker daemon restart; `docker compose down` still stops it.
     restart: unless-stopped
 
-  app: # Spring Boot application service
-    build: . # Builds image locally via dockerfile
+  # Spring Boot REST API. Build the JAR first; Dockerfile copies it into this image.
+  app:
+    build: . # Repository root is the build context and contains the Dockerfile.
     container_name: library-app
     depends_on:
       db:
+        # Avoid starting Spring before PostgreSQL is ready to accept connections.
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB} # References the db container above
+      # Inside the Compose network, `db` is the database service hostname.
+      # Do not use localhost here: localhost would point back to this app container.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      # Flyway V2 uses this BCrypt hash when creating the historical bootstrap
+      # administrator in a fresh database. Set it before the first startup.
       LIBRO_ADMIN_PASSWORD_HASH: ${LIBRO_ADMIN_PASSWORD_HASH}
     ports:
-      - "8080:8080" # Maps host port 8080 to container port 8080
+      # Open the API on your computer at http://localhost:8080.
+      - "8080:8080"
     restart: unless-stopped
 
 volumes:
-  postgres_data: # Define the name of the docker volume
+  # Compose creates and manages this persistent volume for PostgreSQL data.
+  postgres_data:

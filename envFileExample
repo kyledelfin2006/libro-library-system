@@ -1,4 +1,11 @@
+# Copy this file to `.env` in the repository root before running Docker Compose:
+#   Copy-Item envFileExample .env   (PowerShell)
+#   cp envFileExample .env          (macOS/Linux)
+# Replace the example database credentials and provide a BCrypt hash before
+# first startup. Keep your populated `.env` private; do not commit it.
 POSTGRES_DB=libraryDb
 POSTGRES_USER=change_role
 POSTGRES_PASSWORD=change_me
+# Flyway V2 uses this hash to create the initial administrator on a fresh DB.
+# Supply a BCrypt hash, never a plaintext password. No librarian is seeded.
 LIBRO_ADMIN_PASSWORD_HASH=
