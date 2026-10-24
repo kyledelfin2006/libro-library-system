@@ -1,0 +1,20 @@
+# The build context is the repository root, but the Dockerfile only needs the
+# already-packaged JAR in target/. Keep credentials and local tooling out of it.
+.git/
+.idea/
+.run/
+.kilo/
+.env
+.env.*
+
+# Source, docs, and project metadata are not copied into the runtime image.
+# Keep target/ available because Dockerfile copies target/*.jar.
+src/
+docs/
+guiding-docs/
+assets/
+README.md
+AGENTS.md
+pom.xml
+docker-compose.yml
+envFileExample

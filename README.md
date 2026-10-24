@@ -836,4 +836,4 @@ The [Development Problems Solved](docs/development-problems-solved.md) write-up 
 
 ## License
 
-No license file is currently included in the repository. Add one if you plan to distribute or reuse this project.
+This project is licensed under the [MIT License](LICENSE).
