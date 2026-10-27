@@ -237,7 +237,16 @@ The protected-request path does not need a database lookup for each token. That 
 
 ### Authentication and authorization
 
-1. Add Spring Boot's `spring-boot-starter-oauth2-resource-server` dependency. It brings in the Resource Server and JOSE support used to decode and verify JWT Bearer tokens; do not add a separate JWT library or write a custom request filter. See [Spring Security Resource Server dependencies](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html#oauth2resourceserver-jwt-minimaldependencies).
+1. Add Spring Boot's Resource Server starter. It brings in the Resource Server and JOSE support used to decode and verify JWT Bearer tokens; do not add a separate JWT library or write a custom request filter. Add this dependency under `<dependencies>` in `pom.xml` (without a version; Spring Boot's dependency management supplies it):
+
+   ```xml
+   <dependency>
+       <groupId>org.springframework.boot</groupId>
+       <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+   </dependency>
+   ```
+
+   See [Spring Security Resource Server dependencies](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html#oauth2resourceserver-jwt-minimaldependencies).
 2. Obtain the configured `AuthenticationManager` and authenticate a `UsernamePasswordAuthenticationToken` in `AuthService`. Ensure it uses the existing `LibroUserDetailsService` and BCrypt `PasswordEncoder`.
 3. Configure `JwtEncoder` for issuance and `JwtDecoder` for request validation with the same external HS256 secret. Pin HS256 explicitly.
 4. Configure validation for signature, exact issuer, audience, expiry, and any `nbf` claim. Require a non-empty `sub` and exactly one known `UserRole` value in `roles`. Do not accept a correctly signed token with a missing or unrecognized role.
@@ -325,9 +334,11 @@ The proposal is ready for review. The main choices to confirm are:
 4. **Error body:** this proposal recommends Spring's standard Bearer 401/403 responses and the shared JSON `ErrorResponse` for login failures; add custom filter-chain handlers only if one consistent JSON shape becomes a firm API requirement.
 5. **Key shape:** use the proposed shared HS256 secret for this single application; revisit asymmetric signing if token verification is separated into other services.
 
-## 12. Implementation sketch with teaching notes
+## 12. Detailed implementation proposal and code
 
-This is the code shape I recommend implementing. It is intentionally kept to six new classes: `AuthAPI`, two DTOs, `AuthService`, `JwtProperties`, and `JwtConfiguration`. Five existing classes get focused edits: `SecurityConfig`, `GlobalExceptionHandler`, `OpenApiConfig`, `PasswordPolicy`, and `UserService`. The last two edits close a pre-existing character-versus-byte gap in the BCrypt boundary; JWT login needs the same limit as account creation. No custom JWT filter, JWT database table, refresh-token store, or extra token-service layer is needed.
+This section is written as a junior backend engineer's implementation proposal: each code block names its file, shows the proposed implementation, and explains how it connects to the existing request flow. The code is a proposal, not compiled application code. Implement it in the sequence in Section 14 and verify each phase before moving to the next.
+
+The change adds six classes: `AuthAPI`, two DTOs, `AuthService`, `JwtProperties`, and `JwtConfiguration`. It updates five existing classes: `SecurityConfig`, `GlobalExceptionHandler`, `OpenApiConfig`, `PasswordPolicy`, and `UserService`. `PasswordPolicy` and `UserService` need a small UTF-8 byte-length check because BCrypt has a 72-byte input boundary; see Section 12.9. No custom JWT filter, JWT database table, refresh-token store, or separate token-service class is needed.
 
 The snippets are proposals, not compiled code. Imports are shown so you can see which Spring feature owns each job. Existing route matchers are included in the security example so the token conversion can be read in the context of the rules it must preserve.
 
@@ -1088,19 +1099,108 @@ Replace the Basic scheme in `OpenApiConfig` with this scheme and keep it as the 
 
 **Approved deployment decision:** gateway-based throttling and monitoring for the login endpoint are required before public internet exposure. The gateway owner selects and verifies the request thresholds and alerting; the application proposal does not prescribe a vendor or implement a rate limiter.
 
-## 14. Teaching order for implementing this proposal
+## 14. Step-by-step integration plan
 
-If we implement this together, I would do it in this order so each piece has a visible purpose:
+This is the order I would follow as the engineer implementing the change. Each phase has a clear outcome and a check before proceeding. The complete proposed Java files are in Section 12; this section explains how to integrate them without changing the current account, loan, or role behavior accidentally.
 
-1. Add DTOs and `AuthAPI`; inspect the endpoint shape in generated OpenAPI.
-2. Expose the configured `AuthenticationManager`; make a unit/MVC case prove the existing BCrypt hash accepts the right password and rejects the wrong one.
-3. Add `JwtProperties` and `JwtConfiguration`; fail application startup for absent, malformed, or short keys.
-4. Add token issue logic to `AuthService`; inspect claims from a test-issued token and verify the role is derived from the principal.
-5. Enable Resource Server JWT and test real signed Bearer requests while CSRF remains enabled and Basic still exists only for verification.
-6. Verify all roles and ownership rules, then remove Basic, set stateless policy, and disable CSRF in the final header-only configuration.
-7. Update owned repository docs only after runtime behavior and generated OpenAPI pass their checks.
+### Phase 1: Add the Resource Server dependency
 
-**Code review note:** none of the Java snippets above have been compiled. They are the proposed implementation to assess; implementation would still need the focused tests in Section 10 and a Maven check after you approve the design.
+Add the Maven dependency shown in Section 7. Keep the existing Spring Security starter. The new starter gives Spring the Bearer-token support; it does not add a login endpoint or change the existing HTTP Basic behavior by itself.
+
+**Check:** resolve the Maven dependency tree or compile the project to confirm dependency resolution. Do not remove Basic or change CSRF in this phase.
+
+### Phase 2: Add request and response DTOs, then the login endpoint
+
+Create `LoginRequestDTO`, `TokenResponseDTO`, and `AuthAPI` from Sections 12.1–12.3. The login DTO accepts only the university ID and password. The controller validates the input, delegates to `AuthService`, and returns a no-store token response. It does not query `UserRepository` or decide a role.
+
+During the transition, keep CSRF enabled. An unsafe POST to login may need a CSRF token while the old Basic flow is still active. The final Bearer-only configuration changes that policy only after Basic is removed.
+
+**Check:** inspect the generated OpenAPI operation for login: it should show the request/response DTOs and no Bearer requirement. Add `@Operation(security = {})` to public signup as described in Section 12.10.
+
+### Phase 3: Wire password authentication and validate JWT settings
+
+Add the `AuthenticationManager` bean from Section 12.7, configured with the existing `LibroUserDetailsService` and `PasswordEncoder`. Add `JwtProperties` and the key/encoder/decoder configuration from Sections 12.5–12.6. Add the deployment properties shown in Section 7, but provide the actual secret only through the process environment or a secret manager.
+
+Before adding token issuance, verify startup fails for a missing, malformed, or shorter-than-32-byte decoded secret. Use a disposable test-only key in tests; never copy a deployed key into the repository.
+
+**Check:** an `AuthService` unit test should prove correct credentials authenticate and incorrect credentials fail. Confirm an unknown university ID and a wrong password produce the same public 401 response.
+
+### Phase 4: Issue a token using only authenticated account data
+
+Add `AuthService` from Section 12.4. It calls `AuthenticationManager.authenticate(...)`; Spring checks the password against the stored BCrypt hash. Only after success does the service build claims from the returned `Authentication`: `sub` comes from its name, and `roles` comes from its trusted authorities. The client never supplies its role.
+
+The role is a login-time snapshot. With the current design, account deletion or role changes do not invalidate a token immediately; the token can remain usable through its expiry and configured clock allowance.
+
+**Check:** decode a token created with the test key and assert the expected subject, one known role, issuer, audience, issue time, and expiry. Also assert the claims contain no password, password hash, or profile fields.
+
+### Phase 5: Enable Bearer validation while keeping Basic temporarily
+
+Wire the configured `JwtDecoder` and `JwtAuthenticationConverter` into `.oauth2ResourceServer(...).jwt(...)`. Preserve the current route matchers. During this overlap phase, keep `.httpBasic(...)` and CSRF enabled so existing callers continue to work while signed Bearer requests are tested.
+
+The transition should look like this security configuration fragment; do not copy the final stateless/CSRF-disabled settings from Section 12.7 yet:
+
+```java
+http
+        .authorizeHttpRequests(auth -> auth
+                // Keep the current route and role matchers here.
+                .anyRequest().authenticated()
+        )
+        .httpBasic(basic -> {})
+        .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt ->
+                jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
+```
+
+There is deliberately no `.csrf(csrf -> csrf.disable())` or `SessionCreationPolicy.STATELESS` in this temporary configuration. CSRF is enabled by default and remains enabled while Basic is accepted.
+
+The Resource Server filter reads `Authorization: Bearer <token>`, validates it, and builds Spring's authenticated request identity. Spring then checks the route's role rule before the controller runs. The controller and service continue to receive the university ID through `Authentication.getName()`; loan ownership checks remain in `LoanService`.
+
+**Check:** send real signed tokens through MockMvc and the real filter chain. Verify missing, malformed, expired, wrong-signature, wrong-issuer, wrong-audience, wrong-algorithm, and invalid-role tokens return 401. Verify a valid student token reaches book reads but receives 403 on staff-only routes. Keep separate service tests for ownership behavior.
+
+### Phase 6: Cut over to Bearer-only authentication
+
+After the Bearer flow, role matrix, account ownership checks, OpenAPI contract, and client integration pass:
+
+1. Remove `.httpBasic(...)` from `SecurityConfig`.
+2. Set `SessionCreationPolicy.STATELESS`.
+3. Disable CSRF for this header-only API chain, as shown in the final configuration in Section 12.7.
+4. Keep only exact `POST /app/users/signup` and `POST /app/auth/login` matchers public. Keep `.anyRequest().authenticated()` as the default.
+
+Do these together as a controlled cutover. Do not deploy the CSRF-disabled configuration while Basic or cookie/session authentication is still accepted.
+
+**Check:** a request with Basic credentials but no Bearer token must receive 401. An unsafe request with a valid Bearer token and no CSRF token should reach the normal authorization/controller outcome. Missing/invalid tokens should get 401; valid tokens with insufficient roles should get 403.
+
+### Phase 7: Update OpenAPI, repository docs, and deployment controls
+
+Replace the global Basic security scheme with Bearer/JWT, mark signup and login public, and verify the generated `/v3/api-docs` output rather than relying only on annotations. Update `AGENTS.md`, README, the engineering reference, security guide, loan guide, and roadmap only after the runtime cutover is complete.
+
+Before public internet exposure, the deployment owner must configure gateway throttling and monitoring for repeated requests to `POST /app/auth/login`. The code proposal does not select a gateway or invent rate thresholds.
+
+**Check:** run the regular Maven suite and the PostgreSQL integration profile where Docker is available, follow the test plan in Section 10, and verify the production secret is present in the deployment secret manager and is not logged.
+
+### Example client flow
+
+The client first calls login with credentials:
+
+```http
+POST /app/auth/login
+Content-Type: application/json
+
+{
+  "universityId": "2025-4321",
+  "password": "<user password>"
+}
+```
+
+The API responds with an access token. The client stores it only in its appropriate secure client-side storage, then sends it on protected requests:
+
+```http
+GET /app/books/42
+Authorization: Bearer <access-token>
+```
+
+The client does not send the password again for this request. Spring verifies the token and applies the endpoint role rule before the request reaches `BookAPI`.
+
+**Proposal status:** the Java code blocks are implementation examples and have not been compiled. Once implementation is approved, each phase still needs its listed checks; passing a compile alone does not prove the security behavior.
 
 ## Primary references
 
