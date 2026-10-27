@@ -9,7 +9,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
 
-Libro is a library management system built with Spring Boot. It helps manage a library's physical book copies, user accounts, and loan history.
+Libro is a Spring Boot-based library management system for managing physical book copies, user accounts, and loan history.
 
 ### Features
 
