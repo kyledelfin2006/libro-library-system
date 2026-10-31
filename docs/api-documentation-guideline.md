@@ -1,6 +1,6 @@
 # API Documentation Guideline
 
-This guide defines how to keep the book, user, and loan APIs complete in generated OpenAPI while keeping Spring MVC controller code focused on HTTP behavior. Swagger UI should be useful as the project's interactive API reference and portfolio demonstration; the OpenAPI document is the contract it renders.
+This guide defines how to keep the authentication, book, user, and loan APIs complete in generated OpenAPI while keeping Spring MVC controller code focused on HTTP behavior. Swagger UI is intended to be the project's interactive API reference and portfolio demonstration; the OpenAPI document is the contract it renders. The current filter chain also protects the Swagger UI and `/v3/api-docs` routes, so anonymous browser access is not available and the intended interactive access path remains an open deployment decision.
 
 ## Documentation ownership
 
@@ -35,6 +35,7 @@ Do not copy the same prose into controller comments, annotations, README tables,
 - Do not repeat basic facts already evident from a field name or constraint. Schema annotations are not a second validation system; do not claim a constraint the application does not enforce.
 - For PATCH DTOs, document omission and `null` behavior explicitly when they differ. Do not add `@Valid` merely to improve the generated schema; preserve the endpoint's actual validation semantics.
 - Mark sensitive or server-managed fields clearly, and exclude them from response DTOs unless the public contract requires them.
+- When an enforced rule is not represented by a schema constraint, such as BCrypt's 72-byte UTF-8 limit, document that boundary in the field or operation description and enforce it in the owning service; a character-count schema constraint does not express a byte limit.
 
 ## Responses and errors
 
@@ -50,7 +51,7 @@ Do not copy the same prose into controller comments, annotations, README tables,
 - Document parameters whose meaning is ambiguous or whose allowed values/limits are not represented elsewhere. Use typed Java parameters and validation for actual enforcement; documentation alone is not validation.
 - For pagination, make the zero-based page convention, default size, maximum size, allowed sort fields, and sort direction discoverable in Swagger. Keep the rules next to the endpoint or in one reusable description only if the same behavior applies consistently.
 - Add examples for representative create/update payloads and unusual query formats when DTO examples and inferred parameter schemas are not enough. Keep one source of truth where possible; avoid copying the same JSON example into multiple annotations and README sections.
-- Document security requirements accurately. The current filter chain leaves `POST /app/users/signup` public and requires HTTP Basic authentication on other routes; CSRF protection remains enabled for unsafe methods. Role rules distinguish administrator and librarian access, while `UserService` enforces account ownership and target roles. Represent the enforced HTTP Basic scheme and signup exception in OpenAPI, and describe CSRF requirements where clients need them. Do not declare bearer or cookie authentication unless the application enforces it.
+- Document security requirements accurately. The current filter chain leaves `POST /app/users/signup` and `POST /app/auth/login` public and requires JWT Bearer authentication on other routes. The chain is stateless and disables CSRF while credentials are accepted only from the Authorization header. Role rules distinguish administrator and librarian access, while `UserService` enforces account ownership and target roles. Represent the enforced Bearer scheme and both public operations in OpenAPI. If credential transport later changes to cookies or sessions, revisit CSRF and document the enforced behavior.
 
 ## Keeping annotations readable
 
@@ -68,9 +69,9 @@ Do not compress all endpoint documentation into controller JavaDoc, create a par
 
 Swagger UI is an interactive API explorer backed by the generated OpenAPI specification. It is suitable as the project's API-facing portfolio UI, but it does not replace a custom library frontend and does not itself deploy the Spring Boot service. A deployment still needs to host the application and database, publish the intended Swagger UI/spec routes, and configure TLS, CORS, and authentication consistently with the deployed API.
 
-Before calling the API documentation portfolio-ready, inspect the generated `/v3/api-docs` and Swagger UI for both tags and verify:
+Before calling the API documentation portfolio-ready, inspect the generated `/v3/api-docs` and Swagger UI for all four tags and verify:
 
-- every live route appears under the correct resource tag (Books, Users, or Loans);
+- every live route appears under the correct resource tag (Authentication, Books, Users, or Loans);
 - summaries, descriptions, parameter defaults/limits, request schemas, response schemas, status codes, and expected errors match runtime behavior;
 - examples validate against the request DTOs and reveal no secrets or personal data;
 - PATCH and PUT semantics are distinct where the implementation distinguishes them;

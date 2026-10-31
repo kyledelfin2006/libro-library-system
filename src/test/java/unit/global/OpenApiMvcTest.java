@@ -1,6 +1,8 @@
 package unit.global;
 
 import app.LibraryApplication;
+import app.auth.controller.AuthAPI;
+import app.auth.service.AuthService;
 import app.book.controller.BookAPI;
 import app.book.mapper.BookMapper;
 import app.book.service.BookService;
@@ -29,7 +31,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest({BookAPI.class, UserAPI.class, LoanAPI.class})
+@WebMvcTest({AuthAPI.class, BookAPI.class, UserAPI.class, LoanAPI.class})
 @AutoConfigureMockMvc(addFilters = false)
 @Import({OpenApiConfig.class, OpenApiMvcTest.MockBeans.class})
 @ContextConfiguration(classes = LibraryApplication.class)
@@ -42,6 +44,11 @@ class OpenApiMvcTest {
 
     @TestConfiguration(proxyBeanMethods = false)
     static class MockBeans {
+        @Bean
+        AuthService authService() {
+            return mock(AuthService.class);
+        }
+
         @Bean
         BookService bookService() {
             return mock(BookService.class);
@@ -69,9 +76,15 @@ class OpenApiMvcTest {
     void generatedSpecDescribesRoutesAndProtectsPasswordFields() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.components.securitySchemes.basicAuth.type").value("http"))
-                .andExpect(jsonPath("$.components.securitySchemes.basicAuth.scheme").value("basic"))
-                .andExpect(jsonPath("$.security[0].basicAuth").isEmpty())
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"))
+                .andExpect(jsonPath("$.security[0].bearerAuth").isEmpty())
+                .andExpect(jsonPath("$.paths['/app/auth/login'].post.security").isEmpty())
+                .andExpect(jsonPath("$.paths['/app/auth/login'].post.responses['200']").exists())
+                .andExpect(jsonPath("$.paths['/app/auth/login'].post.responses['400']").exists())
+                .andExpect(jsonPath("$.paths['/app/auth/login'].post.responses['401']").exists())
+                .andExpect(jsonPath("$.paths['/app/books/{id}'].get.security[0].bearerAuth").exists())
                 .andExpect(jsonPath("$.paths['/app/users/signup'].post.security").isEmpty())
                 .andExpect(jsonPath("$.paths['/app/books/{id}'].get.tags[0]").value("Books"))
                 .andExpect(jsonPath("$.paths['/app/books/query'].get.parameters[?(@.name == 'minReplacementCost')]").exists())
@@ -99,6 +112,7 @@ class OpenApiMvcTest {
                 .andExpect(jsonPath("$.paths['/app/users/signup'].post.responses['400']").exists())
                 .andExpect(jsonPath("$.paths['/app/users/signup'].post.responses['409']").exists())
                 .andExpect(jsonPath("$.components.schemas.UserCreateRequestDTO.properties.password.writeOnly").value(true))
+                .andExpect(jsonPath("$.components.schemas.LoginRequestDTO.properties.password.writeOnly").value(true))
                 .andExpect(jsonPath("$.components.schemas.ChangePasswordDTO.properties.currentPassword.writeOnly").value(true))
                 .andExpect(jsonPath("$.components.schemas.ChangePasswordDTO.properties.newPassword.writeOnly").value(true))
                 .andExpect(jsonPath("$.components.schemas.UserResponseDTO.properties.password").doesNotExist())

@@ -11,6 +11,7 @@ import app.user.entity.enums.UserRole;
 import app.user.exception.UserNotFoundException;
 import app.user.mapper.UserMapper;
 import app.user.repository.UserRepository;
+import app.user.validation.PasswordPolicy;
 import jakarta.transaction.Transactional;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -125,6 +126,11 @@ public class UserService {
 
         // normalize / validate required values
         validateRequiredValue(request.getPassword(), "Password");
+
+        // Character count does not bound multibyte passwords to BCrypt's 72-byte input limit.
+        if (!PasswordPolicy.isWithinBcryptByteLimit(request.getPassword())) {
+            throw new IllegalArgumentException("Password must not exceed 72 UTF-8 bytes");
+        }
 
         // check if university id is already used within the system
         if (userRepository.existsByUniversityId(universityId)) {
@@ -353,6 +359,11 @@ public class UserService {
         // Reject malformed passwords before querying the account. This also protects
         // direct service callers that bypass controller DTO validation.
         validateRequest(request);
+
+        // Do not let BCrypt silently truncate a multibyte replacement password.
+        if (!PasswordPolicy.isWithinBcryptByteLimit(request.getNewPassword())) {
+            throw new IllegalArgumentException("Password must not exceed 72 UTF-8 bytes");
+        }
 
         // Normalize caller and target IDs before checking ownership.
         String normalizedCallerId = normalizeAndValidateUniversityId(callerId);

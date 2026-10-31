@@ -151,7 +151,7 @@ I then added a transactional partial-update path for user profile fields. It pre
 
 ### Verification
 
-`UserServiceTest` covers update normalization, validation, unchanged-email behavior, duplicate-email rejection, and dirty-checking expectations. At the time of this milestone, the controller and authentication integration remained outside scope. `UserAPI` and its MVC tests were added afterward; the current HTTP Basic flow and its test coverage are described in the README and TODO.
+`UserServiceTest` covers update normalization, validation, unchanged-email behavior, duplicate-email rejection, and dirty-checking expectations. At the time of this milestone, the controller and authentication integration remained outside scope. `UserAPI` and its MVC tests were added afterward, and the earlier HTTP Basic flow has since been replaced with local JWT login and Bearer validation. The [Role and JWT Guide](../guiding-docs/security-roles-and-jwt-guide.md) and [JWT Authentication Design](../guiding-docs/jwt-authentication-design.md) are the current sources for live authentication and role behavior; this section remains a record of the earlier user-domain work.
 
 ## 8. The test feedback loop was too easy to misunderstand
 
@@ -205,13 +205,13 @@ I added `OpenApiMvcTest` to the Docker-free suite. It generates `/v3/api-docs` t
 
 ### What was wrong
 
-The existing `/search`, `/budget`, `/sorted`, and `/price` endpoints return complete lists. The `/all` endpoint supports pagination, but it cannot combine searches and price filters. A client filtering a large collection therefore had to request every match before showing even its first screen of results. The response size and the number of entities loaded into memory could grow with the collection.
+At the time of this change, the existing `/search`, `/budget`, `/sorted`, and `/price` endpoints returned complete lists. The `/all` endpoint supported pagination, but it could not combine searches and price filters. A client filtering a large collection therefore had to request every match before showing even its first screen of results. The response size and the number of entities loaded into memory could grow with the collection. V5 later renamed the public price field and range route to replacement-cost terminology; the current range route is `/replacement-cost`.
 
 ### How I addressed it
 
-I added `GET /app/books/query` as one paginated path. It accepts optional title, author, and genre substrings plus optional inclusive minimum and maximum prices. Supplied filters combine with AND; omitting all filters returns the collection as a page. The controller binds typed parameters and `Pageable`, then maps the returned page from entities to public `BookResponseDTO` values without losing the page metadata.
+I added `GET /app/books/query` as one paginated path. It accepts optional title, author, and genre substrings plus optional inclusive minimum and maximum replacement costs. Supplied filters combine with AND; omitting all filters returns the collection as a page. The controller binds typed parameters and `Pageable`, then maps the returned page from entities to public `BookResponseDTO` values without losing the page metadata.
 
-`BookService` checks that the price range is ordered and that every sort property is in the existing allowlist. It appends `id` when needed so records sharing a title or price have a stable order across pages. The read runs in a read-only service transaction. `BookRepository` applies the predicates and pagination in PostgreSQL; it does not load every match for the service to slice in memory. The old list routes retain their existing response shapes for clients that use them.
+`BookService` checks that the replacement-cost range is ordered and that every sort property is in the existing allowlist. It appends `id` when needed so records sharing a title or replacement cost have a stable order across pages. The read runs in a read-only service transaction. `BookRepository` applies the predicates and pagination in PostgreSQL; it does not load every match for the service to slice in memory. The old list routes retain their existing response shapes for clients that use them.
 
 ### Effect and verification
 

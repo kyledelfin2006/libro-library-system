@@ -15,6 +15,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -40,6 +42,19 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    /**
+     * Returns one generic response for an unknown account and an incorrect password.
+     *
+     * @param exception rejected credentials from Spring Security's authentication provider
+     * @return HTTP 401 without disclosing whether the account exists
+     */
+    @ExceptionHandler({BadCredentialsException.class, UsernameNotFoundException.class})
+    public ResponseEntity<ErrorResponse> handleInvalidLogin(Exception exception) {
+        ErrorResponse error = new ErrorResponse(
+                "Authentication failed", "University ID or password is incorrect", 401);
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+    }
 
     /**
      * Converts a service-layer authorization denial into a client-safe 403 response.

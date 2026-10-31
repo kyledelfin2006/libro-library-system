@@ -9,11 +9,11 @@ Libro is a library management system prototype for Aklan State University – Co
 The existing university management information system uses the university ID as the username. Libro keeps that identifier while using its own bounded password policy:
 
 - University IDs use the `####-####` format.
-- User creation and password changes require 8–72 characters, including uppercase and lowercase letters, a number, and a symbol.
+- User creation and password changes require 8–72 characters, including uppercase and lowercase letters, a number, and a symbol. Passwords must also fit BCrypt's 72 UTF-8 byte input limit; this byte bound is checked at signup, password change, and login.
 - Passwords are encoded with BCrypt before persistence and are never returned in response DTOs.
 - University IDs and email addresses are normalized before duplicate checks and storage.
 
-This is alignment with the existing identity convention, not a claim that Libro authenticates against or synchronizes with the MIS. Libro currently authenticates locally against its own user records using HTTP Basic and BCrypt. Signup is public; the remaining routes require authentication. Institutional SSO integration remains undecided.
+This is alignment with the existing identity convention, not a claim that Libro authenticates against or synchronizes with the MIS. Libro authenticates locally against its own user records through `POST /app/auth/login` using BCrypt, then issues JWT Bearer tokens. Signup and login are public; the remaining routes require a token. Institutional SSO integration remains undecided.
 
 ## CCS academic structure
 

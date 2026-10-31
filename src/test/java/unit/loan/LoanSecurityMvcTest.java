@@ -1,6 +1,7 @@
 package unit.loan;
 
 import app.LibraryApplication;
+import app.auth.config.JwtConfiguration;
 import app.auth.SecurityConfig;
 import app.global.exceptions.GlobalExceptionHandler;
 import app.loan.controller.LoanAPI;
@@ -27,7 +28,6 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -35,10 +35,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** MVC tests for loan route authentication, role gates, CSRF, and principal-derived ownership. */
+/** MVC tests for stateless loan route authentication, role gates, and principal-derived ownership. */
 @WebMvcTest(LoanAPI.class)
 @AutoConfigureMockMvc
-@Import({SecurityConfig.class, GlobalExceptionHandler.class, LoanSecurityMvcTest.MockBeans.class})
+@Import({SecurityConfig.class, JwtConfiguration.class, GlobalExceptionHandler.class,
+        LoanSecurityMvcTest.MockBeans.class})
 @ContextConfiguration(classes = LibraryApplication.class)
 class LoanSecurityMvcTest {
 
@@ -76,7 +77,6 @@ class LoanSecurityMvcTest {
 
         mockMvc.perform(post("/app/loans/{bookId}", BOOK_ID)
                         .with(user(BORROWER_ID).roles("STUDENT"))
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isCreated())
@@ -90,8 +90,7 @@ class LoanSecurityMvcTest {
     @Test
     void assistantCannotBorrow() throws Exception {
         mockMvc.perform(post("/app/loans/{bookId}", BOOK_ID)
-                        .with(user("2025-8765").roles("ADMINISTRATOR"))
-                        .with(csrf()))
+                        .with(user("2025-8765").roles("ADMINISTRATOR")))
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(loanService);
@@ -103,8 +102,7 @@ class LoanSecurityMvcTest {
         when(loanService.returnLoan(BORROWER_ID, LOAN_ID)).thenReturn(loanResponse(LoanStatus.RETURNED));
 
         mockMvc.perform(put("/app/loans/{loanId}/return", LOAN_ID)
-                        .with(user(BORROWER_ID).roles("FACULTY"))
-                        .with(csrf()))
+                        .with(user(BORROWER_ID).roles("FACULTY")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("RETURNED"));
 
@@ -115,8 +113,7 @@ class LoanSecurityMvcTest {
     @Test
     void studentCannotMarkLoanLost() throws Exception {
         mockMvc.perform(put("/app/loans/{loanId}/lost", LOAN_ID)
-                        .with(user(BORROWER_ID).roles("STUDENT"))
-                        .with(csrf()))
+                        .with(user(BORROWER_ID).roles("STUDENT")))
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(loanService);
@@ -128,8 +125,7 @@ class LoanSecurityMvcTest {
         when(loanService.markLost("2025-8765", LOAN_ID)).thenReturn(loanResponse(LoanStatus.LOST));
 
         mockMvc.perform(put("/app/loans/{loanId}/lost", LOAN_ID)
-                        .with(user("2025-8765").roles("ADMINISTRATOR"))
-                        .with(csrf()))
+                        .with(user("2025-8765").roles("ADMINISTRATOR")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("LOST"));
 
@@ -158,14 +154,16 @@ class LoanSecurityMvcTest {
         verifyNoInteractions(loanService);
     }
 
-    /** Verifies CSRF protection blocks an otherwise authorized unsafe request without a token. */
+    /** Verifies header-only stateless requests do not require a CSRF token. */
     @Test
-    void borrowRequiresCsrfToken() throws Exception {
+    void borrowDoesNotRequireCsrfToken() throws Exception {
+        when(loanService.borrow(BORROWER_ID, BOOK_ID)).thenReturn(loanResponse(LoanStatus.ACTIVE));
+
         mockMvc.perform(post("/app/loans/{bookId}", BOOK_ID)
                         .with(user(BORROWER_ID).roles("STUDENT")))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isCreated());
 
-        verifyNoInteractions(loanService);
+        verify(loanService).borrow(BORROWER_ID, BOOK_ID);
     }
 
     /** Creates a response value sufficient for asserting controller status and serialization. */

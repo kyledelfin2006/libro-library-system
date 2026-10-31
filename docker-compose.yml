@@ -51,6 +51,11 @@ services:
       # Flyway V2 uses this BCrypt hash when creating the historical bootstrap
       # administrator in a fresh database. Set it before the first startup.
       LIBRO_ADMIN_PASSWORD_HASH: ${LIBRO_ADMIN_PASSWORD_HASH}
+      # A random Base64 secret (at least 32 decoded bytes) is required to issue/validate JWTs.
+      LIBRO_JWT_SECRET_BASE64: ${LIBRO_JWT_SECRET_BASE64}
+      LIBRO_JWT_ISSUER: ${LIBRO_JWT_ISSUER:-libro-api}
+      LIBRO_JWT_AUDIENCE: ${LIBRO_JWT_AUDIENCE:-libro-api}
+      LIBRO_JWT_ACCESS_TOKEN_TTL_SECONDS: ${LIBRO_JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
     ports:
       # Open the API on your computer at http://localhost:8080.
       - "8080:8080"

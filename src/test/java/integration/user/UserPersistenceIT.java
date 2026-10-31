@@ -77,7 +77,7 @@ class UserPersistenceIT {
         }
     }
 
-    /** Represents the owner role supplied by the authenticated HTTP Basic principal. */
+    /** Represents the owner role supplied by the authenticated Bearer principal. */
     private Collection<? extends GrantedAuthority> studentAuthority() {
         return List.of(new SimpleGrantedAuthority("ROLE_STUDENT"));
     }

@@ -32,7 +32,7 @@ public class UserCreateRequestDTO {
             regexp = PasswordPolicy.PASSWORD_REGEX,
             message = PasswordPolicy.PASSWORD_REQUIREMENTS_MESSAGE
     )
-    @Schema(description = "Password meeting the 8–72 character complexity policy. Never returned by the API.", accessMode = Schema.AccessMode.WRITE_ONLY)
+    @Schema(description = "Password meeting the 8–72 character complexity policy and 72 UTF-8 byte BCrypt limit. Never returned by the API.", accessMode = Schema.AccessMode.WRITE_ONLY)
     private String password;
 
     @NotBlank(message = "First name is required")

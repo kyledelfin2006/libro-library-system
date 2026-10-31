@@ -1,13 +1,14 @@
 # Libro Roles and JWT Guide
 
-This guide records the live role and loan policy plus a target design for replacing HTTP Basic with local JWT authentication. Loan rules below are implemented; JWT remains planned.
+This guide records the live role, account, loan, and JWT policy. The detailed as-built JWT design and validation matrix is in [JWT Authentication Design](jwt-authentication-design.md).
 
 ## Current state
 
-- Libro currently uses HTTP Basic authentication backed by `LibroUserDetailsService` and BCrypt.
+- `POST /app/auth/login` authenticates through Spring Security, `LibroUserDetailsService`, and BCrypt, then issues a 15-minute HS256 access token.
+- Protected routes accept JWT Bearer tokens only. The filter chain is stateless and CSRF is disabled for the header-only API. Signup and login are the only public application POST routes.
 - `UserRole` contains `STUDENT`, `FACULTY`, `ADMINISTRATOR`, and `LIBRARIAN`; Flyway V3 adds the librarian value to the accepted database role constraint.
-- Role and account boundaries below are implemented while HTTP Basic remains active. No librarian is seeded; first-account provisioning is deferred. JWT remains planned.
-- Loan routes and persistence are implemented under HTTP Basic. A `Book` row represents one physical copy; only one active loan may reference a copy, and a copy marked lost cannot be loaned again.
+- Role and account boundaries below remain in force under JWT. No librarian is seeded; first-account provisioning is deferred.
+- Loan routes and persistence are implemented under JWT. A `Book` row represents one physical copy; only one active loan may reference a copy, and a copy marked lost cannot be loaned again.
 
 ## Role policy
 
@@ -61,49 +62,25 @@ The approved loan period is 14 calendar days with no weekend or holiday extensio
 
 ## JWT login and request validation
 
-### Login contract
+| Boundary | Live rule |
+| --- | --- |
+| Login | Public `POST /app/auth/login`; `universityId` and `password` only; BCrypt verification goes through `AuthenticationManager` |
+| Password boundary | 8–72 characters with the required complexity; no more than 72 UTF-8 bytes before BCrypt at signup, password change, and login |
+| Credential failure | Unknown university ID and incorrect password return the same generic HTTP 401 |
+| Token | HS256; 15-minute maximum; issuer and audience are configurable; subject is university ID; exactly one known role is included |
+| Bearer transport | `Authorization: Bearer <token>` only; query strings, form fields, cookies, and HTTP Basic are rejected |
+| Validation | Signature, HS256 algorithm, issuer, single audience, time claims, non-blank subject, and one known role are checked before authorization |
+| Route authorization | Existing role matchers remain in `SecurityConfig`; ownership and target-role checks remain in `UserService` and `LoanService` |
+| Runtime state | Stateless; no session, refresh token, token table, or denylist; CSRF is disabled while only Authorization-header credentials are accepted |
+| Secret | `LIBRO_JWT_SECRET_BASE64` is required and must decode to at least 32 bytes; no default or source-controlled secret is used |
+| Stale claims | A role/password change or account deletion may leave an existing token usable through its expiry plus 30 seconds of clock skew |
+| Deployment | Require HTTPS and log redaction; gateway throttling and monitoring for repeated login attempts are required before public internet exposure |
 
-Add public `POST /app/auth/login` with a request containing `universityId` and `password`. Authenticate through Spring Security's `AuthenticationManager`, existing `LibroUserDetailsService`, and BCrypt `PasswordEncoder`; do not compare password hashes manually. Use the same generic HTTP 401 result for an unknown university ID and an incorrect password.
+The login response contains `accessToken`, `tokenType: "Bearer"`, and `expiresIn: 900`, with no-store cache headers. Detailed claim rules, configuration keys, error responses, flow ownership, and negative-case coverage are in [JWT Authentication Design](jwt-authentication-design.md). Spring Security references: [Resource Server](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/index.html), [DAO password authentication](https://docs.spring.io/spring-security/reference/servlet/authentication/passwords/dao-authentication-provider.html), and [CSRF protection](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html).
 
-Return a token response such as:
+## Verification boundaries
 
-```json
-{
-  "accessToken": "<signed-token>",
-  "tokenType": "Bearer",
-  "expiresIn": 900
-}
-```
-
-Mark signup and login public in Spring Security and OpenAPI. Document other routes with the HTTP Bearer security scheme.
-
-### Token format and settings
-
-- Use Spring Security's OAuth2 Resource Server/JWT support for Bearer-token validation; do not write a custom JWT validation filter. Use Spring Security's Nimbus-backed encoder/decoder for local token creation and validation.
-- Sign tokens with HS256 and a random secret containing at least 256 bits of entropy. Load its Base64 value from `LIBRO_JWT_SECRET_BASE64`; never commit it or put it in the migration. Configure issuer as `libro-api` (overridable by deployment configuration).
-- Include `iss`, `sub` (university ID), `roles` (one role name), `iat`, and `exp`. Set expiry to 15 minutes. Do not include password, password hash, or unnecessary profile fields.
-- Validate signature, issuer, and expiry on every Bearer request. Map the `roles` claim to the corresponding `ROLE_...` authority before authorization rules run.
-- Require `Authorization: Bearer <token>`. Do not accept tokens in query strings, form fields, or cookies.
-- Use stateless sessions. Since credentials are sent explicitly in the Authorization header and are not browser-attached cookies, disable CSRF for this API-only Bearer flow. If the client later stores tokens in cookies, revisit CSRF protection. Require HTTPS outside local development.
-- Use access tokens only in the first iteration. Do not add refresh tokens or a token denylist. A role change, password change, or account deletion can leave an already-issued token usable until its 15-minute expiry; document and accept that limit for this version.
-
-Spring Security documents Resource Server support for JWT Bearer tokens and the `UserDetailsService`/`PasswordEncoder` password provider used for login: [Resource Server](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/index.html), [DAO password authentication](https://docs.spring.io/spring-security/reference/servlet/authentication/passwords/dao-authentication-provider.html). Review [CSRF protection](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html) if token transport changes.
-
-## Implementation sequence
-
-1. **Roles and access rules:** implemented in `UserRole`, `SecurityConfig`, `UserService`, and Flyway V3. Public signup remains pinned to `STUDENT`; directory and ownership boundaries are enforced while Basic authentication remains active.
-2. **Loans:** implemented with a forward-only V4 migration, active-copy and borrower-limit concurrency protection, role-scoped histories, and lost-copy resolution. `LoanServiceTest` and `LoanSecurityMvcTest` cover key rules and route boundaries; PostgreSQL tests cover copy edit/loss races, return persistence, copy uniqueness, and deletion restrictions. A concurrent borrower-limit checkout test remains.
-3. **JWT:** add the Spring Boot OAuth2 Resource Server starter, JWT encoder/decoder configuration, secret/issuer settings, login DTO/controller/service, Bearer authorization, stateless session policy, and OpenAPI scheme. Remove HTTP Basic after the Bearer flow is working.
-4. **Documentation:** keep `AGENTS.md`, README endpoint/security inventories, OpenAPI annotations, and [Loan Implementation Guide](../docs/loan.md) aligned with runtime behavior.
-
-## Acceptance checks
-
-- Anonymous requests can reach only signup and login. Missing, malformed, expired, wrong-signature, and wrong-issuer tokens receive HTTP 401; a valid token without the required role receives HTTP 403.
-- Each role can perform exactly the operations in the role matrix. Students/faculty cannot list or read other accounts, update another user's profile/password, or create privileged accounts. Administrators manage student/faculty accounts; librarians may also manage library assistant accounts. Neither staff role may manage another librarian account.
-- Signup with `FACULTY`, `ADMINISTRATOR`, or `LIBRARIAN` in the payload still creates a student. Only librarians create faculty and library assistant accounts. Students/faculty may delete themselves, administrators may delete student/faculty accounts, and librarians may also delete library assistant accounts; staff cannot delete their own account.
-- Login uses the stored BCrypt hash and does not reveal whether the university ID exists.
-- Token claims contain the correct subject and role, use the configured issuer and 15-minute expiry, and contain no credential/profile secrets.
-- Only students and faculty can borrow and return their own loans; no caller can return another user's loan. Administrators and librarians can view and resolve loans only within their role boundaries. A borrower can have at most three active loans and cannot borrow while any loan is overdue.
-- Every loan uses the authenticated caller as borrower. Two concurrent borrow attempts cannot create two active loans for one book copy; concurrent attempts by one borrower cannot exceed the three-loan limit. Staff loss resolution records who and when, closes the active loan, and makes the physical copy unavailable.
-- Loan history prevents deletion of its referenced user or book copy with HTTP 409. User and copy history remain in the database.
-- Generated `/v3/api-docs` shows Bearer security on protected operations and no security requirement on signup/login. Run the normal Maven test suite and PostgreSQL integration profile where Docker is available.
+- `SecurityFlowMvcTest` exercises login through the real `AuthenticationManager` and BCrypt provider, then passes the issued compact token through the real Resource Server filter and decoder.
+- The security MVC suite covers missing, malformed, altered-signature, wrong-key, wrong-algorithm, expired, future-`nbf`, wrong-issuer/audience, invalid-role, query/cookie transport, Basic rejection, generic login failures, and role denials.
+- `OpenApiMvcTest` checks the generated Bearer scheme and the public signup/login declarations.
+- Loan/account service tests continue to cover identity ownership and target-role rules. PostgreSQL integration tests remain for database behavior; no JWT schema migration is required.

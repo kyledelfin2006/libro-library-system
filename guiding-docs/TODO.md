@@ -1,6 +1,6 @@
 # Internal Engineering Roadmap
 
-This is the working implementation roadmap. It is not the public project overview or an API contract. The role/JWT design is specified in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md); this checklist tracks implementation status.
+This is the working implementation roadmap. It is not the public project overview or an API contract. Live role/JWT rules are in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md) and the [JWT Authentication Design](jwt-authentication-design.md); this checklist tracks implementation status.
 
 ## Current state
 
@@ -9,11 +9,10 @@ This is the working implementation roadmap. It is not the public project overvie
 | Books | CRUD, optional description, replacement-cost tracking, search, pagination, sorting, filtering, statistics, DTO validation (V5) |
 | Accounts | Student signup; librarian-created faculty/library assistants; role-scoped directory, profile/password management, and deletion |
 | Roles in Java and the current schema | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN (Flyway V3) |
-| Authentication | HTTP Basic using university ID, UserDetailsService, and BCrypt |
+| Authentication | Local HS256 JWT login and stateless Bearer validation; issuer/audience are configured, maximum token lifetime is 900 seconds, and clock skew is 30 seconds |
 | Authorization | Book reads for all roles; ADMINISTRATOR/LIBRARIAN book CRUD; librarian creates faculty/library assistants; role-scoped service account checks |
 | Loans | Implemented in application and V4 migration; service/MVC rules and key PostgreSQL invariants covered, borrower-limit checkout race remains |
-| JWT login and Bearer validation | Not implemented |
-| LIBRARIAN role and target owner/directory rules | Implemented with HTTP Basic |
+| LIBRARIAN role and target owner/directory rules | Implemented with JWT Bearer authentication |
 
 See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md). Administrator means library assistant, not system administrator. The paginated directory and profile/password operations follow role and target-account boundaries; students/faculty may delete their own accounts. Loan policy and build guidance are in [Loan Implementation Guide](../docs/loan.md).
 
@@ -39,26 +38,29 @@ See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-
 - [x] Preserve book and user history by returning HTTP 409 when referenced records are deleted.
 - [x] Cover the PostgreSQL race where a catalog edit competes with a lost-loan resolution and must preserve `LOST` copy status.
 - [x] Add focused loan service tests for borrower rules, availability, returns, lost-resolution scope, and history pagination.
-- [x] Add loan MVC/security tests for route roles, authenticated identity, and CSRF enforcement.
+- [x] Add loan MVC/security tests for route roles, authenticated identity, and stateless requests without CSRF enforcement.
 - [x] Add PostgreSQL tests for returned history, the one-active-loan index, and protected deletion.
 - [ ] Add a concurrent checkout test proving the three-active-loan borrower limit cannot be exceeded.
 - [x] Verify fresh V1-to-V5 startup through the PostgreSQL integration profile.
 - [x] Verify the V4-to-V5 upgrade path preserves existing replacement-cost values and schema validation.
+- [ ] Verify the V3-to-V4 upgrade path against PostgreSQL.
 
-### 3. Replace HTTP Basic with local JWT authentication
+### 3. Replace HTTP Basic with local JWT authentication (implemented)
 
-- [ ] Add public POST /app/auth/login using Spring Security authentication, UserDetailsService, and BCrypt.
-- [ ] Issue short-lived signed access tokens and validate Bearer tokens with Spring Security OAuth2 Resource Server/JWT support.
-- [ ] Configure the signing secret outside source control; use stateless request security and the documented header-only token transport.
-- [ ] Mark signup and login public in the filter chain and OpenAPI. Remove HTTP Basic after the Bearer flow is verified.
-- [ ] Test absent, malformed, expired, wrong-signature, and wrong-issuer tokens, plus valid-token role denials.
+- [x] Add public POST /app/auth/login using Spring Security AuthenticationManager, UserDetailsService, and BCrypt.
+- [x] Issue short-lived HS256 access tokens and validate Bearer tokens with Spring Security OAuth2 Resource Server/JWT support.
+- [x] Require an external Base64 signing key, validate issuer/audience/time/subject/role claims, and use stateless header-only request security.
+- [x] Mark signup and login public in the filter chain and OpenAPI; remove HTTP Basic.
+- [x] Add signed-token MVC coverage for absent, malformed, expired, wrong-signature/key/algorithm, wrong-issuer/audience, invalid claims, Basic rejection, transport restrictions, and role denials.
+- [x] Enforce BCrypt's 72 UTF-8 byte limit consistently at signup, password change, and login.
 
 ### 4. Keep the public and internal docs aligned
 
 - [x] Update README status, endpoint summary, and historical administrator bootstrap configuration.
 - [x] Update AGENTS.md and Current System Engineering Reference with the new current facts and contributor rules.
 - [x] Update OpenAPI operation descriptions to match role boundaries.
-- [ ] Review the generated OpenAPI document and Swagger UI against runtime behavior.
+- [x] Add generated OpenAPI MVC assertions for Bearer security, public signup/login, and the login contract.
+- [ ] Review the live OpenAPI document and determine an access path for Swagger UI; both currently inherit the authenticated default route policy, so anonymous browser loading is not available.
 
 ## Database migration rule
 
@@ -67,12 +69,13 @@ Before changing a migration, establish whether that version has been applied to 
 ## Verification queue
 
 - [x] Run the PostgreSQL-backed integration profile with Docker and a test-only BCrypt hash.
-- [ ] Perform the generated OpenAPI/Swagger UI review with the application running.
-- [ ] Review each security change against the allowed and denied cases in the target specification.
+- [ ] Configure gateway throttling and monitoring for repeated login attempts before public internet exposure.
+- [ ] Complete an independent security review before public internet exposure.
 
 ## Source documents
 
-- [Security Roles and JWT Guide](security-roles-and-jwt-guide.md): live role/loan policy, JWT target behavior, and acceptance checks.
+- [Security Roles and JWT Guide](security-roles-and-jwt-guide.md): live role/loan policy and JWT summary.
+- [JWT Authentication Design](jwt-authentication-design.md): as-built boundaries, classes, flows, rules, exceptions, configuration, and validation matrix.
 - [Current System Engineering Reference](engineering-reference.md): current repository facts and technical conventions.
 - [API Documentation Guideline](../docs/api-documentation-guideline.md): OpenAPI/controller documentation rules.
 - [Domain Decisions](../docs/domain-decisions.md): physical-copy model and loan invariant.

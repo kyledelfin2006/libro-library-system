@@ -22,7 +22,7 @@ Each catalog record is one physical copy. Replacement cost records its value for
 
 ### API access
 
-Explore the generated API docs in [Swagger UI](http://localhost:8080/swagger-ui.html) or [`/v3/api-docs`](http://localhost:8080/v3/api-docs). HTTP Basic authentication is required except for `POST /app/users/signup`; write requests also require a CSRF token. See [Institutional Context](docs/institutional-context.md) and the [API Documentation Guideline](docs/api-documentation-guideline.md).
+The API contract is generated at [Swagger UI](http://localhost:8080/swagger-ui.html) and [`/v3/api-docs`](http://localhost:8080/v3/api-docs). Both documentation routes currently require authentication under the default route policy, like every route except `POST /app/users/signup` and `POST /app/auth/login`. The API is stateless and does not require a CSRF token for header-authenticated requests. Browser access to the protected Swagger UI has not been verified; see the [roadmap](guiding-docs/TODO.md). See [JWT Authentication Design](guiding-docs/jwt-authentication-design.md), [Institutional Context](docs/institutional-context.md), and the [API Documentation Guideline](docs/api-documentation-guideline.md).
 
 Main Developer: **Aldrin Kyle Delfin**
 
@@ -31,7 +31,7 @@ Main Developer: **Aldrin Kyle Delfin**
 | Layer | Technology / Framework |
 | --- | --- |
 | Language | Java 25 |
-| Framework | Spring Boot 4.1.0 (Web, Data JPA, Security, Validation) |
+| Framework | Spring Boot 4.1.0 (Web, Data JPA, Security, OAuth2 Resource Server/JWT, Validation) |
 | Database | PostgreSQL 18 |
 | Migrations | Flyway 13.3.0 |
 | Containerization | Docker & Docker Compose |
@@ -75,24 +75,25 @@ This README remains the project's main portfolio entry point. Supporting documen
 3. [Institutional Context](docs/institutional-context.md) describes the ASU-CCS academic model and existing MIS assumptions behind the user domain.
 4. [Domain Decisions](docs/domain-decisions.md) explains why a Book represents one physical copy and how loans preserve copy history.
 5. [Loan Implementation Guide](docs/loan.md) explains the loan lifecycle, permissions, API, database design, and local build flow.
+6. [JWT Authentication Design](guiding-docs/jwt-authentication-design.md) documents the live token rules, security boundaries, request flows, errors, configuration, and known limits.
 
 ### For agents, AI, and contributors
 
 1. [Agent and Contributor Guide](AGENTS.md) records current facts, source-of-truth rules, do's and don'ts, and the contribution workflow.
 2. [Current System Engineering Reference](guiding-docs/engineering-reference.md) contains the detailed repository map, layer contracts, endpoint inventory, configuration, and test strategy.
 3. [Development Roadmap](guiding-docs/TODO.md) tracks current implementation status and remaining work.
-4. [Security Roles and JWT Guide](guiding-docs/security-roles-and-jwt-guide.md) defines the role policy, live loan permissions, and planned JWT design.
+4. [Security Roles and JWT Guide](guiding-docs/security-roles-and-jwt-guide.md) defines the live role policy, loan permissions, and JWT authentication rules.
 5. [API Documentation Guideline](docs/api-documentation-guideline.md) sets the standard for accurate OpenAPI and Swagger documentation without unnecessary annotation boilerplate.
 
 ## Architecture Overview
 
-The system runs as a Spring Boot API alongside PostgreSQL. Book, user, and loan requests pass through their HTTP and business layers to persistence; Flyway prepares the schema at startup. Shared validation, mapping, security configuration, and error handling support the API. `UserRepository` serves account and loan use cases, plus `LibroUserDetailsService` for Spring Security's HTTP Basic account lookup.
+The system runs as a Spring Boot API alongside PostgreSQL. Book, user, and loan requests pass through their HTTP and business layers to persistence; Flyway prepares the schema at startup. Shared validation, mapping, security configuration, and error handling support the API. Login uses `LibroUserDetailsService` for account lookup; protected Bearer requests validate locally without a database lookup.
 
 ```mermaid
 flowchart LR
     Client["API client"]
     subgraph App["Spring Boot application"]
-        Security["Spring Security<br/>signup public; other routes authenticated"]
+        Security["Spring Security<br/>signup/login public; other routes require Bearer"]
         API["BookAPI<br/>Spring MVC"] --> Service["BookService<br/>business rules · transactions"]
         Service --> BookRepo["BookRepository<br/>Spring Data JPA"]
         LoanAPI["LoanAPI<br/>checkout · return · history"] --> LoanService["LoanService<br/>loan rules · transactions"]
@@ -103,7 +104,8 @@ flowchart LR
         BookRepo --> ORM["Hibernate / JPA"]
         UserAPI["UserAPI<br/>account and profile routes"] --> User["UserService<br/>profile and password rules"]
         User --> UserRepo["UserRepository"]
-        Security -->|load account for Basic authentication| UserDetails["LibroUserDetailsService<br/>lookup by university ID · map role"]
+        AuthAPI["AuthAPI<br/>POST /app/auth/login"] --> AuthService["AuthService<br/>authenticate · issue JWT"]
+        AuthService -->|AuthenticationManager| UserDetails["LibroUserDetailsService<br/>lookup by university ID · map role"]
         UserDetails -->|findByUniversityId| UserRepo
         UserRepo --> ORM
         Flyway["Flyway migrations<br/>V1 books · V2 users · V3 librarian role · V4 loans · V5 catalog fields"]
@@ -119,7 +121,7 @@ flowchart LR
         User -.-> Shared
         Security -.-> Shared
     end
-    Client -->|HTTP and JSON with optional Basic credentials| Security
+    Client -->|login JSON or Authorization: Bearer token| Security
     ORM -->|JDBC| DB[("PostgreSQL 18")]
     Flyway -->|startup schema changes| DB
     Compose["Docker Compose<br/>starts app after database is healthy"] -.-> App
@@ -131,44 +133,54 @@ flowchart LR
     class DB,Flyway data
 ```
 
-The authentication branch is separate from user account operations. For a protected request, Spring Security asks `LibroUserDetailsService` to load the account by university ID; that service reads the same `UserRepository` used by `UserService`, then returns Spring Security's user details with the stored password hash and mapped role. Signup is permitted without authentication; the remaining routes require authentication. Controllers do not access the repository directly.
+Login passes the submitted university ID and password to Spring Security's authentication manager. `LibroUserDetailsService` loads the account and BCrypt verifies its stored hash. After login, Resource Server validates each Bearer token's signature and claims, maps the signed role, and applies route authorization without reloading the user. Signup and login are public; all other routes require a token. Controllers do not access the repository directly.
 
 ### Current Authentication and Authorization Flow
 
-This is the live HTTP Basic flow. The client sends its university ID and password with every protected request. Spring Security loads the account and role, checks the password with BCrypt, then applies the route's role rule. Basic credentials are Base64-encoded, not encrypted; use HTTPS outside local development.
+The client submits credentials once to receive a short-lived token, then sends the token on protected requests. HTTPS is required outside local development.
 
 ```mermaid
 sequenceDiagram
     participant Client
-    participant Security as Spring Security
+    participant Auth as AuthAPI / AuthService
+    participant Manager as AuthenticationManager
     participant UserLookup as LibroUserDetailsService
     participant Users as UserRepository
     participant DB as PostgreSQL
-    participant Encoder as BCrypt PasswordEncoder
+    participant PasswordEncoder as BCrypt PasswordEncoder
+    participant JwtEncoder as Nimbus JwtEncoder
+    participant Security as Resource Server / authorization
     participant API as Protected endpoint
 
-    Client->>Security: HTTP request with Basic credentials
-    Security->>UserLookup: Load account by university ID
+    Client->>Auth: POST /app/auth/login (universityId, password)
+    Auth->>Manager: Authenticate credentials
+    Manager->>UserLookup: Load account by university ID
     UserLookup->>Users: findByUniversityId
     Users->>DB: Read account, hash, and role
     DB-->>Users: User record
     Users-->>UserLookup: Stored account details
-    UserLookup-->>Security: UserDetails with hash and authority
-    Security->>Encoder: Verify submitted password against hash
-    Encoder-->>Security: Match or reject
-    alt credentials are valid and route allows the role
-        Security->>API: Continue with authenticated principal
-        API-->>Client: Endpoint response
-    else invalid credentials or denied role
-        Security-->>Client: Authentication or authorization error
+    UserLookup-->>Manager: UserDetails with hash and authority
+    Manager->>PasswordEncoder: Verify password against hash
+    PasswordEncoder-->>Manager: Match or reject
+    alt credentials are valid
+        Manager-->>Auth: Authenticated university ID and role
+        Auth->>Auth: Build issuer, audience, role, iat, exp claims
+        Auth->>JwtEncoder: Sign HS256 token
+        JwtEncoder-->>Client: 200 Bearer token (no-store)
+    else invalid credentials
+        Manager-->>Client: Generic 401
     end
+    Client->>Security: Protected request with Authorization: Bearer token
+    Security->>Security: Validate token and apply route-role rule
+    Security->>API: Continue with verified principal
+    API-->>Client: Existing API response
 ```
 
 Account and loan access is checked against the authenticated user's university ID and role. `ADMINISTRATOR` is the library-assistant role, and `LIBRARIAN` is the library's librarian. Students and faculty borrow and return their own loans; staff review only the histories permitted by their role.
 
 | Current rule | Allowed access |
 | --- | --- |
-| Public signup | POST /app/users/signup |
+| Public signup and login | POST /app/users/signup; POST /app/auth/login |
 | Read books | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN |
 | Add, update, or delete books | ADMINISTRATOR, LIBRARIAN |
 | Create school faculty and library assistant accounts | LIBRARIAN |
@@ -212,7 +224,7 @@ flowchart TD
     X -.-> A
 ```
 
-Account operations and Basic authentication use `UserRepository`: `UserService` uses it for signup, profile, and password operations; `LoanService` uses it to identify and lock borrowers; `LibroUserDetailsService` loads the account Spring Security authenticates. Authentication does not route through `UserAPI` or `UserService`.
+Account operations and login use `UserRepository`: `UserService` uses it for signup, profile, and password operations; `LoanService` uses it to identify and lock borrowers; `LibroUserDetailsService` loads the account Spring Security authenticates at login. Bearer-token validation does not query the account again and does not route through `UserAPI` or `UserService`.
 
 ### Current Persistence Model
 
@@ -277,12 +289,17 @@ docs/
   loan.md
 guiding-docs/
   engineering-reference.md
+  jwt-authentication-design.md
   security-roles-and-jwt-guide.md
   TODO.md
 
 src/main/java/app/
   LibraryApplication.java
   auth/
+    config/JwtConfiguration.java and JwtProperties.java
+    controller/AuthAPI.java
+    dto/LoginRequestDTO.java and TokenResponseDTO.java
+    service/AuthService.java
     SecurityConfig.java
     LibroUserDetailsService.java
   loan/
@@ -320,6 +337,7 @@ src/main/java/app/
   global/
     config/
       OpenApiConfig.java
+      ErrorApiResponse.java and ErrorApiResponses.java
     exceptions/
       GlobalExceptionHandler.java
     responses/
@@ -360,6 +378,7 @@ src/test/java/
   unit/
     auth/
       SecurityFlowMvcTest.java
+      JwtConfigurationTest.java
     book/
       BookApiMvcTest.java
       BookMapperTest.java
@@ -384,6 +403,7 @@ src/test/java/
       LoanPersistenceIT.java
 
 src/test/resources/
+  application.properties
   junit-platform.properties
   logback-test.xml
 ```
@@ -472,7 +492,7 @@ Collection statistics include the number of copies, total and average replacemen
 
 - Springdoc OpenAPI 3 generates Swagger UI and `/v3/api-docs` from the API contract.
 - Request validation and shared error responses give clients structured field-level details for invalid requests and consistent responses for other expected failures.
-- Spring Security uses HTTP Basic; signup is public, and unsafe requests also require a CSRF token.
+- Spring Security uses stateless JWT Bearer authentication; signup and login are public, and other routes require an Authorization header token.
 - PostgreSQL stores the catalog, accounts, and loan history. Flyway applies versioned schema changes, while Hibernate validates mappings at startup.
 - Docker Compose runs the application with PostgreSQL, and the health endpoint reports API and database reachability.
 
@@ -515,7 +535,7 @@ sequenceDiagram
     App-->>Compose: API ready on port 8080
 ```
 
-Flyway owns schema creation and updates; Hibernate validates the resulting schema instead of changing it. The filter chain exposes public signup, retains HTTP Basic and CSRF protection, and enforces the current route rules.
+Flyway owns schema creation and updates; Hibernate validates the resulting schema instead of changing it. The filter chain exposes public signup/login, accepts only Bearer tokens for protected routes, and enforces the current route rules.
 
 ## Code Highlights
 
@@ -608,9 +628,17 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 
 `/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minReplacementCost` and `maxReplacementCost` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `replacementCost`; invalid ranges, decimals, or sort fields return HTTP 400. The `replacementCost` JSON field is the recorded amount used to replace one physical copy; it does not trigger a charge. `description` is optional and limited to 2,000 characters. Existing list routes retain their response shapes apart from the renamed and added book fields. `BookResponseDTO` also includes `copyStatus` (`IN_COLLECTION` or `LOST`); the compact book examples above omit it for readability.
 
+### Authentication API
+
+`POST /app/auth/login` accepts a university ID and password and returns an HS256 access token valid for at most 15 minutes. The response is marked `no-store`; send the token only in `Authorization: Bearer <token>`. Wrong passwords and unknown university IDs receive the same generic 401. `LIBRO_JWT_SECRET_BASE64` must be supplied outside source control and decode to at least 32 bytes. See the [JWT Authentication Design](guiding-docs/jwt-authentication-design.md) for claim, exception, and validation boundaries.
+
+| Method | Path | Description | Request | Response |
+| --- | --- | --- | --- | --- |
+| `POST` | `/app/auth/login` | Public login; authenticates through Spring Security and BCrypt | `{"universityId":"2025-4321","password":"<password>"}` | `{"accessToken":"<signed-token>","tokenType":"Bearer","expiresIn":900}` |
+
 ### User API
 
-Signup is public and always creates a student. Only librarians can create faculty and library assistant accounts. Administrators can manage student and faculty accounts; librarians can also manage library assistant accounts. Students and faculty can manage their own profiles and passwords and delete their own accounts. Staff cannot manage another librarian account or delete their own account. All other routes require HTTP Basic authentication, and unsafe requests also require a CSRF token. See the [role permissions table](guiding-docs/security-roles-and-jwt-guide.md#role-policy) for the full policy.
+Signup is public and always creates a student. Only librarians can create faculty and library assistant accounts. Administrators can manage student and faculty accounts; librarians can also manage library assistant accounts. Students and faculty can manage their own profiles and passwords and delete their own accounts. Staff cannot manage another librarian account or delete their own account. All other routes require a valid JWT Bearer token. See the [role permissions table](guiding-docs/security-roles-and-jwt-guide.md#role-policy) for the full policy.
 
 | Method | Path | Description | Example Request | Example Response |
 | --- | --- | --- | --- | --- |
@@ -650,8 +678,9 @@ Docker is the preferred way to run the project because it brings up both Postgre
     POSTGRES_USER=admin
     POSTGRES_PASSWORD=change_me
     LIBRO_ADMIN_PASSWORD_HASH=<BCrypt hash for a password you choose>
+    LIBRO_JWT_SECRET_BASE64=<output of openssl rand -base64 32>
     ```
-    Replace the hash placeholder before starting the app. Flyway V2 seeds the administrator as university ID `0000-0000`; no librarian is seeded. Only BCrypt hashes are stored in the database. Keep `.env` private. Librarian-only routes require an existing librarian account; initial librarian provisioning is deferred.
+    Replace both placeholders before starting the app. Flyway V2 seeds the historical `ADMINISTRATOR` account (library-assistant role) as university ID `0000-0000`; no librarian is seeded. Only BCrypt hashes are stored in the database. Keep `.env` private. Librarian-only routes require an existing librarian account; initial librarian provisioning is deferred.
 2. Build the application jar:
     ```bash
     mvn clean package
@@ -660,7 +689,7 @@ Docker is the preferred way to run the project because it brings up both Postgre
     ```bash
     docker compose up --build
     ```
-4. Open [Swagger UI](http://localhost:8080/swagger-ui.html) to explore and try the API endpoints. The raw OpenAPI specification is available at [`http://localhost:8080/v3/api-docs`](http://localhost:8080/v3/api-docs). Both routes require HTTP Basic authentication. Swagger UI is an interactive API reference; it does not deploy the service. Unsafe requests are subject to CSRF protection as well as authentication rules.
+4. Log in through `POST /app/auth/login`, then send the returned token as a Bearer credential on protected API requests. Swagger UI and `/v3/api-docs` remain behind the protected default route policy. The OpenAPI document declares signup and login public and all other operations Bearer-protected.
 
 ### Local development
 
@@ -676,8 +705,9 @@ If you prefer to run the application directly on the host machine, start only Po
     $env:SPRING_DATASOURCE_USERNAME="admin"
     $env:SPRING_DATASOURCE_PASSWORD="change_me"
     $env:LIBRO_ADMIN_PASSWORD_HASH="<BCrypt hash for the local bootstrap account>"
+    $env:LIBRO_JWT_SECRET_BASE64="<output of openssl rand -base64 32>"
     ```
-    Maven does not read Docker Compose's `.env` file, so set the bootstrap hash in the shell environment used to run the app.
+    Maven does not read Docker Compose's `.env` file. Set the datasource variables, `LIBRO_ADMIN_PASSWORD_HASH`, and `LIBRO_JWT_SECRET_BASE64` in the process environment used to run the app. Issuer, audience, and token lifetime have defaults; the JWT secret must decode to at least 32 random bytes.
 3. Run the app:
     ```bash
     mvn spring-boot:run
@@ -693,25 +723,28 @@ If you prefer to run the application directly on the host machine, start only Po
 | `Book not found` | The requested ID does not exist | Verify the ID with `GET /app/books/all` |
 | `Invalid Number Format` | Non-numeric values were sent to a numeric endpoint | Use numeric values for `replacement cost`, `minReplacementCost`, `maxReplacementCost`, and similar fields |
 | `Method not allowed` | Wrong HTTP verb was used | Match the method listed in the endpoint table |
+| `401 Unauthorized` on a protected API or documentation route | Bearer token is missing, expired, malformed, or invalid | Log in at `POST /app/auth/login` and send the returned token in `Authorization: Bearer <token>` |
+| `403 Forbidden` with a valid token | The token's role does not satisfy the route or service ownership rule | Check the [role policy](guiding-docs/security-roles-and-jwt-guide.md#role-policy) and the target account/loan scope |
+| App fails during startup mentioning `LIBRO_JWT_SECRET_BASE64` | The required key is absent, invalid Base64, or decodes to fewer than 32 bytes | Generate a random key with `openssl rand -base64 32` and provide it through the environment |
 | Docker app container fails to start | The jar was not built before `docker compose up --build` | Run `mvn clean package` first |
-| Swagger UI loads but API calls fail, or `library-app` keeps restarting | Inspect `docker compose logs app`; an old development volume may have `books.id` as `INTEGER` while Hibernate expects `BIGINT` | If the volume contains only disposable development data, back up anything needed and intentionally remove it with `docker compose down -v`; otherwise preserve the volume and resolve the schema through a forward migration. Then rebuild with `docker compose up -d --build` |
+| `library-app` keeps restarting with a schema validation error | Inspect `docker compose logs app`; an old development volume may have `books.id` as `INTEGER` while Hibernate expects `BIGINT` | If the volume contains only disposable development data, back up anything needed and intentionally remove it with `docker compose down -v`; otherwise preserve the volume and resolve the schema through a forward migration. Then rebuild with `docker compose up -d --build` |
 | No Flyway messages or `flyway_schema_history` table | The Boot 4 Flyway starter is absent, or the container contains an old jar | Keep `spring-boot-starter-flyway`, rebuild the jar, and rebuild the image |
 
 The complete diagnosis, pre-release reset procedure, clean-install behavior, and production-data warning are in [Development Problems Solved](docs/development-problems-solved.md).
 
 ## Quick Start
 
-1. Copy `envFileExample` to `.env` and fill in PostgreSQL credentials and `LIBRO_ADMIN_PASSWORD_HASH` for Flyway V2's bootstrap account.
+1. Copy `envFileExample` to `.env` and fill in PostgreSQL credentials, the BCrypt `LIBRO_ADMIN_PASSWORD_HASH`, and a random `LIBRO_JWT_SECRET_BASE64` from `openssl rand -base64 32`.
 2. Run `mvn clean package`.
 3. Run `docker compose up --build`.
-4. Open `http://localhost:8080/app/books/health` with HTTP Basic credentials; the health endpoint is protected like other application routes.
+4. Log in through `POST /app/auth/login` and open `http://localhost:8080/app/books/health` with the returned Bearer token; the health endpoint is protected like other application routes.
 
 ## Data Management
 
 - PostgreSQL 18 stores physical book copies, user accounts, and loan history.
 - Flyway manages schema changes via versioned SQL migrations in `src/main/resources/db/migration/`.
   - `V1__create_books_table.sql` creates the `books` table with the `created_at` column and indexes.
-  - `V2__create_users_table.sql` creates the users table with role, course, major, identity-format, uniqueness, and relationship constraints, then seeds the historical bootstrap library assistant from `LIBRO_ADMIN_PASSWORD_HASH`.
+  - `V2__create_users_table.sql` creates the users table with role, course, major, identity-format, uniqueness, and relationship constraints, then seeds the historical `ADMINISTRATOR` account (library-assistant role) from `LIBRO_ADMIN_PASSWORD_HASH`.
   - `V3__add_librarian_role.sql` adds `LIBRARIAN` to the accepted database roles and applies the staff academic-field rules.
   - `V4__add_loans_and_copy_status.sql` adds physical-copy status, loan history, state constraints, deletion restrictions, and the one-active-loan-per-copy index.
   - `V5__describe_books_and_rename_price_to_replacement_cost.sql` adds optional descriptions and renames stored values to replacement costs without changing the amounts.
@@ -722,27 +755,28 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 - Updates rely on Hibernate dirty checking inside transactional service methods.
 - `BookRequestDTO` validates create and replacement requests; `BookPatchRequestDTO` describes optional PATCH fields. `BookResponseDTO` and `LibraryStatisticsDTO` shape book responses.
 - `BookMapper` centralizes conversion between entities and DTOs.
-- `UserService` normalizes identity values, checks duplicates, enforces academic rules, validates create requests with Jakarta Validator, bounds passwords to 8–72 characters before BCrypt processing, and persists only BCrypt-hashed passwords.
+- `UserService` normalizes identity values, checks duplicates, enforces academic rules, validates create requests with Jakarta Validator, enforces the 8–72 character password policy and BCrypt's 72 UTF-8 byte input limit, and persists only BCrypt-hashed passwords. Login applies the same byte limit before password verification.
 - `UserMapper` keeps password fields out of `UserResponseDTO`.
 - `UserAPI` delegates user operations to `UserService` and returns DTOs rather than entities. Its routing and serialization have MVC-slice coverage.
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The Docker-free suite covers book, user, and loan service/MVC contracts, generated OpenAPI security-sensitive schemas, DTOs, mappings, and exception handling. The opt-in PostgreSQL profile checks Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, database constraints, loan lifecycle persistence, and the race between catalog edits and lost-loan resolution. A concurrent borrower-limit checkout test remains outstanding. PostgreSQL integration execution requires Docker and a valid test-only `LIBRO_ADMIN_PASSWORD_HASH` for Flyway V2. Set the variable in the environment inherited by Maven; Maven does not load Docker Compose's `.env` file.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The Docker-free suite covers authentication, book, user, and loan service/MVC contracts, generated OpenAPI security-sensitive schemas, DTOs, mappings, and exception handling. The opt-in PostgreSQL profile checks Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, database constraints, loan lifecycle persistence, and the race between catalog edits and lost-loan resolution. A concurrent borrower-limit checkout test and the V3-to-V4 migration upgrade test remain outstanding. PostgreSQL integration execution requires Docker and a valid test-only `LIBRO_ADMIN_PASSWORD_HASH` for Flyway V2. Set the variable in the environment inherited by Maven; Maven does not load Docker Compose's `.env` file.
 
 Tests are grouped by test scope and domain: `src/test/java/unit/auth`, `src/test/java/unit/loan`, `src/test/java/unit/book`, `src/test/java/unit/user`, and `src/test/java/unit/global`; PostgreSQL integration tests live under `src/test/java/integration/book`, `src/test/java/integration/loan`, and `src/test/java/integration/user`. Keep new tests with the domain they exercise. Shared PostgreSQL test configuration lives directly under `integration` so all integration classes use one Spring context and container.
 
 - `BookTest` verifies book construction and request DTO constraints.
 - `BookApiMvcTest` verifies routes, status codes, JSON response shapes, invalid request payloads, pagination/query binding, and global exception responses without starting JPA or PostgreSQL.
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.
-- `BookServiceTest` verifies service rules, repository interaction, search, sorting, pricing, typed statistics projections, genre-distribution mapping, and dirty-checking expectations.
+- `BookServiceTest` verifies service rules, repository interaction, search, sorting, replacement-cost behavior, typed statistics projections, genre-distribution mapping, and dirty-checking expectations.
 - `UserApiMvcTest` verifies all user routes, request binding and validation, paging defaults, direct DTO versus envelope response shapes, 404/409 error responses, and that public responses do not expose password fields. It mocks `UserService` and does not start JPA or PostgreSQL.
-- `SecurityFlowMvcTest` exercises the real filter chain and `LibroUserDetailsService` with a mocked user repository: public signup, unauthenticated rejection, valid university-ID/password authentication, and incorrect-password rejection.
+- `SecurityFlowMvcTest` exercises the real filter chain, BCrypt login, JWT issue/validation, claim/signature/algorithm/transport edge cases, role denials, and Basic rejection with a mocked user repository.
+- `JwtConfigurationTest` verifies that malformed or undersized JWT signing keys fail startup and that the minimum accepted key decodes correctly.
 - `LoanServiceTest` covers checkout rules, active-loan/overdue rejection, return ownership, staff loss scope, history permissions, and pagination restrictions.
-- `LoanSecurityMvcTest` exercises loan route role rules, principal-derived identity, authenticated history, and CSRF enforcement through the real filter chain.
-- `OpenApiMvcTest` generates `/v3/api-docs` in an MVC slice and checks representative routes, response codes, write-only password inputs, absence of password fields in public responses, and loan-history pagination/sort documentation without Docker.
+- `LoanSecurityMvcTest` exercises loan route role rules, principal-derived identity, authenticated history, and stateless requests without CSRF through the real filter chain.
+- `OpenApiMvcTest` generates `/v3/api-docs` in an MVC slice and checks the Bearer scheme, public signup/login, login responses, representative routes, write-only password inputs, absence of password fields in public responses, and loan-history pagination/sort documentation without Docker.
 - `GlobalExceptionHandlerTest` directly invokes the exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
-- `UserServiceTest` verifies partial-update normalization, DTO and business validation, password verification and encoding, unchanged-email handling, duplicate-email rejection, and dirty-checking expectations. Academic combinations still need focused coverage; `UserPersistenceIT` covers selected real-database paths.
+- `UserServiceTest` verifies partial-update normalization, DTO and business validation, password verification and encoding, the 72 UTF-8 byte BCrypt boundary, unchanged-email handling, duplicate-email rejection, and dirty-checking expectations. Academic combinations still need focused coverage; `UserPersistenceIT` covers selected real-database paths.
 - `BookPersistenceIT` runs only with the `integration` profile and Docker. It checks fresh V1-to-V5 migration/schema validation, the V4-to-V5 value-preserving upgrade, PostgreSQL book queries and projections, committed PATCH/PUT updates, and that an edit waiting for a concurrent lost-loan resolution preserves the copy's `LOST` status.
 - `LoanPersistenceIT` checks returned history persistence, the one-active-loan-per-copy database index, and deletion restrictions for borrowers and copies with history.
 - `UserPersistenceIT` checks normalized user creation, stored password hashes, committed profile/password changes, and PostgreSQL uniqueness and ID-format constraints. All three integration classes share a PostgreSQL 18 container and serialize access to it; running them requires Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH`.
@@ -796,7 +830,7 @@ Generate the JaCoCo report at `target/site/jacoco/index.html`:
 mvn clean verify
 ```
 
-The default suite includes plain unit tests and MVC slices. It verifies HTTP Basic authentication and request protection through the real filter chain, while real JPA transactions, Flyway migrations, and PostgreSQL constraints require the Docker-backed integration profile. Role-based permissions are enforced for book and account operations; production identity-provider choices remain open.
+The default suite includes plain unit tests and MVC slices. It verifies JWT login, token validation, role mapping, Basic rejection, and request protection through the real filter chain, while real JPA transactions, Flyway migrations, and PostgreSQL constraints require the Docker-backed integration profile. JWT requires no database migration.
 
 Validation failures retain the `error`, `details`, `timestamp`, and `statusCode` fields and additionally return a structured map:
 
@@ -828,10 +862,9 @@ The [Development Problems Solved](docs/development-problems-solved.md) write-up 
 
 ## Upcoming Improvements
 
-- Inspect the generated OpenAPI document and Swagger UI with the application and database running; verify parameter defaults, request/response schemas, statuses, errors, and examples against the implementation.
-- Replace HTTP Basic with the planned short-lived JWT Bearer flow, or choose institutional SSO before deployment.
-- Review the HTTP Basic and CSRF model before exposing the API to external clients.
-- Add a concurrent borrower-limit checkout test; include the PostgreSQL integration profile in CI when a CI workflow is introduced.
+- Review the generated OpenAPI document and determine an intended access path for Swagger UI, which currently inherits the authenticated default route policy; verify parameter defaults, request/response schemas, statuses, errors, and examples against the implementation.
+- Configure and verify gateway throttling and monitoring for repeated login attempts before public internet exposure.
+- Add a concurrent borrower-limit checkout test and a V3-to-V4 migration upgrade test; include the PostgreSQL integration profile in CI when a CI workflow is introduced.
 - Benchmark case-insensitive substring searches as the catalog grows; add database search indexes only if measurements justify them.
 
 ## License

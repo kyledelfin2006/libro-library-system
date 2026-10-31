@@ -1,6 +1,6 @@
 # Loan Implementation Guide
 
-This guide describes the implemented loan feature. For exact live behavior, the Java code, Flyway migrations, and generated OpenAPI are authoritative. Authentication is currently HTTP Basic with CSRF enabled; JWT is still planned.
+This guide describes the implemented loan feature. For exact live behavior, the Java code, Flyway migrations, and generated OpenAPI are authoritative. Loan routes require the stateless JWT Bearer authentication described in [JWT Authentication Design](../guiding-docs/jwt-authentication-design.md); unsafe requests do not require CSRF tokens.
 
 ## What a loan means
 
@@ -36,17 +36,17 @@ Overdue is a calculated condition, not a status: `status == ACTIVE && now.isAfte
 
 ```mermaid
 flowchart TD
-    Start["Student or faculty selects a copy"] --> Auth{"Authenticated with HTTP Basic?"}
+    Start["Student or faculty selects a copy"] --> Auth{"Authenticated with valid Bearer token?"}
     Auth -->|No| SignIn["401: sign in"]
     Auth -->|Yes| Role{"Role is STUDENT or FACULTY?"}
     Role -->|No| Forbidden["403: borrowing is not allowed"]
-    Role -->|Yes| Borrow["POST /app/loans/{bookId} with CSRF token"]
+    Role -->|Yes| Borrow["POST /app/loans/{bookId}"]
     Borrow --> Checks{"Copy exists and is available?<br/>No overdue loan?<br/>Fewer than three active loans?"}
     Checks -->|No| Rejected["404: copy missing<br/>409: unavailable, overdue, or at limit"]
     Checks -->|Yes| Active["Create ACTIVE loan<br/>Due 14 calendar days after checkout"]
     Active --> History["View GET /app/loans/me"]
     Active --> Due{"Returned by dueAt?"}
-    Due -->|Yes| Return["PUT /app/loans/{loanId}/return with CSRF token"]
+    Due -->|Yes| Return["PUT /app/loans/{loanId}/return"]
     Due -->|No| Overdue["Loan stays ACTIVE<br/>Overdue is calculated and new checkout is blocked"]
     Overdue --> Return
     Return --> Ownership{"Loan is ACTIVE and belongs to caller?"}
@@ -62,7 +62,7 @@ flowchart TD
     History --> Scope{"Staff role permits access to this borrower?"}
     Scope -->|No| Denied["403: borrower is outside staff scope"]
     Scope -->|Yes| Select["Select an ACTIVE loan"]
-    Select --> Resolve["PUT /app/loans/{loanId}/lost with CSRF token"]
+    Select --> Resolve["PUT /app/loans/{loanId}/lost"]
     Resolve --> Active{"Loan is still ACTIVE?"}
     Active -->|No| Conflict["409: loan is already terminal"]
     Active -->|Yes| Lost["Set loan status LOST<br/>Record lostAt and lostBy"]
@@ -82,7 +82,7 @@ sequenceDiagram
     participant Repos as Repositories
     participant DB as PostgreSQL
 
-    Client->>Security: POST /app/loans/42 with Basic credentials
+    Client->>Security: POST /app/loans/42 with Authorization: Bearer token
     Security->>API: Authenticated principal (university ID)
     API->>Service: borrow(principal ID, book ID)
     Service->>Repos: Lock borrower and physical copy
@@ -129,7 +129,11 @@ The timestamps intentionally have no UTC offset because the contract is Manila `
 
 ```text
 src/main/java/app/
-├── auth/SecurityConfig.java                 # HTTP route role gates; Basic + CSRF remain enabled
+├── auth/
+│   ├── SecurityConfig.java                   # HTTP route role gates; stateless JWT Bearer security
+│   ├── config/JwtConfiguration.java          # HS256 signing and strict Bearer-token validation
+│   ├── controller/AuthAPI.java               # Public login endpoint
+│   └── service/AuthService.java              # Credential authentication and token issuance
 ├── book/
 │   ├── entity/Book.java                     # Physical copy, including IN_COLLECTION or LOST
 │   ├── entity/BookCopyStatus.java
@@ -151,7 +155,8 @@ src/main/resources/db/migration/
 ├── V1__create_books_table.sql
 ├── V2__create_users_table.sql
 ├── V3__add_librarian_role.sql
-└── V4__add_loans_and_copy_status.sql
+├── V4__add_loans_and_copy_status.sql
+└── V5__describe_books_and_rename_price_to_replacement_cost.sql
 ```
 
 ### Important persistence constraints
@@ -162,7 +167,7 @@ V4 adds `books.copy_status` and `loans`. Loan foreign keys use `ON DELETE RESTRI
 
 Prerequisites are Java 25, Maven 3.x, and Docker Desktop if you want PostgreSQL through Compose. There is no Maven wrapper in this repository.
 
-1. Copy `envFileExample` to `.env` and set `LIBRO_ADMIN_PASSWORD_HASH` to a BCrypt hash. Do not put a plaintext password or real secret in source control.
+1. Copy `envFileExample` to `.env`, set `LIBRO_ADMIN_PASSWORD_HASH` to a BCrypt hash, and set `LIBRO_JWT_SECRET_BASE64` to a random Base64 key generated with `openssl rand -base64 32`. Do not put a plaintext password or real secret in source control.
 2. Build the JAR that the Docker image copies:
 
    ```powershell
@@ -175,7 +180,7 @@ Prerequisites are Java 25, Maven 3.x, and Docker Desktop if you want PostgreSQL 
    docker compose up --build
    ```
 
-   Flyway applies V1 through V4 at startup. Do not use `docker compose down -v` unless you intentionally want to destroy the database volume.
+   Flyway applies V1 through V5 at startup. Do not use `docker compose down -v` unless you intentionally want to destroy the database volume.
 
 4. Run the default unit/MVC verification suite:
 
@@ -183,10 +188,10 @@ Prerequisites are Java 25, Maven 3.x, and Docker Desktop if you want PostgreSQL 
    mvn clean verify
    ```
 
-To include PostgreSQL integration tests, run `mvn -Pintegration clean verify` with Docker available and `LIBRO_ADMIN_PASSWORD_HASH` set in the shell environment inherited by Maven to a test-only BCrypt hash. Maven does not load the Docker Compose `.env` file; Flyway V2 needs the variable to seed its bootstrap account in the disposable test database.
+To include PostgreSQL integration tests, run `mvn -Pintegration clean verify` with Docker available and `LIBRO_ADMIN_PASSWORD_HASH` set in the shell environment inherited by Maven to a test-only BCrypt hash. Maven does not load the Docker Compose `.env` file; Flyway V2 needs the variable to seed its bootstrap account in the disposable test database. The test profile supplies a deterministic test-only JWT key; production still requires `LIBRO_JWT_SECRET_BASE64`.
 
-For a loan smoke test, have a library assistant or librarian create a book copy, then authenticate as a student or faculty borrower. Call `POST /app/loans/{bookId}`, inspect `GET /app/loans/me`, and return it with `PUT /app/loans/{loanId}/return`. Swagger UI is at `http://localhost:8080/swagger-ui.html`; because CSRF remains enabled, state-changing requests must include the configured CSRF token.
+For a loan smoke test, have a library assistant or librarian create a book copy, log in as a student or faculty borrower through `POST /app/auth/login`, then send the returned Bearer token with `POST /app/loans/{bookId}`, `GET /app/loans/me`, and `PUT /app/loans/{loanId}/return`. Swagger UI is at `http://localhost:8080/swagger-ui.html`, but it currently inherits the authenticated default route policy; browser access has not been verified. API requests use the Authorization header and do not require a CSRF token.
 
 ## Before extending the feature
 
-`LoanServiceTest` covers the main checkout, return, lost-resolution, role-scope, ownership, and history rules. `LoanSecurityMvcTest` checks route roles, principal-derived identity, and CSRF. `BookPersistenceIT` covers V4 schema validation and the concurrent catalog-edit/lost-resolution race; `LoanPersistenceIT` covers return persistence, the one-active-loan index, and deletion restrictions. A concurrent borrower-limit checkout test and the V3-to-V4 upgrade test remain open. Do not edit V4 after it has reached a persistent database; add a new forward-only migration. Keep the README relationship diagram and this guide synchronized with the entity and database model.
+`LoanServiceTest` covers the main checkout, return, lost-resolution, role-scope, ownership, and history rules. `LoanSecurityMvcTest` checks route roles, principal-derived identity, and header-only stateless requests. `BookPersistenceIT` covers fresh V1-to-V5 schema validation, the V4-to-V5 value-preserving upgrade, and the concurrent catalog-edit/lost-resolution race; `LoanPersistenceIT` covers return persistence, the one-active-loan index, and deletion restrictions. A concurrent borrower-limit checkout test and the V3-to-V4 upgrade test remain open. Do not edit an applied migration; add a new forward-only migration. Keep the README relationship diagram and this guide synchronized with the entity and database model.

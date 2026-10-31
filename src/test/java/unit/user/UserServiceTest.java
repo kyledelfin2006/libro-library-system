@@ -12,6 +12,7 @@ import app.user.exception.UserNotFoundException;
 import app.user.mapper.UserMapper;
 import app.user.repository.UserRepository;
 import app.user.service.UserService;
+import app.user.validation.PasswordPolicy;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validation;
 import jakarta.validation.ValidatorFactory;
@@ -90,6 +91,14 @@ class UserServiceTest {
 
         when(repository.findByUniversityId("2025-4321"))
                 .thenReturn(Optional.of(existingUser));
+    }
+
+    /** Confirms the BCrypt input guard accepts exactly 72 UTF-8 bytes and rejects overflow. */
+    @Test
+    void bcryptPasswordByteBoundaryAccepts72AndRejectsMore() {
+        assertTrue(PasswordPolicy.isWithinBcryptByteLimit("Ä".repeat(36)));
+        assertFalse(PasswordPolicy.isWithinBcryptByteLimit("Ä".repeat(37)));
+        assertFalse(PasswordPolicy.isWithinBcryptByteLimit("A".repeat(73)));
     }
 
     /** Verifies supplied values are trimmed, normalized, and applied. */
@@ -268,6 +277,19 @@ class UserServiceTest {
         assertEquals(UserRole.STUDENT, result.getUserRole());
     }
 
+    /** Verifies signup rejects multibyte input that exceeds BCrypt's byte boundary. */
+    @Test
+    void signupRejectsPasswordOverBcryptByteLimitBeforePersistence() {
+        String password = "Aa1!" + "Ä".repeat(35);
+        UserCreateRequestDTO request = new UserCreateRequestDTO(
+                "2025-8888", password, "Student", "Patron", null,
+                "student@example.edu", UserRole.STUDENT, UserCourse.IT, UserITMajor.SE);
+
+        assertThrows(IllegalArgumentException.class, () -> userService.createUser(request));
+
+        verifyNoInteractions(repository, passwordEncoder);
+    }
+
     @Test
     void createFaculty_usesFixedRoleForLibrarian() {
         UserCreateRequestDTO request = new UserCreateRequestDTO(
@@ -438,6 +460,17 @@ class UserServiceTest {
         }
 
         verify(repository, never()).findByUniversityId(anyString());
+    }
+
+    /** Verifies password changes enforce BCrypt's byte limit even for valid character counts. */
+    @Test
+    void updatePasswordRejectsMultibyteInputOverBcryptByteLimitBeforeLookup() {
+        String password = "Aa1!" + "Ä".repeat(35);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> updatePassword("2025-4321", new ChangePasswordDTO("Current1!", password)));
+
+        verifyNoInteractions(repository, passwordEncoder);
     }
 
     /** Verifies a missing user prevents password verification and encoding. */

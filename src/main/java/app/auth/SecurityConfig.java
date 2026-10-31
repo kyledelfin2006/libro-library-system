@@ -3,25 +3,55 @@ package app.auth;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
     /**
-     * Applies authentication and role rules to the HTTP API while retaining CSRF protection.
+     * Exposes the existing university-ID lookup and BCrypt check for the login endpoint.
+     *
+     * @param userDetailsService the repository-backed account lookup
+     * @param passwordEncoder the existing BCrypt password encoder
+     * @return the manager used by {@code AuthService}
+     */
+    @Bean
+    public AuthenticationManager authenticationManager(
+            LibroUserDetailsService userDetailsService,
+            PasswordEncoder passwordEncoder) {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
+        provider.setPasswordEncoder(passwordEncoder);
+        return new ProviderManager(provider);
+    }
+
+    /**
+     * Applies stateless Bearer authentication and the current route-role rules.
      *
      * @param http Spring Security HTTP configuration
+     * @param jwtAuthenticationConverter maps the validated Libro role claim
      * @return the configured filter chain
      * @throws Exception if the security chain cannot be built
      */
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(
+            HttpSecurity http,
+            JwtAuthenticationConverter jwtAuthenticationConverter) throws Exception {
         http
+                // Credentials are accepted only from the explicit Authorization header.
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.POST, "/app/users/signup").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/app/users/signup", "/app/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/app/users/faculty").hasRole("LIBRARIAN")
                         .requestMatchers(HttpMethod.POST, "/app/users/administrators").hasRole("LIBRARIAN")
 
@@ -60,7 +90,8 @@ public class SecurityConfig {
 
                         .anyRequest().authenticated()
                 )
-                .httpBasic(basic -> {});
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt ->
+                        jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
         return http.build();
     }
 }
