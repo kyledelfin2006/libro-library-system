@@ -69,7 +69,8 @@ Before changing a migration, establish whether that version has been applied to 
 ## Verification queue
 
 - [x] Run the PostgreSQL-backed integration profile with Docker and a test-only BCrypt hash.
-- [ ] Configure gateway throttling and monitoring for repeated login attempts before public internet exposure.
+- [x] Add configurable per-IP application throttling for public login and signup routes, standard 429 responses, and warning logs when a client reaches its quota.
+- [ ] Configure gateway throttling and monitoring for login and signup before public internet exposure; restrict direct app access and tune thresholds for the deployment.
 - [ ] Complete an independent security review before public internet exposure.
 
 ## Source documents

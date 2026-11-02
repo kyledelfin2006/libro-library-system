@@ -33,6 +33,7 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 - The project is a single-module Java 25 / Spring Boot 4.1 REST API using Spring MVC, Spring Data JPA, Hibernate, PostgreSQL, Flyway, and Maven.
 - Login at POST /app/auth/login authenticates through Spring Security, LibroUserDetailsService, and BCrypt, then issues a 15-minute HS256 JWT. Protected routes accept Bearer tokens only; HTTP Basic is removed.
 - POST /app/users/signup and POST /app/auth/login are public. All other routes require authentication. The filter chain is stateless and CSRF is disabled for this Authorization-header-only API.
+- Login and signup requests pass through a configurable per-IP fixed-window MVC interceptor after Spring Security and before body binding/controller invocation; over-limit requests return 429 without reaching the controller/service. Counters are per process and reset on restart. Use gateway throttling and private app ingress before scaling or public exposure.
 - JWT issuer/audience default to `libro-api`; `LIBRO_JWT_SECRET_BASE64` is required and must decode to at least 32 bytes. Tokens validate signature, issuer, single audience, time claims, subject, and exactly one known role. See [JWT Authentication Design](guiding-docs/jwt-authentication-design.md).
 - Passwords must satisfy the 8–72 character complexity policy and remain within BCrypt's 72 UTF-8 byte input limit. Signup, password changes, and login enforce the byte boundary.
 - The live UserRole values are STUDENT, FACULTY, ADMINISTRATOR, and LIBRARIAN.

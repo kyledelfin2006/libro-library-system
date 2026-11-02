@@ -5,6 +5,7 @@ import app.auth.LibroUserDetailsService;
 import app.auth.SecurityConfig;
 import app.auth.config.JwtConfiguration;
 import app.auth.config.JwtProperties;
+import app.auth.ratelimit.PublicRouteRateLimitConfig;
 import app.auth.controller.AuthAPI;
 import app.auth.service.AuthService;
 import app.book.controller.BookAPI;
@@ -79,6 +80,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
         AuthService.class,
         LibroUserDetailsService.class,
         PasswordConfig.class,
+        PublicRouteRateLimitConfig.class,
         GlobalExceptionHandler.class,
         SecurityFlowMvcTest.MockBeans.class
 })
@@ -252,8 +254,8 @@ class SecurityFlowMvcTest {
                 .andExpect(status().isUnauthorized())
                 .andReturn().getResponse().getContentAsString();
 
-        assertEquals(JsonPath.read(wrongPassword, "$.error"), JsonPath.read(unknownId, "$.error"));
-        assertEquals(JsonPath.read(wrongPassword, "$.details"), JsonPath.read(unknownId, "$.details"));
+        assertEquals((String) JsonPath.read(wrongPassword, "$.error"), (String) JsonPath.read(unknownId, "$.error"));
+        assertEquals((String) JsonPath.read(wrongPassword, "$.details"), (String) JsonPath.read(unknownId, "$.details"));
         assertEquals("University ID or password is incorrect", JsonPath.read(wrongPassword, "$.details"));
         verifyNoInteractions(bookService, bookMapper);
     }

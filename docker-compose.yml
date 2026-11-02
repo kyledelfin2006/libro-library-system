@@ -3,7 +3,7 @@
 #   mvn clean package              (builds target/*.jar for the Dockerfile)
 #   docker compose up --build
 # Docker Compose reads variables from the root .env file automatically.
-# Fill every value in that file before starting; these substitutions have no defaults.
+# Fill the required values before starting. Public-route limits have defaults and can be tuned in `.env`.
 services:
   # PostgreSQL stores the library data. Its named volume survives container
   # recreation and ordinary `docker compose down`; removing it with
@@ -56,6 +56,11 @@ services:
       LIBRO_JWT_ISSUER: ${LIBRO_JWT_ISSUER:-libro-api}
       LIBRO_JWT_AUDIENCE: ${LIBRO_JWT_AUDIENCE:-libro-api}
       LIBRO_JWT_ACCESS_TOKEN_TTL_SECONDS: ${LIBRO_JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
+      LIBRO_LOGIN_RATE_LIMIT_REQUESTS: ${LIBRO_LOGIN_RATE_LIMIT_REQUESTS:-20}
+      LIBRO_LOGIN_RATE_LIMIT_WINDOW_SECONDS: ${LIBRO_LOGIN_RATE_LIMIT_WINDOW_SECONDS:-60}
+      LIBRO_SIGNUP_RATE_LIMIT_REQUESTS: ${LIBRO_SIGNUP_RATE_LIMIT_REQUESTS:-10}
+      LIBRO_SIGNUP_RATE_LIMIT_WINDOW_SECONDS: ${LIBRO_SIGNUP_RATE_LIMIT_WINDOW_SECONDS:-3600}
+      LIBRO_RATE_LIMIT_MAX_TRACKED_CLIENT_ROUTES: ${LIBRO_RATE_LIMIT_MAX_TRACKED_CLIENT_ROUTES:-10000}
     ports:
       # Open the API on your computer at http://localhost:8080.
       - "8080:8080"

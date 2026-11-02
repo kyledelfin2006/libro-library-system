@@ -66,6 +66,7 @@ public class UserAPI {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "User created")
     @ErrorApiResponse(responseCode = "400", description = "Request validation failed or university ID/email is already registered")
     @ErrorApiResponse(responseCode = "409", description = "A database uniqueness constraint was concurrently violated")
+    @ErrorApiResponse(responseCode = "429", description = "This client has sent too many signup requests")
     public ResponseEntity<ApiResponse<UserResponseDTO>> createUser(
             @Valid @RequestBody UserCreateRequestDTO request) {
         return ResponseEntity.status(HttpStatus.CREATED)

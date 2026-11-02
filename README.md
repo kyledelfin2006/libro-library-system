@@ -26,6 +26,10 @@ The API contract is generated at [Swagger UI](http://localhost:8080/swagger-ui.h
 
 Main Developer: **Aldrin Kyle Delfin**
 
+## Hack4Gov 5
+
+My team, **CyberGuild**, placed among the top five teams in the **Hack4Gov 5 Regional Qualifying Round**, which focused on ethical hacking and cybersecurity principles.
+
 ## Tech Stack
 
 | Layer | Technology / Framework |
@@ -61,6 +65,7 @@ Main Developer: **Aldrin Kyle Delfin**
 * [Testing](#testing)
 * [Documentation](#documentation)
 * [Problems I Solved](#problems-i-solved)
+* [Hack4Gov 5](#hack4gov-5)
 * [Upcoming Improvements](#upcoming-improvements)
 * [License](#license)
 

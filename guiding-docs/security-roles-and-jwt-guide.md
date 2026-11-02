@@ -6,6 +6,7 @@ This guide records the live role, account, loan, and JWT policy. The detailed as
 
 - `POST /app/auth/login` authenticates through Spring Security, `LibroUserDetailsService`, and BCrypt, then issues a 15-minute HS256 access token.
 - Protected routes accept JWT Bearer tokens only. The filter chain is stateless and CSRF is disabled for the header-only API. Signup and login are the only public application POST routes.
+- Public login and signup requests are limited per client IP using configurable in-memory windows. The limits are per app instance and reset on restart; gateway throttling remains required before public exposure and multi-instance deployment.
 - `UserRole` contains `STUDENT`, `FACULTY`, `ADMINISTRATOR`, and `LIBRARIAN`; Flyway V3 adds the librarian value to the accepted database role constraint.
 - Role and account boundaries below remain in force under JWT. No librarian is seeded; first-account provisioning is deferred.
 - Loan routes and persistence are implemented under JWT. A `Book` row represents one physical copy; only one active loan may reference a copy, and a copy marked lost cannot be loaned again.
@@ -74,7 +75,7 @@ The approved loan period is 14 calendar days with no weekend or holiday extensio
 | Runtime state | Stateless; no session, refresh token, token table, or denylist; CSRF is disabled while only Authorization-header credentials are accepted |
 | Secret | `LIBRO_JWT_SECRET_BASE64` is required and must decode to at least 32 bytes; no default or source-controlled secret is used |
 | Stale claims | A role/password change or account deletion may leave an existing token usable through its expiry plus 30 seconds of clock skew |
-| Deployment | Require HTTPS and log redaction; gateway throttling and monitoring for repeated login attempts are required before public internet exposure |
+| Deployment | Require HTTPS and log redaction; app-level limits are per instance, so gateway throttling, trusted client-IP handling, and monitoring are required before public exposure |
 
 The login response contains `accessToken`, `tokenType: "Bearer"`, and `expiresIn: 900`, with no-store cache headers. Detailed claim rules, configuration keys, error responses, flow ownership, and negative-case coverage are in [JWT Authentication Design](jwt-authentication-design.md). Spring Security references: [Resource Server](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/index.html), [DAO password authentication](https://docs.spring.io/spring-security/reference/servlet/authentication/passwords/dao-authentication-provider.html), and [CSRF protection](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html).
 

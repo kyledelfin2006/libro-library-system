@@ -44,6 +44,7 @@ public class AuthAPI {
             description = "Authenticates a university ID and password. Invalid credentials receive the same generic 401 response. The access token expires within 15 minutes and is returned with no-store caching.")
     @ErrorApiResponse(responseCode = "400", description = "Login request is missing a valid university ID or password")
     @ErrorApiResponse(responseCode = "401", description = "University ID or password is incorrect")
+    @ErrorApiResponse(responseCode = "429", description = "This client has sent too many login requests")
     public ResponseEntity<TokenResponseDTO> login(@Valid @RequestBody LoginRequestDTO request) {
         // Never cache a response containing a bearer credential.
         return ResponseEntity.ok()

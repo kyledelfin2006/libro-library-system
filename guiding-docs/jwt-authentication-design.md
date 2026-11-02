@@ -23,8 +23,8 @@
 
 | Method and path | Authentication | Contract |
 | --- | --- | --- |
-| `POST /app/users/signup` | Public | Existing signup contract; service always assigns `STUDENT` |
-| `POST /app/auth/login` | Public | Validated credentials in; 200 token response on success; 400 for invalid request shape; generic 401 for rejected credentials |
+| `POST /app/users/signup` | Public | Existing signup contract; service always assigns `STUDENT`; 429 when the client IP exceeds its configured quota |
+| `POST /app/auth/login` | Public | Validated credentials in; 200 token response on success; 400 for invalid request shape; generic 401 for rejected credentials; 429 when the client IP exceeds its configured quota |
 | All other routes | Bearer token required | Existing role, ownership, and response contracts continue to apply |
 
 Login request:
@@ -32,6 +32,8 @@ Login request:
 ```json
 {"universityId":"2025-4321","password":"<user supplied password>"}
 ```
+
+For login and signup, Spring Security first permits the public route. Spring MVC then matches the route and calls `PublicRouteRateLimitInterceptor` before binding or validating the request body. If the client IP is over that route's quota, the interceptor returns HTTP 429 with `Retry-After` and the normal `ErrorResponse` body; it does not invoke the controller or service. Requests within quota continue through normal body validation and endpoint handling.
 
 Successful response:
 
@@ -86,6 +88,11 @@ Full role meanings and account-operation details are in the [role policy](securi
 | `LIBRO_JWT_ISSUER` | `libro.security.jwt.issuer` | `libro-api` | Non-blank exact issuer |
 | `LIBRO_JWT_AUDIENCE` | `libro.security.jwt.audience` | `libro-api` | Non-blank single audience |
 | `LIBRO_JWT_ACCESS_TOKEN_TTL_SECONDS` | `libro.security.jwt.access-token-ttl-seconds` | `900` | Positive and at most 900 seconds |
+| `LIBRO_LOGIN_RATE_LIMIT_REQUESTS` | `libro.security.rate-limit.login.requests` | `20` | Positive per-IP login quota in each fixed window |
+| `LIBRO_LOGIN_RATE_LIMIT_WINDOW_SECONDS` | `libro.security.rate-limit.login.window-seconds` | `60` | Positive and at most 86400 seconds |
+| `LIBRO_SIGNUP_RATE_LIMIT_REQUESTS` | `libro.security.rate-limit.signup.requests` | `10` | Positive per-IP signup quota in each fixed window |
+| `LIBRO_SIGNUP_RATE_LIMIT_WINDOW_SECONDS` | `libro.security.rate-limit.signup.window-seconds` | `3600` | Positive and at most 86400 seconds |
+| `LIBRO_RATE_LIMIT_MAX_TRACKED_CLIENT_ROUTES` | `libro.security.rate-limit.max-tracked-client-routes` | `10000` | At least 2; bounds in-memory route/address counters |
 
 Generate the key from cryptographically secure randomness and provide it through an untracked local environment file or deployment secret manager. For example, `openssl rand -base64 32` generates 32 random bytes and encodes them. Do not commit a real key, put one in a migration, or log one. Every application replica must share the same active key and issuer/audience settings. Replacing the shared HS256 key invalidates all existing tokens.
 
@@ -111,6 +118,7 @@ The protected-request path does not load the account from PostgreSQL again. This
 | Password exceeds 72 UTF-8 bytes at login | 401 | Same generic response as other rejected credentials |
 | Password exceeds 72 UTF-8 bytes at signup or password change | 400 | Shared validation response; no password value is echoed |
 | Unknown university ID or incorrect password | 401 | `{"error":"Authentication failed","details":"University ID or password is incorrect",...}` for both cases |
+| Login/signup client IP has used its configured quota | 429 | Shared `ErrorResponse` JSON and `Retry-After`; MVC interceptor short-circuits before body binding, controller, or service invocation |
 | Missing, malformed, expired, not-yet-valid, wrong-signature, wrong-key, wrong-algorithm, wrong-issuer, wrong-audience, or invalid-claims Bearer token | 401 | Spring Security response; it occurs before MVC `GlobalExceptionHandler` |
 | Valid token without required route role | 403 | Spring Security authorization response |
 | Valid token but owner/target role rule fails | Existing service/API response | JWT does not change service-level access checks; selected resources may retain the existing 404 concealment behavior |
@@ -124,6 +132,7 @@ Login errors use the shared JSON error envelope; Resource Server 401/403 errors 
 | Case | Expected result | Coverage |
 | --- | --- | --- |
 | Public signup and login | Reach their controllers without a Bearer token | `SecurityFlowMvcTest` |
+| Repeated request beyond configured public-route quota | 429 with positive `Retry-After`; independent route/IP counters | `PublicRouteRateLimitInterceptorTest` |
 | Correct credentials | Login returns a token that authenticates a protected book request | `SecurityFlowMvcTest` |
 | Unknown account vs wrong password | Same generic 401 details | `SecurityFlowMvcTest` |
 | 72 UTF-8 password bytes vs multibyte overflow | Exactly 72 accepted by the shared boundary; overflow rejected before BCrypt | `UserServiceTest`, `SecurityFlowMvcTest` |
@@ -146,7 +155,7 @@ The normal Maven test suite exercises the real filter and decoder with signed co
 | Limit | Current decision |
 | --- | --- |
 | Revocation | No refresh tokens, token registry, or denylist. Password/role changes and account deletion can leave a token usable through expiry plus 30 seconds of skew. |
-| Login abuse | Before public internet exposure, the gateway must throttle repeated `POST /app/auth/login` attempts and monitor abusive traffic. Thresholds are deployment-owned. |
+| Public route abuse | In-app fixed-window limits cover login and signup by remote IP. State is bounded, per process, and resets on restart; at capacity, an older counter can be evicted. Fixed windows can allow a boundary burst. Shared gateway throttling, trusted client-IP handling, and operational monitoring remain deployment requirements before public exposure or multi-instance scaling. |
 | Token theft | A bearer token can be replayed by anyone holding it until expiry. Use HTTPS, short lifetime, header-only transport, no-store responses, and log redaction. |
 | Browser storage | The API does not accept cookies. If a client later stores tokens in cookies, revisit CSRF; prefer a deliberate browser storage design and mitigate XSS. |
 | Key rotation | One shared HS256 key is used for issuing and validating. Coordinated rotation invalidates existing tokens; use asymmetric keys only if verification moves to separate services. |
