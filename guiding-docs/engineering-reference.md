@@ -29,6 +29,7 @@ The application is a single-module Spring Boot REST API for managing a library's
 | API documentation | Springdoc OpenAPI 3; Swagger UI and `/v3/api-docs`                   |
 
 The Maven coordinates are `kyle.com:library-api-system:1.0-SNAPSHOT`. The committed `mvnw`/`mvnw.cmd` scripts pin Maven 3.9.16 for local builds, CI, and Docker image builds.
+The POM overrides Boot's managed Jackson 3, Jackson 2, Spring Framework, and Tomcat versions with patched releases; revisit these overrides when Boot manages the same or newer versions. The runtime image also upgrades Alpine's `libexpat` package during its build.
 
 ## Repository Map
 
