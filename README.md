@@ -5,7 +5,7 @@
 </p>
 
 ![Java](https://img.shields.io/badge/Java-25-orange?logo=openjdk&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-6DB33F?logo=springboot&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.2-6DB33F?logo=springboot&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
 [![CI](https://github.com/kyledelfin2006/libro-library-system/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kyledelfin2006/libro-library-system/actions/workflows/ci.yml)
@@ -36,7 +36,7 @@ My team, **CyberGuild**, placed among the top five teams in the **Hack4Gov 5 Reg
 | Layer | Technology / Framework |
 | --- | --- |
 | Language | Java 25 |
-| Framework | Spring Boot 4.1.0 (Web, Data JPA, Security, OAuth2 Resource Server/JWT, Validation) |
+| Framework | Spring Boot 4.1.2 (Web, Data JPA, Security, OAuth2 Resource Server/JWT, Validation) |
 | Database | PostgreSQL 18 |
 | Migrations | Flyway 13.3.0 |
 | Containerization | Docker & Docker Compose |

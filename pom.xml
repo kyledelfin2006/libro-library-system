@@ -17,7 +17,7 @@
     <properties>
         <!-- Boot's parent maps this to maven.compiler.release, so the JDK level is declared exactly once. -->
         <java.version>25</java.version>
-        <!-- Spring Boot 4.1.0 manages Jackson 3.1.4; 3.1.7 fixes CVE-2026-91777. -->
+        <!-- Pin the patched Jackson 3.1 line for CVE-2026-91777. -->
         <jackson-bom.version>3.1.7</jackson-bom.version>
         <!-- Springdoc also brings Jackson 2; align that stack on its patched 2.21 line. -->
         <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
