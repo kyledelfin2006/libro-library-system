@@ -73,6 +73,21 @@ class PublicRouteRateLimitInterceptorTest {
         assertEquals(429, blocked.getStatus());
     }
 
+    /** Confirms each rejected request increments the per-route rejection counter used for abuse alerting. */
+    @Test
+    void rejectionIncrementsRouteCounter() throws Exception {
+        io.micrometer.core.instrument.simple.SimpleMeterRegistry registry =
+                new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        PublicRouteRateLimitInterceptor metered = new PublicRouteRateLimitInterceptor(
+                new RateLimitProperties(new RateLimitProperties.Limit(1, 60),
+                        new RateLimitProperties.Limit(1, 3600), 10), registry);
+
+        assertTrue(metered.preHandle(post("/app/auth/login", "10.0.0.9"), new MockHttpServletResponse(), this));
+        assertFalse(metered.preHandle(post("/app/auth/login", "10.0.0.9"), new MockHttpServletResponse(), this));
+
+        assertEquals(1.0, registry.counter("libro.rate_limit.rejections", "route", "/app/auth/login").count());
+    }
+
     /** Creates a request with an explicit source address so the per-client key is deterministic. */
     private MockHttpServletRequest post(String path, String remoteAddress) {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", path);

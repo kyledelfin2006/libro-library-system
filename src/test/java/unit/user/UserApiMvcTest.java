@@ -169,10 +169,10 @@ class UserApiMvcTest {
 
         mockMvc.perform(get("/app/users").principal(CALLER))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].universityId").value(USER_ID))
-                .andExpect(jsonPath("$.number").value(0))
-                .andExpect(jsonPath("$.size").value(12))
-                .andExpect(jsonPath("$.totalElements").value(1));
+                .andExpect(jsonPath("$.data.content[0].universityId").value(USER_ID))
+                .andExpect(jsonPath("$.data.number").value(0))
+                .andExpect(jsonPath("$.data.size").value(12))
+                .andExpect(jsonPath("$.data.totalElements").value(1));
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
         verify(service).getAllUsers(pageable.capture(), eq(USER_ID), anyCollection());
@@ -192,9 +192,9 @@ class UserApiMvcTest {
                         .queryParam("size", "2")
                         .queryParam("sort", "lastName,desc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.number").value(1))
-                .andExpect(jsonPath("$.size").value(2))
-                .andExpect(jsonPath("$.totalElements").value(3));
+                .andExpect(jsonPath("$.data.number").value(1))
+                .andExpect(jsonPath("$.data.size").value(2))
+                .andExpect(jsonPath("$.data.totalElements").value(3));
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
         verify(service).getAllUsers(pageable.capture(), eq(USER_ID), anyCollection());
@@ -209,10 +209,10 @@ class UserApiMvcTest {
 
         mockMvc.perform(get("/app/users/{universityId}", USER_ID).principal(CALLER))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.universityId").value(USER_ID))
-                .andExpect(jsonPath("$.firstName").value("Alex"))
-                .andExpect(jsonPath("$.password").doesNotExist())
-                .andExpect(jsonPath("$.passwordHash").doesNotExist());
+                .andExpect(jsonPath("$.data.universityId").value(USER_ID))
+                .andExpect(jsonPath("$.data.firstName").value("Alex"))
+                .andExpect(jsonPath("$.data.password").doesNotExist())
+                .andExpect(jsonPath("$.data.passwordHash").doesNotExist());
     }
 
     @Test

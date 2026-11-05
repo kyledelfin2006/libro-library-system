@@ -5,14 +5,18 @@ import app.auth.dto.LoginRequestDTO;
 import app.auth.dto.TokenResponseDTO;
 import app.user.entity.enums.UserRole;
 import app.user.validation.PasswordPolicy;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -28,6 +32,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtEncoder jwtEncoder;
     private final JwtProperties jwtProperties;
+    private final MeterRegistry meterRegistry;
 
     /**
      * Creates the login service.
@@ -35,13 +40,24 @@ public class AuthService {
      * @param authenticationManager existing user lookup and BCrypt authentication provider
      * @param jwtEncoder Nimbus-backed signer configured with the deployment key
      * @param jwtProperties trusted issuer, audience, and token lifetime
+     * @param meterRegistry metrics registry for login outcome counters; a throwaway registry is used in slices without one
      */
     public AuthService(AuthenticationManager authenticationManager,
                        JwtEncoder jwtEncoder,
-                       JwtProperties jwtProperties) {
+                       JwtProperties jwtProperties,
+                       ObjectProvider<MeterRegistry> meterRegistry) {
         this.authenticationManager = authenticationManager;
         this.jwtEncoder = jwtEncoder;
         this.jwtProperties = jwtProperties;
+        this.meterRegistry = meterRegistry.getIfAvailable(SimpleMeterRegistry::new);
+    }
+
+    /**
+     * Increments the login outcome counter. Only the outcome is tagged: account identifiers would create unbounded
+     * metric cardinality and put personal data in the metrics system.
+     */
+    private void recordLogin(String result) {
+        meterRegistry.counter("libro.auth.logins", "result", result).increment();
     }
 
     /**
@@ -53,12 +69,21 @@ public class AuthService {
     public TokenResponseDTO login(LoginRequestDTO request) {
         // BCrypt has a 72-byte input boundary; reject multibyte overlength input before password work.
         if (!PasswordPolicy.isWithinBcryptByteLimit(request.getPassword())) {
+            recordLogin("failure");
             throw new BadCredentialsException("University ID or password is incorrect");
         }
 
-        Authentication authentication = authenticationManager.authenticate(
-                UsernamePasswordAuthenticationToken.unauthenticated(
-                        request.getUniversityId(), request.getPassword()));
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(
+                    UsernamePasswordAuthenticationToken.unauthenticated(
+                            request.getUniversityId(), request.getPassword()));
+        } catch (AuthenticationException e) {
+            // Count rejected credentials so a password-guessing burst is visible to alerting, then rethrow unchanged.
+            recordLogin("failure");
+            throw e;
+        }
+        recordLogin("success");
         String role = authenticatedLibroRole(authentication);
         Instant issuedAt = Instant.now();
         Instant expiresAt = issuedAt.plusSeconds(jwtProperties.accessTokenTtlSeconds());

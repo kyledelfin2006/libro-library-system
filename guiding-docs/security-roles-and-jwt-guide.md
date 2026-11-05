@@ -75,9 +75,9 @@ The approved loan period is 14 calendar days with no weekend or holiday extensio
 | Runtime state | Stateless; no session, refresh token, token table, or denylist; CSRF is disabled while only Authorization-header credentials are accepted |
 | Secret | `LIBRO_JWT_SECRET_BASE64` is required and must decode to at least 32 bytes; no default or source-controlled secret is used |
 | Stale claims | A role/password change or account deletion may leave an existing token usable through its expiry plus 30 seconds of clock skew |
-| Deployment | Require HTTPS and log redaction; app-level limits are per instance, so gateway throttling, trusted client-IP handling, and monitoring are required before public exposure |
+| Deployment | Require HTTPS (the optional `proxy` Compose profile terminates TLS with Caddy) and log redaction; app-level limits are per instance, so gateway throttling, trusted client-IP handling, and monitoring are required before public exposure |
 
-The login response contains `accessToken`, `tokenType: "Bearer"`, and `expiresIn: 900`, with no-store cache headers. Detailed claim rules, configuration keys, error responses, flow ownership, and negative-case coverage are in [JWT Authentication Design](jwt-authentication-design.md). Spring Security references: [Resource Server](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/index.html), [DAO password authentication](https://docs.spring.io/spring-security/reference/servlet/authentication/passwords/dao-authentication-provider.html), and [CSRF protection](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html).
+The login response is an `ApiResponse` whose `data` contains `accessToken`, `tokenType: "Bearer"`, and `expiresIn: 900`, with no-store cache headers. Detailed claim rules, configuration keys, error responses, flow ownership, and negative-case coverage are in [JWT Authentication Design](jwt-authentication-design.md). Spring Security references: [Resource Server](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/index.html), [DAO password authentication](https://docs.spring.io/spring-security/reference/servlet/authentication/passwords/dao-authentication-provider.html), and [CSRF protection](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html).
 
 ## Verification boundaries
 

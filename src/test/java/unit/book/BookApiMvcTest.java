@@ -151,11 +151,11 @@ class BookApiMvcTest {
 
         mockMvc.perform(get("/app/books/1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.title").value("1984"))
-                .andExpect(jsonPath("$.description").value("A dystopian novel about surveillance."))
-                .andExpect(jsonPath("$.replacementCost").value(19.99))
-                .andExpect(jsonPath("$.createdAt").doesNotExist());
+                .andExpect(jsonPath("$.data.id").value(1))
+                .andExpect(jsonPath("$.data.title").value("1984"))
+                .andExpect(jsonPath("$.data.description").value("A dystopian novel about surveillance."))
+                .andExpect(jsonPath("$.data.replacementCost").value(19.99))
+                .andExpect(jsonPath("$.data.createdAt").doesNotExist());
     }
 
     @Test
@@ -195,12 +195,12 @@ class BookApiMvcTest {
                         .queryParam("size", "2")
                         .queryParam("sort", "replacementCost,desc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].id").value(1))
-                .andExpect(jsonPath("$.content[0].title").value("1984"))
-                .andExpect(jsonPath("$.number").value(1))
-                .andExpect(jsonPath("$.size").value(2))
-                .andExpect(jsonPath("$.totalElements").value(5))
-                .andExpect(jsonPath("$.totalPages").value(3));
+                .andExpect(jsonPath("$.data.content[0].id").value(1))
+                .andExpect(jsonPath("$.data.content[0].title").value("1984"))
+                .andExpect(jsonPath("$.data.number").value(1))
+                .andExpect(jsonPath("$.data.size").value(2))
+                .andExpect(jsonPath("$.data.totalElements").value(5))
+                .andExpect(jsonPath("$.data.totalPages").value(3));
 
         org.mockito.ArgumentCaptor<Pageable> pageable = org.mockito.ArgumentCaptor.forClass(Pageable.class);
         verify(service).getBooks(pageable.capture());
@@ -227,9 +227,9 @@ class BookApiMvcTest {
                         .queryParam("size", "2")
                         .queryParam("sort", "replacementCost,desc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].id").value(1))
-                .andExpect(jsonPath("$.totalElements").value(5))
-                .andExpect(jsonPath("$.totalPages").value(3));
+                .andExpect(jsonPath("$.data.content[0].id").value(1))
+                .andExpect(jsonPath("$.data.totalElements").value(5))
+                .andExpect(jsonPath("$.data.totalPages").value(3));
 
         var page = org.mockito.ArgumentCaptor.forClass(Pageable.class);
         verify(service).queryBooks(org.mockito.Mockito.eq("farm"), org.mockito.Mockito.eq("orwell"),
@@ -255,7 +255,7 @@ class BookApiMvcTest {
                 .thenReturn(new PageImpl<>(List.of()));
         mockMvc.perform(get("/app/books/query"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(0));
+                .andExpect(jsonPath("$.data.totalElements").value(0));
 
         var page = org.mockito.ArgumentCaptor.forClass(Pageable.class);
         verify(service).queryBooks(any(), any(), any(), any(), any(), page.capture());
@@ -284,8 +284,8 @@ class BookApiMvcTest {
                         .queryParam("type", "author")
                         .queryParam("value", "orwell"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].id").value(1))
-                .andExpect(jsonPath("$.content[0].author").value("George Orwell"));
+                .andExpect(jsonPath("$.data.content[0].id").value(1))
+                .andExpect(jsonPath("$.data.content[0].author").value("George Orwell"));
 
         verify(service).searchBooks(eq("author"), eq("orwell"), any(Pageable.class));
     }
@@ -299,7 +299,7 @@ class BookApiMvcTest {
                         .queryParam("minReplacementCost", "10.00")
                         .queryParam("maxReplacementCost", "25.00"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content").isEmpty());
+                .andExpect(jsonPath("$.data.content").isEmpty());
 
         verify(service).getBooksInReplacementCostRange(eq(new BigDecimal("10.00")), eq(new BigDecimal("25.00")),
                 any(Pageable.class));
@@ -349,9 +349,9 @@ class BookApiMvcTest {
 
         mockMvc.perform(get("/app/books/stats"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalBooks").value(6))
-                .andExpect(jsonPath("$.totalReplacementCost").value(123.45))
-                .andExpect(jsonPath("$.highestReplacementCostBook.id").value(4));
+                .andExpect(jsonPath("$.data.totalBooks").value(6))
+                .andExpect(jsonPath("$.data.totalReplacementCost").value(123.45))
+                .andExpect(jsonPath("$.data.highestReplacementCostBook.id").value(4));
     }
 
     private Book book(Long id) {

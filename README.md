@@ -23,7 +23,7 @@ Each catalog record is one physical copy. Replacement cost records its value for
 
 ### API access
 
-The API contract is generated at [Swagger UI](http://localhost:8080/swagger-ui.html) and [`/v3/api-docs`](http://localhost:8080/v3/api-docs). Both documentation routes are **public by default** so UI developers can browse the contract without a token; set `LIBRO_API_DOCS_ENABLED=false` to remove them in production. Every other route except `POST /app/users/signup`, `POST /app/auth/login` and the health probes requires a Bearer token. The API is stateless and does not require a CSRF token for header-authenticated requests. See [JWT Authentication Design](guiding-docs/jwt-authentication-design.md), [Institutional Context](docs/institutional-context.md), and the [API Documentation Guideline](docs/api-documentation-guideline.md).
+The API contract is generated at [Swagger UI](http://localhost:8080/swagger-ui.html) and [`/v3/api-docs`](http://localhost:8080/v3/api-docs). Both documentation routes are **disabled by default**; set `LIBRO_API_DOCS_ENABLED=true` (the local `.env.example` does) to serve them publicly without a token. Every other route except `POST /app/users/signup`, `POST /app/auth/login` and the health probes requires a Bearer token. The API is stateless and does not require a CSRF token for header-authenticated requests. See [JWT Authentication Design](guiding-docs/jwt-authentication-design.md), [Institutional Context](docs/institutional-context.md), and the [API Documentation Guideline](docs/api-documentation-guideline.md).
 
 Main Developer: **Aldrin Kyle Delfin**
 
@@ -186,7 +186,7 @@ Account and loan access is checked against the authenticated user's university I
 
 | Current rule | Allowed access |
 | --- | --- |
-| Public operations | POST /app/users/signup; POST /app/auth/login; GET /actuator/health/liveness and /actuator/health/readiness |
+| Public operations | POST /app/users/signup; POST /app/auth/login; GET /livez and /readyz |
 | Read books | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN |
 | Add, update, or delete books | ADMINISTRATOR, LIBRARIAN |
 | Create school faculty and library assistant accounts | LIBRARIAN |
@@ -285,7 +285,7 @@ AGENTS.md
 README.md
 Dockerfile
 docker-compose.yml
-envFileExample
+.env.example
 pom.xml
 docs/
   api-documentation-guideline.md
@@ -306,6 +306,7 @@ src/main/java/app/
     controller/AuthAPI.java
     dto/LoginRequestDTO.java and TokenResponseDTO.java
     service/AuthService.java
+    JsonSecurityErrorHandler.java
     SecurityConfig.java
     LibroUserDetailsService.java
   loan/
@@ -346,6 +347,10 @@ src/main/java/app/
       ErrorApiResponse.java and ErrorApiResponses.java
     exceptions/
       GlobalExceptionHandler.java
+    logging/
+      RequestIdFilter.java
+    time/
+      LibraryTime.java
     responses/
       ApiResponse.java
       ErrorResponse.java
@@ -474,7 +479,7 @@ Each `Book` is one physical borrowable copy. Separate copies can share a title o
 - Create, view, replace, partially update, and delete copy records.
 - Search by title, author, genre, or exact replacement cost; combine text and inclusive replacement-cost filters.
 - Paginate and sort results, with supported sort fields validated by the API.
-- Filter by a replacement-cost range or a maximum budget. Every list endpoint is paginated (zero-based `page`, default `size` 12, maximum 100, `sort=property,direction`).
+- Filter by a replacement-cost range or a maximum budget. Every successful response uses the `ApiResponse` envelope (`success`, `message`, `data`, `timestamp`); errors use `ErrorResponse`. Every list endpoint is paginated (zero-based `page`, default `size` 12, maximum 100, `sort=property,direction`).
 - Record an optional description and a positive replacement cost. Replacement cost is catalog information, not a fee charged to a borrower.
 
 ### Collection insight
@@ -615,23 +620,23 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 
 | Method | Path | Description | Example Request | Example Response |
 | --- | --- | --- | --- | --- |
-| `GET` | `/app/books/all` | Returns a paginated list of books | `GET /app/books/all?page=0&size=12&sort=id,asc` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}],"pageable":{...}}` |
-| `GET` | `/app/books/query` | Paginates books with optional title, author, genre, and inclusive replacement cost filters | `GET /app/books/query?author=orwell&minReplacementCost=10&sort=replacementCost,desc&page=0&size=12` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}],"totalElements":1,"totalPages":1,...}` |
-| `GET` | `/app/books/{id}` | Fetches a single book by ID | `GET /app/books/1` | `{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}` |
+| `GET` | `/app/books/all` | Returns a paginated list of books | `GET /app/books/all?page=0&size=12&sort=id,asc` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}],"pageable":{...}}}` |
+| `GET` | `/app/books/query` | Paginates books with optional title, author, genre, and inclusive replacement cost filters | `GET /app/books/query?author=orwell&minReplacementCost=10&sort=replacementCost,desc&page=0&size=12` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}],"totalElements":1,"totalPages":1,...}}` |
+| `GET` | `/app/books/{id}` | Fetches a single book by ID | `GET /app/books/1` | `{"success":true,"message":"Success","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}}` |
 | `POST` | `/app/books/add` | Creates a new book using `BookRequestDTO` validation | `POST /app/books/add` with `{"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}` | `{"success":true,"message":"Book Added Successfully","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99},"timestamp":172...}` |
 | `PATCH` | `/app/books/{id}` | Partially updates a book | `PATCH /app/books/1` with `{"replacementCost":15.99}` | `{"success":true,"message":"Book updated successfully","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":15.99},"timestamp":172...}` |
 | `PUT` | `/app/books/{id}` | Replaces a book completely | `PUT /app/books/1` with full DTO payload | `{"success":true,"message":"Book updated successfully","data":{"id":1,"title":"Animal Farm","author":"George Orwell","genre":"Political Satire","description":"A farmyard allegory.","replacementCost":12.99},"timestamp":172...}` |
 | `DELETE` | `/app/books/{id}` | Deletes a book by ID | `DELETE /app/books/1` | `{"success":true,"message":"Book deleted successfully","timestamp":172...}` |
-| `GET` | `/app/books/search?type=title&value=orwell` | Searches by title, author, genre, or replacement cost (paginated) | `GET /app/books/search?type=author&value=orwell&page=0&size=12` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}` |
-| `GET` | `/app/books/budget?maxReplacementCost=20` | Returns a page of copies with a replacement cost at or below the given value | `GET /app/books/budget?maxReplacementCost=20` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}` |
-| `GET` | `/app/books/sorted?category=title` | Returns a page sorted ascending by title, author, genre, replacement cost, or id | `GET /app/books/sorted?category=replacementCost&page=0&size=12` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}` |
-| `GET` | `/app/books/genre` | Returns genre distribution counts | `GET /app/books/genre` | `{"Fiction":3,"Fantasy":2,"Dystopian":1}` |
-| `GET` | `/app/books/replacement-cost?minReplacementCost=10&maxReplacementCost=25` | Returns a page of books within a replacement cost range | `GET /app/books/replacement-cost?minReplacementCost=10&maxReplacementCost=25` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}` |
-| `GET` | `/app/books/stats` | Returns total books, total replacement cost, and the copy with the highest replacement cost | `GET /app/books/stats` | `{"totalBooks":6,"totalReplacementCost":123.45,"highestReplacementCostBook":{"id":4,"title":"...","author":"...","genre":"...","replacementCost":49.99}}` |
+| `GET` | `/app/books/search?type=title&value=orwell` | Searches by title, author, genre, or replacement cost (paginated) | `GET /app/books/search?type=author&value=orwell&page=0&size=12` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}}` |
+| `GET` | `/app/books/budget?maxReplacementCost=20` | Returns a page of copies with a replacement cost at or below the given value | `GET /app/books/budget?maxReplacementCost=20` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}}` |
+| `GET` | `/app/books/sorted?category=title` | Returns a page sorted ascending by title, author, genre, replacement cost, or id | `GET /app/books/sorted?category=replacementCost&page=0&size=12` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}}` |
+| `GET` | `/app/books/genre` | Returns genre distribution counts | `GET /app/books/genre` | `{"success":true,"message":"Success","data":{"Fiction":3,"Fantasy":2,"Dystopian":1}}` |
+| `GET` | `/app/books/replacement-cost?minReplacementCost=10&maxReplacementCost=25` | Returns a page of books within a replacement cost range | `GET /app/books/replacement-cost?minReplacementCost=10&maxReplacementCost=25` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}}` |
+| `GET` | `/app/books/stats` | Returns total books, total replacement cost, and the copy with the highest replacement cost | `GET /app/books/stats` | `{"success":true,"message":"Success","data":{"totalBooks":6,"totalReplacementCost":123.45,"highestReplacementCostBook":{"id":4,"title":"...","author":"...","genre":"...","replacementCost":49.99}}}` |
 | `GET` | `/app/books/stats/average-replacement-cost` | Returns the average replacement cost of all books | `GET /app/books/stats/average-replacement-cost` | `{"success":true,"message":"Average replacement cost of collection","data":20.50,"timestamp":172...}` |
 | `GET` | `/app/books/stats/count` | Returns the total number of books | `GET /app/books/stats/count` | `{"success":true,"message":"Book Collection Count","data":6,"timestamp":172...}` |
 
-Unauthenticated operational probes are `GET /actuator/health/liveness` and `GET /actuator/health/readiness`. Readiness includes the database health indicator; details are hidden and no other Actuator endpoint is exposed.
+Unauthenticated operational probes are `GET /livez` and `GET /readyz`. Readiness includes the database health indicator; details are hidden. Actuator `health` and the Prometheus scrape endpoint (`/actuator/prometheus`) are served only on a private management port (`MANAGEMENT_SERVER_PORT`, default 9091), which Compose does not publish. Every response carries an `X-Request-Id` header that also appears in logs and in the `requestId` field of error bodies.
 
 `/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minReplacementCost` and `maxReplacementCost` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `replacementCost`; invalid ranges, decimals, or sort fields return HTTP 400. The `replacementCost` JSON field is the recorded amount used to replace one physical copy; it does not trigger a charge. `description` is optional and limited to 2,000 characters. Existing list routes retain their response shapes apart from the renamed and added book fields. `BookResponseDTO` also includes `copyStatus` (`IN_COLLECTION` or `LOST`); the compact book examples above omit it for readability.
 
@@ -641,7 +646,7 @@ Unauthenticated operational probes are `GET /actuator/health/liveness` and `GET 
 
 | Method | Path | Description | Request | Response |
 | --- | --- | --- | --- | --- |
-| `POST` | `/app/auth/login` | Public login; authenticates through Spring Security and BCrypt | `{"universityId":"2025-4321","password":"<password>"}` | `{"accessToken":"<signed-token>","tokenType":"Bearer","expiresIn":900}` |
+| `POST` | `/app/auth/login` | Public login; authenticates through Spring Security and BCrypt | `{"universityId":"2025-4321","password":"<password>"}` | `{"success":true,"message":"Success","data":{"accessToken":"<signed-token>","tokenType":"Bearer","expiresIn":900}}` |
 
 ### User API
 
@@ -649,8 +654,8 @@ Signup is public and always creates a student. Only librarians can create facult
 
 | Method | Path | Description | Example Request | Example Response |
 | --- | --- | --- | --- | --- |
-| `GET` | `/app/users` | Lists student/faculty accounts for administrators; librarians also see library assistants | `GET /app/users?page=0&size=12` | Spring `Page<UserResponseDTO>` |
-| `GET` | `/app/users/{universityId}` | Gets own profile or a profile visible to the caller's staff role | `GET /app/users/2025-4321` | `UserResponseDTO` |
+| `GET` | `/app/users` | Lists student/faculty accounts for administrators; librarians also see library assistants | `GET /app/users?page=0&size=12` | `ApiResponse<Page<UserResponseDTO>>` |
+| `GET` | `/app/users/{universityId}` | Gets own profile or a profile visible to the caller's staff role | `GET /app/users/2025-4321` | `ApiResponse<UserResponseDTO>` |
 | `POST` | `/app/users/signup` | Creates a user account | `POST /app/users/signup` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 | `POST` | `/app/users/faculty` | Librarian creates a faculty account | `POST /app/users/faculty` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 | `PATCH` | `/app/users/{universityId}` | Updates supplied profile fields | `PATCH /app/users/2025-4321` with `UserCreateUpdateDTO` | `ApiResponse<UserResponseDTO>` |
@@ -677,7 +682,7 @@ Docker is the preferred way to run the project because it brings up both Postgre
 
 1. Create your environment file from the example:
     ```powershell
-    Copy-Item envFileExample .env
+    Copy-Item .env.example .env
     ```
     Use values like:
     ```env
@@ -687,12 +692,13 @@ Docker is the preferred way to run the project because it brings up both Postgre
     LIBRO_ADMIN_PASSWORD_HASH=<BCrypt hash for a password you choose>
     LIBRO_JWT_SECRET_BASE64=<output of openssl rand -base64 32>
     ```
-    Replace both placeholders before starting the app. Flyway V2 seeds the historical `ADMINISTRATOR` account (library-assistant role) as university ID `0000-0000`; no librarian is seeded by migration. For the first librarian, optionally set all five `LIBRO_BOOTSTRAP_LIBRARIAN_*` values in `envFileExample`, including a BCrypt hash, before startup. The application creates that account once and ignores the bootstrap values after any librarian exists. Keep `.env` private.
+    Replace both placeholders before starting the app. Flyway V2 seeds the historical `ADMINISTRATOR` account (library-assistant role) as university ID `0000-0000`; no librarian is seeded by migration. For the first librarian, optionally set all five `LIBRO_BOOTSTRAP_LIBRARIAN_*` values in `.env.example`, including a BCrypt hash, before startup. The application creates that account once and ignores the bootstrap values after any librarian exists. Keep `.env` private.
 2. Start the full stack; Docker builds the JAR from a clean checkout:
     ```bash
     docker compose up --build
     ```
-3. Check `http://localhost:8080/actuator/health/readiness` without a token. Log in through `POST /app/auth/login`, then send the returned token as a Bearer credential on protected API requests. Swagger UI and `/v3/api-docs` are public unless `LIBRO_API_DOCS_ENABLED=false`.
+    To terminate TLS in front of the API, add the optional Caddy proxy profile, set `LIBRO_DOMAIN` and `SERVER_FORWARD_HEADERS_STRATEGY=native` in `.env`, and start with `docker compose --profile proxy up --build`. The proxy listens on ports 80 and 443 and is the only public entry point; the app and database stay on `127.0.0.1`. See [`deploy/Caddyfile`](deploy/Caddyfile).
+3. Check `http://localhost:8080/readyz` without a token. Log in through `POST /app/auth/login`, then send the returned token as a Bearer credential on protected API requests. Swagger UI and `/v3/api-docs` are served only when `LIBRO_API_DOCS_ENABLED=true` (set in the local `.env`).
 
 Set `LIBRO_CORS_ALLOWED_ORIGINS` to a comma-separated list of exact UI origins to enable browser access; it defaults to blank and wildcards are rejected. Set `SERVER_FORWARD_HEADERS_STRATEGY=native` only when the app port is reachable exclusively from the trusted OCI load balancer or proxy. The default is `none`.
 
@@ -739,10 +745,10 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 
 ## Quick Start
 
-1. Copy `envFileExample` to `.env` and fill in PostgreSQL credentials, the BCrypt `LIBRO_ADMIN_PASSWORD_HASH`, and a random `LIBRO_JWT_SECRET_BASE64` from `openssl rand -base64 32`.
+1. Copy `.env.example` to `.env` and fill in PostgreSQL credentials, the BCrypt `LIBRO_ADMIN_PASSWORD_HASH`, and a random `LIBRO_JWT_SECRET_BASE64` from `openssl rand -base64 32`.
 2. Optionally set all five `LIBRO_BOOTSTRAP_LIBRARIAN_*` values, using a BCrypt hash, to provision the first librarian at startup.
 3. Run `docker compose up --build`; Docker builds the application from source.
-4. Probe `http://localhost:8080/actuator/health/readiness` without a token.
+4. Probe `http://localhost:8080/readyz` without a token.
 
 ## Data Management
 
@@ -774,7 +780,7 @@ Tests are grouped by test scope and domain: `src/test/java/unit/auth`, `src/test
 - `BookApiMvcTest` verifies routes, status codes, JSON response shapes, invalid request payloads, pagination/query binding, and global exception responses without starting JPA or PostgreSQL.
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.
 - `BookServiceTest` verifies service rules, repository interaction, search, sorting, replacement-cost behavior, typed statistics projections, genre-distribution mapping, and dirty-checking expectations.
-- `UserApiMvcTest` verifies all user routes, request binding and validation, paging defaults, direct DTO versus envelope response shapes, 404/409 error responses, and that public responses do not expose password fields. It mocks `UserService` and does not start JPA or PostgreSQL.
+- `UserApiMvcTest` verifies all user routes, request binding and validation, paging defaults, envelope response shapes, 404/409 error responses, and that public responses do not expose password fields. It mocks `UserService` and does not start JPA or PostgreSQL.
 - `SecurityFlowMvcTest` exercises the real filter chain, CORS preflight allow/deny rules, BCrypt login, JWT issue/validation, claim/signature/algorithm/transport edge cases, role denials, and Basic rejection with a mocked user repository.
 - `HealthEndpointMvcTest` checks public readiness output and protects unexposed Actuator paths.
 - `PublicRouteRateLimitInterceptorTest` checks per-client quotas, Spring forwarded-header address handling, and rejection of spoofed forwarding headers when proxy handling is off.
@@ -871,7 +877,7 @@ The [Development Problems Solved](docs/development-problems-solved.md) write-up 
 ## Upcoming Improvements
 
 - Review the generated OpenAPI document and Swagger UI in a browser; verify parameter defaults, request/response schemas, statuses, errors, and examples against the implementation.
-- Configure and verify gateway throttling and monitoring for repeated login attempts before public internet exposure.
+- Deploy behind TLS (the `proxy` profile or an OCI load balancer) and alert on `libro.auth.logins{result="failure"}` and `libro.rate_limit.rejections` before public internet exposure; see the [JWT Authentication Design](guiding-docs/jwt-authentication-design.md) for the abuse-control and revocation policy.
 - Add a V3-to-V4 migration upgrade test against PostgreSQL.
 - Benchmark case-insensitive substring searches as the catalog grows; add database search indexes only if measurements justify them.
 

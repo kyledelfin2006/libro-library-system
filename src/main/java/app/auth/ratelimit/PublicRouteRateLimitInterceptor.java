@@ -1,5 +1,7 @@
 package app.auth.ratelimit;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +20,7 @@ import java.util.Map;
 public class PublicRouteRateLimitInterceptor implements HandlerInterceptor {
 
     private final RateLimitProperties properties;
+    private final MeterRegistry meterRegistry;
     private final Map<ClientRoute, RequestWindow> windows = new LinkedHashMap<>();
     private long requestsSinceCleanup;
 
@@ -27,7 +30,18 @@ public class PublicRouteRateLimitInterceptor implements HandlerInterceptor {
      * @param properties configured quotas and maximum tracked client count
      */
     public PublicRouteRateLimitInterceptor(RateLimitProperties properties) {
+        this(properties, new SimpleMeterRegistry());
+    }
+
+    /**
+     * Creates the limiter and records rejections in the supplied metrics registry.
+     *
+     * @param properties configured quotas and maximum tracked client count
+     * @param meterRegistry registry that receives the {@code libro.rate_limit.rejections} counter
+     */
+    public PublicRouteRateLimitInterceptor(RateLimitProperties properties, MeterRegistry meterRegistry) {
         this.properties = properties;
+        this.meterRegistry = meterRegistry;
     }
 
     /**
@@ -67,6 +81,8 @@ public class PublicRouteRateLimitInterceptor implements HandlerInterceptor {
             return true;
         }
 
+        // Count rejections per route (never per client address) so a credential-stuffing spike is visible to alerts.
+        meterRegistry.counter("libro.rate_limit.rejections", "route", route).increment();
         response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
         response.setHeader("Retry-After", Long.toString(retryAfter));
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);

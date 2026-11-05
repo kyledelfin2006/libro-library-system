@@ -27,7 +27,7 @@ ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -Duser.timezone=Asia/Manila"
 USER libro
 # Document the HTTP port used by the API and health probes.
 EXPOSE 8080
-# Probe /actuator/health/readiness every 30s; allow 60s for migrations, then require success within 5s for three retries.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD wget -qO- http://127.0.0.1:8080/actuator/health/readiness || exit 1
+# Probe /readyz every 30s; allow 60s for migrations, then require success within 5s for three retries.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD wget -qO- http://127.0.0.1:8080/readyz || exit 1
 # Start the packaged Spring Boot application in the foreground for container supervision.
 ENTRYPOINT ["java", "-jar", "app.jar"]

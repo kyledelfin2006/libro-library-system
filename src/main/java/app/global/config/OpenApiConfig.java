@@ -24,7 +24,7 @@ import org.springframework.context.annotation.Configuration;
                 description = "Book collection, user account, and loan API for the Libro library management system prototype. "
                         + "POST /app/users/signup and POST /app/auth/login are public; all other routes require a 15-minute JWT Bearer access token issued by this API. "
                         + "Signup creates student patron accounts only. Only the library librarian creates school faculty and library assistant accounts. All roles may read books; library assistants and the librarian may add, update, or delete books. Library assistants may view and manage student/faculty accounts; the librarian may also manage library assistant accounts. Students and faculty may delete their own accounts. The API is stateless and accepts credentials only in the Authorization header.",
-                license = @License(name = "Project-specific prototype; no distribution license declared")
+                license = @License(name = "MIT", url = "https://opensource.org/licenses/MIT")
         )
 )
 public class OpenApiConfig {

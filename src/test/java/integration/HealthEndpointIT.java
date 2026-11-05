@@ -30,7 +30,7 @@ class HealthEndpointIT {
     /** Confirms anonymous liveness/readiness probes return minimal UP responses and other Actuator paths stay private. */
     @Test
     void exposesOnlyMinimalAnonymousHealthProbes() throws Exception {
-        for (String path : new String[]{"/actuator/health/liveness", "/actuator/health/readiness"}) {
+        for (String path : new String[]{"/livez", "/readyz"}) {
             HttpResponse<String> response = get(path);
 
             // Plain string checks avoid depending on a particular Jackson major version in this test.

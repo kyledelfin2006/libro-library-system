@@ -167,7 +167,7 @@ V4 adds `books.copy_status` and `loans`. Loan foreign keys use `ON DELETE RESTRI
 
 Prerequisites are Java 25, Maven 3.x, and Docker Desktop if you want PostgreSQL through Compose. There is no Maven wrapper in this repository.
 
-1. Copy `envFileExample` to `.env`, set `LIBRO_ADMIN_PASSWORD_HASH` to a BCrypt hash, and set `LIBRO_JWT_SECRET_BASE64` to a random Base64 key generated with `openssl rand -base64 32`. Do not put a plaintext password or real secret in source control.
+1. Copy `.env.example` to `.env`, set `LIBRO_ADMIN_PASSWORD_HASH` to a BCrypt hash, and set `LIBRO_JWT_SECRET_BASE64` to a random Base64 key generated with `openssl rand -base64 32`. Do not put a plaintext password or real secret in source control.
 2. Build the JAR that the Docker image copies:
 
    ```powershell

@@ -13,8 +13,8 @@ Findings are sorted by Priority (P0 → P2), then Effort (S → M → L). Number
 
 **Config surface.** `src/main/resources/application.properties` reads datasource settings, the admin Flyway hash, JWT settings, rate limits, CORS origins, forwarded-header strategy, health exposure, and optional first-librarian bootstrap variables. Template: `envFileExample`. No Spring profiles or structured logging config in `main`.
 
-**Tooling present.** `Dockerfile` (multi-stage, non-root JRE image), `docker-compose.yml` (postgres + app), JaCoCo, Failsafe under `-Pintegration`, 10 docs files, an earlier read-only security report (`reports/read-only.report.md`).
-**Tooling absent.** Linter/formatter (Checkstyle/Spotless/etc.), metrics endpoint, `.editorconfig`.
+**Tooling present.** `Dockerfile` (multi-stage, non-root JRE image), `docker-compose.yml` (postgres + app), JaCoCo, Failsafe under `-Pintegration`, 10 docs files.
+**Tooling absent.** Linter/formatter (Checkstyle/Spotless/etc.).
 
 **Current check results** (Windows, JDK 25, Maven Wrapper 3.9.x, Docker available):
 
@@ -28,25 +28,6 @@ Findings are sorted by Priority (P0 → P2), then Effort (S → M → L). Number
 ---
 
 ## 2. Findings
-
-### [P2][S] Fix stale audit documentation and OpenAPI license metadata
-Phase: 5 (Cleanup). Depends on: other issues, so statuses reflect final state.
-Detailed explanation: AGENTS.md treats prose that disagrees with code as a defect. The tracked security report still says login and signup have no rate limiting, which was implemented afterwards. The OpenAPI license string says no license is declared while the repository carries an MIT license. These are low risk individually but mislead reviewers and API consumers, so fix them when statuses are final.
-Category: Developer experience
-Location: `reports/read-only.report.md` (stale rate-limit statements), `src/main/java/app/global/config/OpenApiConfig.java:27` ("no distribution license declared" vs MIT `LICENSE`)
-Problem: A tracked report contradicts the code and the OpenAPI license string contradicts `LICENSE`.
-Impact if not fixed: Misleading information for reviewers and API consumers; confusion about which ignore rules apply.
-Recommended fix: Mark the report as a dated historical snapshot with a status table and correct the license metadata.
-Step-by-step plan (for an agent):
-1. Add a status table at the top of `reports/read-only.report.md` mapping each finding to fixed/open.
-2. Set `@License(name = "MIT", url = "https://opensource.org/licenses/MIT")` in `OpenApiConfig` and update any test asserting the string (`OpenApiMvcTest`).
-3. Keep ignore rules documented and verify no stale config claims remain.
-4. Verification: `git check-ignore -v .env target pom.xml` shows only intended matches; `./mvnw -B test`.
-Acceptance criteria:
-* [ ] No tracked doc claims behavior contradicted by code.
-* [ ] OpenAPI license matches `LICENSE`.
-Files likely touched: `reports/read-only.report.md`, `src/main/java/app/global/config/OpenApiConfig.java`, `.gitignore`, `src/test/java/unit/global/OpenApiMvcTest.java`
-Risks / notes: Keep OpenAPI description claims aligned with `SecurityConfig` after other issues change them.
 
 ### [P2][S] Add an index for loan lookups by book and status
 Phase: 4 (Hardening). Depends on: CI integration job.
@@ -66,118 +47,6 @@ Acceptance criteria:
 * [ ] Docs name V6 as latest.
 Files likely touched: `src/main/resources/db/migration/V6__index_loan_book_status.sql`, `AGENTS.md`, `guiding-docs/engineering-reference.md`, `docs/loan.md`
 Risks / notes: Never edit V1–V5. Pair with the V3→V4 upgrade-path verification if both ship together.
-
-### [P2][S] Tidy Maven build configuration and enforce toolchain versions
-Phase: 5 (Cleanup). Depends on: test baseline (to measure coverage).
-Detailed explanation: The POM carries overlapping or implicit settings: Lombok's version is set both by a property and a literal, the Java level is set through `source`, `target`, and plugin configuration instead of `release`, and nothing stops someone building with an older JDK or Maven and getting confusing compiler errors. JaCoCo produces a report but cannot fail the build when coverage drops. The Enforcer plugin and a JaCoCo `check` goal make the toolchain and quality bar explicit and automatic. Set the coverage floor from a measured baseline after the test fix, not before.
-Category: Dependency hygiene
-Location: `pom.xml:18-23,128-134,174-189,192-213,218-237`
-Problem: Lombok is declared in two places (`<lombok.version>` and a hard-coded `1.18.46` at line 132; Boot already manages it), compiler `source`/`target` are set three ways (properties plus plugin config) rather than `maven.compiler.release`, no `maven-enforcer-plugin` requires Java 25/Maven 3.9, JaCoCo has no `check` goal/threshold, `springdoc` and `flyway.version` override the BOM without a comment, and `spring-boot-devtools` is `optional` without `runtime` scope.
-Impact if not fixed: Version drift, a build on the wrong JDK compiles with confusing errors, and coverage can regress unnoticed.
-Recommended fix: Consolidate versions, use `release`, add Enforcer and a JaCoCo coverage floor.
-Step-by-step plan (for an agent):
-1. Remove the hard-coded Lombok `<version>` (keep Boot-managed or the property, not both); set `<maven.compiler.release>25</maven.compiler.release>` and drop `source`/`target`.
-2. Add `maven-enforcer-plugin` with `requireJavaVersion [25,)` and `requireMavenVersion [3.9,)`.
-3. Add a JaCoCo `check` execution (start at the current measured line/branch coverage, e.g. rounded down) bound to `verify`.
-4. Add a short comment explaining each BOM override (`flyway.version`, springdoc).
-5. Verification: `./mvnw -B verify` passes; `./mvnw -B verify -Djava.version=17` style mismatch fails fast under a wrong JDK.
-Acceptance criteria:
-* [ ] One source of truth per version.
-* [ ] Build fails on wrong JDK/Maven.
-* [ ] Coverage floor enforced.
-Files likely touched: `pom.xml`
-Risks / notes: Measure coverage after the test-properties fix; the current number is distorted by the 40 failing tests.
-
-### [P2][S] Add `.editorconfig` for editor consistency
-Phase: 5 (Cleanup); schedule early if the Maven wrapper lands first. Depends on: nothing.
-Detailed explanation: `.gitattributes` now pins line endings for shell scripts, wrapper scripts, and Dockerfile content. `.editorconfig` is still absent, so editor indentation, charset, and final-newline defaults vary between contributors.
-Category: Developer experience
-Location: repository root (`.editorconfig` is absent)
-Problem: No editor-level charset, indentation, and final-newline defaults; no Checkstyle/Spotless formatter is configured.
-Impact if not fixed: Editors keep producing avoidable formatting differences.
-Recommended fix: Add `.editorconfig`; optionally add Spotless (check-only) later.
-Step-by-step plan (for an agent):
-1. Create `.gitattributes`: `* text=auto eol=lf`, `*.cmd text eol=crlf`, `*.png binary`.
-2. Create `.editorconfig` (UTF-8, LF, 4-space Java, final newline).
-3. Run `git add --renormalize .` and review the diff size; commit separately.
-4. Verification: `git ls-files --eol | grep -v "i/lf"` lists only intentionally CRLF files.
-Acceptance criteria:
-* [ ] Files committed and the tree normalizes cleanly.
-Files likely touched: `.gitattributes`, `.editorconfig`
-Risks / notes: A renormalize commit can touch many files — do it in an isolated commit with no other changes.
-
-### [P2][S] Replace `jakarta.transaction.Transactional` in `UserService` and mark read paths read-only
-Phase: 5 (Cleanup). Depends on: nothing.
-Detailed explanation: `UserService` imports the Jakarta transaction annotation while the other services use Spring's. Spring honors both, but the Jakarta version has no `readOnly` flag and different rollback defaults, so the codebase has two transaction conventions. Read methods have no transaction at all, so multi-query reads are not consistent and miss Hibernate's read-only optimizations. Aligning on Spring's annotation is mechanical and low risk, and matters more once open-in-view is disabled.
-Category: Structure & modularity
-Location: `src/main/java/app/user/service/UserService.java:15,67,80,97,184,255,347,556`
-Problem: `UserService` uses `jakarta.transaction.Transactional` while `BookService`/`LoanService` use Spring's. The Jakarta annotation lacks `readOnly` and Spring-specific rollback semantics; `getAllUsers`, `getUserByUniversityId` have no transaction at all.
-Impact if not fixed: Inconsistent transaction behavior across services and no read-only optimization; surprises when mapping lazy data later.
-Recommended fix: Use `org.springframework.transaction.annotation.Transactional` everywhere and add `@Transactional(readOnly = true)` on read methods.
-Step-by-step plan (for an agent):
-1. Change the import in `UserService`.
-2. Add `@Transactional(readOnly = true)` to `getAllUsers` and `getUserByUniversityId`.
-3. Verification: `./mvnw -B test -Dtest=UserServiceTest` and `./mvnw -B -Pintegration verify -Dit.test=UserPersistenceIT`.
-Acceptance criteria:
-* [ ] No `jakarta.transaction` imports remain in `src/main`.
-* [ ] Tests pass.
-Files likely touched: `src/main/java/app/user/service/UserService.java`
-Risks / notes: Behavior is equivalent for the write methods.
-
-### [P2][S] Rename `envFileExample` to `.env.example`
-Phase: 5 (Cleanup, last). Depends on: all issues that add environment variables.
-Detailed explanation: `.env.example` is the convention that editors, secret scanners, and new contributors recognize. The current name is not recognized by common tooling. The file now includes CORS, forwarded-header, and librarian-bootstrap variables, but should be renamed and kept as the single inventory of runtime configuration. It must contain only placeholders.
-Category: Developer experience
-Location: `envFileExample` (referenced in 8 places in README/compose/docs), `.dockerignore:20`
-Problem: The non-standard filename is not recognized by tooling and secret scanners.
-Impact if not fixed: New contributors and the OCI deployment lack a complete variable inventory.
-Recommended fix: Rename and complete the file; update references.
-Step-by-step plan (for an agent):
-1. `git mv envFileExample .env.example`; run the repo-wide replacement (`grep -rn envFileExample .`).
-2. Preserve the existing deployment variables and safe placeholder values during the rename.
-3. Ensure `.dockerignore` still excludes `.env` and `.env.*` but not needed docs.
-4. Verification: `grep -rn envFileExample .` returns nothing; `docker compose config` resolves with a copy of the file as `.env`.
-Acceptance criteria:
-* [ ] A single `.env.example` file lists every environment variable.
-Files likely touched: `.env.example`, `README.md`, `docker-compose.yml`, `Dockerfile`, `.dockerignore`, `guiding-docs/engineering-reference.md`
-Risks / notes: Do this after the other config issues to avoid repeated edits. The example must contain no real secrets.
-
-### [P2][M] Pick one success-response shape (envelope vs bare DTO) before the UI is written
-Phase: 3 (UI readiness) if the owner agrees; otherwise defer. Depends on: pagination issue, test baseline.
-Detailed explanation: Some endpoints return `{success,message,data}` and others return the bare DTO, even for the same resource (a user is bare on GET but wrapped on PATCH). The UI would need per-call unwrapping and a generated client would model two shapes. Changing this after the UI exists is a breaking change for every call site, so the cost is lowest now. It is a product decision, hence P2 and the instruction to choose the convention with the owner first and record it in the API documentation guideline.
-Category: Structure & modularity
-Location: `src/main/java/app/book/controller/BookAPI.java` (`/stats`, `/search`, `/{id}`, `/all` return bare DTOs; `/add`, `/{id}` PATCH/PUT/DELETE, `/stats/count` return `ApiResponse`), `src/main/java/app/user/controller/UserAPI.java:129-142` (bare) vs the rest (envelope), `src/main/java/app/loan/controller/LoanAPI.java` (mixed)
-Problem: The same resource type is returned in different shapes depending on the operation (e.g. `GET /app/users/{id}` returns a bare profile; `PATCH` returns `{success,message,data}`).
-Impact if not fixed: The UI client needs per-endpoint unwrapping logic and a generated client will be awkward; changing it after the UI exists is a breaking change.
-Recommended fix: Adopt a rule: reads return bare DTOs/pages, mutations return the bare updated resource (or 204), and drop the envelope — or the reverse; apply it uniformly.
-Step-by-step plan (for an agent):
-1. Choose the convention with the owner and write it in `docs/api-documentation-guideline.md`.
-2. Change controllers and `@Operation`/`@ApiResponse` schemas to match; keep `ErrorResponse` for all errors.
-3. Update `BookApiMvcTest`, `UserApiMvcTest`, `LoanSecurityMvcTest`, `OpenApiMvcTest`, README examples.
-4. Verification: `./mvnw -B test`; `grep -rn "ApiResponse<" src/main/java/app/*/controller` shows only the chosen usage.
-Acceptance criteria:
-* [ ] One documented, uniformly applied success shape.
-* [ ] All tests and README samples updated.
-Files likely touched: `src/main/java/app/book/controller/BookAPI.java`, `src/main/java/app/user/controller/UserAPI.java`, `src/main/java/app/loan/controller/LoanAPI.java`, `src/main/java/app/global/responses/ApiResponse.java`, tests, `README.md`, `docs/api-documentation-guideline.md`
-Risks / notes: Breaking change — acceptable only because there is no UI yet.
-
-### [P2][S] Expose basic metrics (Micrometer/Prometheus) behind the private management port
-Phase: 4 (Hardening). Depends on: Actuator health issue.
-Detailed explanation: With no metrics there is no evidence for choosing an OCI shape, spotting slow endpoints, or noticing a credential-stuffing attack. Micrometer's Prometheus registry provides request latency, JVM, and connection-pool metrics for free once Actuator exists, and a counter on rate-limit rejections gives a direct abuse signal. The metrics endpoint must sit on a separate management port that is not published, so it cannot be reached from the internet.
-Category: MVP additions
-Location: `pom.xml` (no Actuator/Micrometer); `application.properties`
-Problem: No request rate/latency/error metrics, JVM or HikariCP pool gauges, or login-failure counters.
-Impact if not fixed: No data to size the OCI shape or alert on login abuse.
-Recommended fix: After the Actuator issue, add `micrometer-registry-prometheus` and expose `/actuator/prometheus` only on a private management port.
-Step-by-step plan (for an agent):
-1. Add `io.micrometer:micrometer-registry-prometheus`.
-2. Set `management.server.port=${MANAGEMENT_SERVER_PORT:9091}` and `management.endpoints.web.exposure.include=health,prometheus`; do not publish 9091 in compose.
-3. Increment a `Counter` for rate-limit rejections in `PublicRouteRateLimitInterceptor` (inject `MeterRegistry`).
-4. Verification: `curl localhost:9091/actuator/prometheus` (from inside the network) lists `http_server_requests_seconds` and the counter.
-Acceptance criteria:
-* [ ] Metrics reachable on the private port only, and not through the public port.
-Files likely touched: `pom.xml`, `src/main/resources/application.properties`, `src/main/java/app/auth/ratelimit/PublicRouteRateLimitInterceptor.java`, `docker-compose.yml`
-Risks / notes: Depends on the Actuator health endpoint issue. Do not add `/actuator/**` to `permitAll`.
 
 ### [P2][M] Verify the V3→V4 migration upgrade path on PostgreSQL
 Phase: 4 (Hardening). Depends on: CI integration job.
@@ -208,13 +77,13 @@ The table below tracks the remaining backlog by the original audit phases. Every
 | 0. Baseline | A buildable, green repository | Complete |
 | 1. Safety net | Automated checks and basic correctness | Complete (CI, runtime properties, H2 removed, client-error handling) |
 | 2. Deployability | A container OCI can run and probe | Complete (non-root image, probes, compose hardening, trusted-proxy IP, timezone, admin-hash default) |
-| 3. UI readiness | A stable contract the UI can code against | Complete except the response-shape decision below |
-| 4. Hardening | Prove invariants and watch dependencies | Remaining: V3-to-V4 upgrade test, loans index (V6), metrics |
-| 5. Cleanup | Consistency and documentation | Remaining: POM tidy and enforcer, `.editorconfig`, Spring `@Transactional`, doc drift, `.env.example` |
+| 3. UI readiness | A stable contract the UI can code against | Complete |
+| 4. Hardening | Prove invariants and watch dependencies | Remaining: V3-to-V4 upgrade test, loans index (V6) |
+| 5. Cleanup | Consistency and documentation | Complete |
 
 Cross-phase rules:
 1. **Order inside a phase** follows the "Depends on" line of each issue; the flat list in section 4 is a dependency-valid linear order of the same work.
-2. **Decision still needed from the owner before the UI is written**: the response-shape convention (envelope vs bare DTO). Settled: timezone is Asia/Manila, list endpoints are paginated, Swagger UI is public but switchable, and the CI platform is GitHub Actions.
+2. **Settled decisions**: timezone is Asia/Manila, every success response uses the `ApiResponse` envelope, list endpoints are paginated, Swagger UI is off by default and enabled by `LIBRO_API_DOCS_ENABLED=true`, and the CI platform is GitHub Actions.
 3. **Docs travel with code.** Each pull request updates only the facts it changes (README, AGENTS.md, engineering reference, roadmap, OpenAPI), per the repository's contribution rules.
 4. **Reporting.** Each pull request states exactly which Maven checks ran (`test`, `-Pintegration verify`), as AGENTS.md requires. Integration checks need Docker.
 5. **Rollback.** All Phase 0-3 changes are code or config and revert with the commit; the only schema change (V6) is additive and index-only.
@@ -231,17 +100,10 @@ Cross-phase rules:
 
 ## 4. Suggested execution order (flat list)
 
-1. Pick one success-response shape (envelope vs bare DTO) before the UI is written
-2. Tidy Maven build configuration and enforce toolchain versions
-3. Add an index for loan lookups by book and status
-4. Verify the V3→V4 migration upgrade path on PostgreSQL
-5. Replace `jakarta.transaction.Transactional` in `UserService` and mark read paths read-only
-6. Expose basic metrics (Micrometer/Prometheus) behind the private management port
-7. Add `.editorconfig` and `.gitattributes` to stabilize line endings and formatting
-8. Fix doc/config drift (stale audit report, license text, `.gitignore` oddities)
-9. Rename `envFileExample` to `.env.example` and add deployment-facing variables
+1. Add an index for loan lookups by book and status
+2. Verify the V3→V4 migration upgrade path on PostgreSQL
 
-Rationale: settle the response shape before UI work starts, then complete hardening and cleanup. Completed findings are removed from this file; git history records them.
+Rationale: both remaining items are database-level hardening. Completed findings are removed from this file; git history records them.
 
 ---
 

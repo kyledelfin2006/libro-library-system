@@ -12,7 +12,7 @@ import app.user.exception.UserNotFoundException;
 import app.user.mapper.UserMapper;
 import app.user.repository.UserRepository;
 import app.user.validation.PasswordPolicy;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
@@ -485,6 +485,7 @@ public class UserService {
      * @throws AccessDeniedException if the caller is not an administrator or librarian
      * @throws IllegalArgumentException if pageable is null or contains an unsupported sort field
      */
+    @Transactional(readOnly = true)
     public Page<UserResponseDTO> getAllUsers(
             Pageable pageable,
             String callerId,
@@ -522,6 +523,7 @@ public class UserService {
      * @throws UserNotFoundException if no matching user exists
      * @throws IllegalArgumentException if the university ID format is invalid
      */
+    @Transactional(readOnly = true)
     public UserResponseDTO getUserByUniversityId(
             String callerId,
             String targetId,

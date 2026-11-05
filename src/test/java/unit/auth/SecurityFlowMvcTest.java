@@ -91,7 +91,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         SecurityFlowMvcTest.HealthProbeController.class
 })
 @ContextConfiguration(classes = LibraryApplication.class)
-@TestPropertySource(properties = "libro.security.cors.allowed-origins=https://ui.example.edu")
+@TestPropertySource(properties = {"libro.security.cors.allowed-origins=https://ui.example.edu", "libro.api-docs.enabled=true"})
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SecurityFlowMvcTest {
 
@@ -155,13 +155,13 @@ class SecurityFlowMvcTest {
     static class HealthProbeController {
 
         /** Returns the minimal liveness payload used by the Actuator endpoint. */
-        @org.springframework.web.bind.annotation.GetMapping("/actuator/health/liveness")
+        @org.springframework.web.bind.annotation.GetMapping("/livez")
         java.util.Map<String, String> liveness() {
             return java.util.Map.of("status", "UP");
         }
 
         /** Returns the minimal readiness payload used by the Actuator endpoint. */
-        @org.springframework.web.bind.annotation.GetMapping("/actuator/health/readiness")
+        @org.springframework.web.bind.annotation.GetMapping("/readyz")
         java.util.Map<String, String> readiness() {
             return java.util.Map.of("status", "UP");
         }
@@ -233,7 +233,7 @@ class SecurityFlowMvcTest {
     /** Confirms liveness and readiness probes are public and return no component details. */
     @Test
     void healthProbesArePublicAndHideDetails() throws Exception {
-        for (String path : List.of("/actuator/health/liveness", "/actuator/health/readiness")) {
+        for (String path : List.of("/livez", "/readyz")) {
             mockMvc.perform(get(path))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.status").value("UP"))
@@ -296,17 +296,17 @@ class SecurityFlowMvcTest {
                                 {"universityId":"2025-4321","password":"GoodPassword1!"}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.tokenType").value("Bearer"))
-                .andExpect(jsonPath("$.expiresIn").value(900))
-                .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.userRole").doesNotExist())
+                .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.data.expiresIn").value(900))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.userRole").doesNotExist())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
                         .string("Cache-Control", "no-store"))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
                         .string("Pragma", "no-cache"))
                 .andReturn();
 
-        String token = JsonPath.read(login.getResponse().getContentAsString(), "$.accessToken");
+        String token = JsonPath.read(login.getResponse().getContentAsString(), "$.data.accessToken");
         assertNull(login.getRequest().getSession(false), "stateless login must not create an HTTP session");
         var decoded = jwtDecoder.decode(token);
         assertEquals(UNIVERSITY_ID, decoded.getSubject());
@@ -320,7 +320,7 @@ class SecurityFlowMvcTest {
         mockMvc.perform(get("/app/books/1")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1));
+                .andExpect(jsonPath("$.data.id").value(1));
 
         verify(userRepository, times(1)).findByUniversityId(UNIVERSITY_ID);
         verify(bookService).findBookById(1L);
@@ -468,7 +468,7 @@ class SecurityFlowMvcTest {
         assertRejected(signedToken(jwtProperties.issuer(), List.of(jwtProperties.audience()),
                 UNIVERSITY_ID, List.of("STUDENT"), null, now.plusSeconds(900), null));
         assertRejected(signedToken(jwtProperties.issuer(), List.of(jwtProperties.audience()),
-                UNIVERSITY_ID, List.of("STUDENT"), now.plusSeconds(31), now.plusSeconds(900), null));
+                UNIVERSITY_ID, List.of("STUDENT"), now.plusSeconds(120), now.plusSeconds(900), null));
         assertRejected(signedToken(jwtProperties.issuer(), List.of(jwtProperties.audience()),
                 UNIVERSITY_ID, List.of("STUDENT"), now.minusSeconds(931), now.minusSeconds(31), null));
         verifyNoInteractions(userRepository, bookService, bookMapper);

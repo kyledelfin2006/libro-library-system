@@ -60,7 +60,8 @@ See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-
 - [x] Update AGENTS.md and Current System Engineering Reference with the new current facts and contributor rules.
 - [x] Update OpenAPI operation descriptions to match role boundaries.
 - [x] Add generated OpenAPI MVC assertions for Bearer security, public signup/login, and the login contract.
-- [x] Serve Swagger UI and `/v3/api-docs` publicly by default, controlled by `LIBRO_API_DOCS_ENABLED`.
+- [x] Serve Swagger UI and `/v3/api-docs` publicly only when `LIBRO_API_DOCS_ENABLED=true` (off by default).
+- [x] Return every successful response in the `ApiResponse` envelope.
 - [ ] Review the live OpenAPI document and Swagger UI in a browser against the implementation.
 
 ## Database migration rule
@@ -71,7 +72,8 @@ Before changing a migration, establish whether that version has been applied to 
 
 - [x] Run the PostgreSQL-backed integration profile with Docker and a test-only BCrypt hash.
 - [x] Add configurable per-IP application throttling for public login and signup routes, standard 429 responses, and warning logs when a client reaches its quota.
-- [ ] Configure gateway throttling and monitoring for login and signup before public internet exposure; restrict direct app access and tune thresholds for the deployment. App-level trusted-proxy address resolution is implemented and remains disabled by default.
+- [x] Provide a TLS reverse-proxy reference (`docker compose --profile proxy`) and export login-outcome and rate-limit-rejection metrics on the private management port.
+- [ ] Deploy behind TLS with a real domain, alert on the login-failure and rate-limit metrics, and add gateway throttling before scaling beyond one instance.
 - [ ] Complete an independent security review before public internet exposure.
 
 ## Source documents

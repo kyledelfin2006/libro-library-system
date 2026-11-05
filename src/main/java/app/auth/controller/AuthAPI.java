@@ -47,11 +47,11 @@ public class AuthAPI {
     @ErrorApiResponse(responseCode = "400", description = "Login request is missing a valid university ID or password")
     @ErrorApiResponse(responseCode = "401", description = "University ID or password is incorrect")
     @ErrorApiResponse(responseCode = "429", description = "This client has sent too many login requests")
-    public ResponseEntity<TokenResponseDTO> login(@Valid @RequestBody LoginRequestDTO request) {
+    public ResponseEntity<app.global.responses.ApiResponse<TokenResponseDTO>> login(@Valid @RequestBody LoginRequestDTO request) {
         // Never cache a response containing a bearer credential.
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .header("Pragma", "no-cache")
-                .body(authService.login(request));
+                .body(app.global.responses.ApiResponse.ok(authService.login(request)));
     }
 }

@@ -130,13 +130,13 @@ public class LoanAPI {
             description = "Returns active, returned, and lost loans for the authenticated caller. "
                     + HISTORY_PAGINATION_DESCRIPTION + " Overdue is calculated at request time.")
     @ErrorApiResponse(responseCode = "400", description = "Unsupported sort property")
-    public ResponseEntity<Page<LoanResponseDTO>> myHistory(
+    public ResponseEntity<ApiResponse<Page<LoanResponseDTO>>> myHistory(
             @ParameterObject @PageableDefault(size = 12, sort = {"borrowedAt", "id"}, direction = org.springframework.data.domain.Sort.Direction.DESC)
             Pageable pageable,
             Authentication authentication
     ) {
         // Use the caller principal so clients cannot select another account's own-history query.
-        return ResponseEntity.ok(loanService.getMyHistory(authentication.getName(), pageable));
+        return ResponseEntity.ok(ApiResponse.ok(loanService.getMyHistory(authentication.getName(), pageable)));
     }
 
     /**
@@ -155,7 +155,7 @@ public class LoanAPI {
     @ErrorApiResponse(responseCode = "403", description = "Caller cannot view this patron's history")
     @ErrorApiResponse(responseCode = "404", description = "Patron account not found")
     @ErrorApiResponse(responseCode = "400", description = "Unsupported sort property")
-    public ResponseEntity<Page<LoanResponseDTO>> patronHistory(
+    public ResponseEntity<ApiResponse<Page<LoanResponseDTO>>> patronHistory(
             @Parameter(description = "University ID of the patron whose history is requested.", example = "2025-4321")
             @PathVariable String universityId,
             @ParameterObject @PageableDefault(size = 12, sort = {"borrowedAt", "id"}, direction = org.springframework.data.domain.Sort.Direction.DESC)
@@ -163,7 +163,7 @@ public class LoanAPI {
             Authentication authentication
     ) {
         // The service checks both the staff role and the target patron role.
-        return ResponseEntity.ok(loanService.getPatronHistory(
-                authentication.getName(), universityId, pageable));
+        return ResponseEntity.ok(ApiResponse.ok(loanService.getPatronHistory(
+                authentication.getName(), universityId, pageable)));
     }
 }

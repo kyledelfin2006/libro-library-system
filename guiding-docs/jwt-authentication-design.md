@@ -25,7 +25,7 @@
 | --- | --- | --- |
 | `POST /app/users/signup` | Public | Existing signup contract; service always assigns `STUDENT`; 429 when the client IP exceeds its configured quota |
 | `POST /app/auth/login` | Public | Validated credentials in; 200 token response on success; 400 for invalid request shape; generic 401 for rejected credentials; 429 when the client IP exceeds its configured quota |
-| `GET /actuator/health/**` | Public | Liveness/readiness only; details are hidden and only the health endpoint is exposed |
+| `GET /livez, GET /readyz` | Public | Liveness/readiness only; details are hidden and only the health endpoint is exposed |
 | All other application routes | Bearer token required | Existing role, ownership, and response contracts continue to apply |
 
 Login request:
@@ -41,7 +41,7 @@ The limiter keys on the servlet container's `getRemoteAddr()`. `SERVER_FORWARD_H
 Successful response:
 
 ```json
-{"accessToken":"<signed-token>","tokenType":"Bearer","expiresIn":900}
+{"success":true,"message":"Success","data":{"accessToken":"<signed-token>","tokenType":"Bearer","expiresIn":900},"timestamp":1720000000000}
 ```
 
 The login response includes `Cache-Control: no-store` and `Pragma: no-cache`. Send the token only as `Authorization: Bearer <token>`. Query parameters, form fields, cookies, and HTTP Basic are not accepted as authentication. Use HTTPS outside local development and redact Authorization headers from access logs.
@@ -124,13 +124,13 @@ The protected-request path does not load the account from PostgreSQL again. This
 | Password exceeds 72 UTF-8 bytes at signup or password change | 400 | Shared validation response; no password value is echoed |
 | Unknown university ID or incorrect password | 401 | `{"error":"Authentication failed","details":"University ID or password is incorrect",...}` for both cases |
 | Login/signup client IP has used its configured quota | 429 | Shared `ErrorResponse` JSON and `Retry-After`; MVC interceptor short-circuits before body binding, controller, or service invocation |
-| Missing, malformed, expired, not-yet-valid, wrong-signature, wrong-key, wrong-algorithm, wrong-issuer, wrong-audience, or invalid-claims Bearer token | 401 | Spring Security response; it occurs before MVC `GlobalExceptionHandler` |
-| Valid token without required route role | 403 | Spring Security authorization response |
+| Missing, malformed, expired, not-yet-valid, wrong-signature, wrong-key, wrong-algorithm, wrong-issuer, wrong-audience, or invalid-claims Bearer token | 401 | Standard JSON error body with `WWW-Authenticate: Bearer`, written by `JsonSecurityErrorHandler` before MVC runs |
+| Valid token without required route role | 403 | Standard JSON error body written by `JsonSecurityErrorHandler` |
 | Valid token but owner/target role rule fails | Existing service/API response | JWT does not change service-level access checks; selected resources may retain the existing 404 concealment behavior |
 | Authentication provider/database failure | 500 generic server response | Not disguised as invalid credentials; internal details are not returned |
 | Missing, malformed, or undersized JWT secret at startup | Application startup fails | No fallback development key exists |
 
-Login errors use the shared JSON error envelope; Resource Server 401/403 errors are generated before MVC and may have a different body. The filter response does not include decoder exception detail, key material, or claim values.
+Login errors, Resource Server 401/403 errors (through `JsonSecurityErrorHandler`) and 429 responses all use the shared `ErrorResponse` JSON shape, including `requestId`. The filter response does not include decoder exception detail, key material, or claim values.
 
 ## Validation matrix
 
@@ -160,8 +160,12 @@ The normal Maven test suite exercises the real filter and decoder with signed co
 | Limit | Current decision |
 | --- | --- |
 | Revocation | No refresh tokens, token registry, or denylist. Password/role changes and account deletion can leave a token usable through expiry plus 30 seconds of skew. |
-| Public route abuse | In-app fixed-window limits cover login and signup by remote IP. State is bounded, per process, and resets on restart; at capacity, an older counter can be evicted. Fixed windows can allow a boundary burst. Shared gateway throttling, trusted client-IP handling, and operational monitoring remain deployment requirements before public exposure or multi-instance scaling. |
+| Public route abuse | In-app fixed-window limits cover login and signup by remote IP. State is bounded, per process, and resets on restart; at capacity, an older counter can be evicted. Fixed windows can allow a boundary burst. Trusted client-IP handling is available through `SERVER_FORWARD_HEADERS_STRATEGY=native` behind the `proxy` profile, and `libro.rate_limit.rejections` and `libro.auth.logins` metrics support monitoring. Shared gateway throttling and alerting remain deployment requirements before multi-instance scaling. |
 | Token theft | A bearer token can be replayed by anyone holding it until expiry. Use HTTPS, short lifetime, header-only transport, no-store responses, and log redaction. |
 | Browser storage | The API does not accept cookies. If a client later stores tokens in cookies, revisit CSRF; prefer a deliberate browser storage design and mitigate XSS. |
 | Key rotation | One shared HS256 key is used for issuing and validating. Coordinated rotation invalidates existing tokens; use asymmetric keys only if verification moves to separate services. |
 | External identity | This API issues its own tokens; it is not an OAuth authorization server and does not implement institutional SSO or third-party consent flows. |
+
+## Revocation policy
+
+An issued token stays valid until it expires (at most 900 seconds plus 30 seconds of clock skew) even after a password change, role change or account deletion. This delay is **accepted** for this project: there are no refresh tokens, no denylist and no per-request account lookup. Changing it is a separate design decision, for example a token-version claim compared with the stored account on each request.

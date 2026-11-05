@@ -86,7 +86,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(
             HttpSecurity http,
             JwtAuthenticationConverter jwtAuthenticationConverter,
-            @Value("${libro.api-docs.enabled:true}") boolean apiDocsEnabled) throws Exception {
+            @Value("${libro.api-docs.enabled:false}") boolean apiDocsEnabled) throws Exception {
         http
                 // CORS must handle browser preflights before stateless Bearer authentication.
                 .cors(Customizer.withDefaults())
@@ -102,8 +102,8 @@ public class SecurityConfig {
                                 "/swagger-ui.html", "/swagger-ui/**").permitAll();
                     }
                     auth
-                        // Health probes are public; no other actuator endpoint is exposed or permitted.
-                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
+                        // Liveness/readiness probes are public; all other Actuator endpoints live on the private management port.
+                        .requestMatchers(HttpMethod.GET, "/livez", "/readyz").permitAll()
                         .requestMatchers(HttpMethod.POST, "/app/users/signup", "/app/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/app/users/faculty").hasRole("LIBRARIAN")
                         .requestMatchers(HttpMethod.POST, "/app/users/administrators").hasRole("LIBRARIAN")
