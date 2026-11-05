@@ -90,5 +90,5 @@ END $$;
 
 -- Store only the password hash; the administrator chooses and retains the raw password.
 INSERT INTO users (university_id, password_hash, first_name, last_name, email, user_role)
-VALUES ('0000-0000', '${adminPasswordHash}', 'System', 'Administrator',
+VALUES ('0000-0001', '${adminPasswordHash}', 'System', 'Administrator',
         'admin@library.local', 'ADMINISTRATOR');

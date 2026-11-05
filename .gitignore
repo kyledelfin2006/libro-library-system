@@ -117,3 +117,6 @@ Thumbs.db
 proposed.project.structured.txt
 .run/
 .kilo
+
+# Local seeded-account credentials (private)
+SEED-ACCOUNTS.local.txt
