@@ -19,6 +19,8 @@ FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 # Create a dedicated system account so a compromised API process has no root privileges.
 RUN addgroup -S libro && adduser -S -G libro libro
+# Apply Alpine's fixed libexpat package before the image is scanned or run.
+RUN apk upgrade --no-cache libexpat
 # Copy the single, versioned artifact from the build stage and assign it to the runtime account.
 COPY --from=build --chown=libro:libro /build/target/library-api-system-*.jar app.jar
 # Bound JVM heap sizing to the container limit and keep offset-free timestamps on the library clock.
