@@ -18,6 +18,8 @@ public class ErrorResponse {
     private final int statusCode;
     @Schema(description = "Field name to validation message mapping; _global identifies object-level errors.", example = "{\"replacementCost\":\"Replacement cost must be greater than 0\"}")
     private final Map<String, String> fieldErrors;
+    @Schema(description = "Correlation ID, also returned in the X-Request-Id header. Quote it when reporting a problem.", example = "3f2b8c1e-5a41-4c0e-9a57-0d6f1b7e2c11")
+    private final String requestId;
 
     public ErrorResponse(String error, String details, int statusCode) {
         this(error, details, statusCode, Map.of());
@@ -29,6 +31,8 @@ public class ErrorResponse {
         this.timestamp = System.currentTimeMillis();
         this.statusCode = statusCode;
         this.fieldErrors = Map.copyOf(fieldErrors);
+        // Read from the logging context set by RequestIdFilter; null outside an HTTP request (for example in unit tests).
+        this.requestId = org.slf4j.MDC.get("requestId");
     }
 
 }

@@ -1,0 +1,6 @@
+# The POSIX wrapper must keep LF line endings so Linux CI and Docker can execute it.
+/mvnw text eol=lf
+# The Windows launcher is a batch/PowerShell polyglot and uses Windows line endings.
+/mvnw.cmd text eol=crlf
+# Keep Docker instructions portable across Windows checkouts and Linux builders.
+/Dockerfile text eol=lf

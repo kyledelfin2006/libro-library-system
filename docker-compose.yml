@@ -1,7 +1,6 @@
 # Quick start from the repository root:
 #   Copy-Item envFileExample .env   (PowerShell)
-#   mvn clean package              (builds target/*.jar for the Dockerfile)
-#   docker compose up --build
+#   docker compose up --build      (Docker builds the application from source)
 # Docker Compose reads variables from the root .env file automatically.
 # Fill the required values before starting. Public-route limits have defaults and can be tuned in `.env`.
 services:
@@ -18,9 +17,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      # Lets tools on your computer connect to PostgreSQL at localhost:5432.
+      # Lets tools on this computer connect to PostgreSQL at localhost:5432.
+      # Bound to loopback so other hosts on the network cannot reach the database.
       # The app container connects over Compose's private network using `db:5432`.
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       # PostgreSQL 18 uses /var/lib/postgresql as its data-volume root.
       - postgres_data:/var/lib/postgresql
@@ -34,7 +34,7 @@ services:
     # Restart after a crash or Docker daemon restart; `docker compose down` still stops it.
     restart: unless-stopped
 
-  # Spring Boot REST API. Build the JAR first; Dockerfile copies it into this image.
+  # Spring Boot REST API. The multi-stage Dockerfile compiles and packages the application.
   app:
     build: . # Repository root is the build context and contains the Dockerfile.
     container_name: library-app
@@ -49,21 +49,50 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       # Flyway V2 uses this BCrypt hash when creating the historical bootstrap
-      # administrator in a fresh database. Set it before the first startup.
-      LIBRO_ADMIN_PASSWORD_HASH: ${LIBRO_ADMIN_PASSWORD_HASH}
+      # administrator in a fresh database. Required only for the first startup of an empty database;
+      # a blank value on a fresh database makes the migration fail fast.
+      LIBRO_ADMIN_PASSWORD_HASH: ${LIBRO_ADMIN_PASSWORD_HASH:-}
       # A random Base64 secret (at least 32 decoded bytes) is required to issue/validate JWTs.
       LIBRO_JWT_SECRET_BASE64: ${LIBRO_JWT_SECRET_BASE64}
       LIBRO_JWT_ISSUER: ${LIBRO_JWT_ISSUER:-libro-api}
       LIBRO_JWT_AUDIENCE: ${LIBRO_JWT_AUDIENCE:-libro-api}
       LIBRO_JWT_ACCESS_TOKEN_TTL_SECONDS: ${LIBRO_JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
+      # Public Swagger UI/OpenAPI routes; set false to remove them.
+      LIBRO_API_DOCS_ENABLED: ${LIBRO_API_DOCS_ENABLED:-true}
+      # Exact comma-separated UI origins; blank default allows none. Set only the deployed browser UI origins.
+      LIBRO_CORS_ALLOWED_ORIGINS: ${LIBRO_CORS_ALLOWED_ORIGINS:-}
+      # Allowed values none/native; default none. Use native only when the app port is reachable solely from the trusted proxy.
+      SERVER_FORWARD_HEADERS_STRATEGY: ${SERVER_FORWARD_HEADERS_STRATEGY:-none}
       LIBRO_LOGIN_RATE_LIMIT_REQUESTS: ${LIBRO_LOGIN_RATE_LIMIT_REQUESTS:-20}
       LIBRO_LOGIN_RATE_LIMIT_WINDOW_SECONDS: ${LIBRO_LOGIN_RATE_LIMIT_WINDOW_SECONDS:-60}
       LIBRO_SIGNUP_RATE_LIMIT_REQUESTS: ${LIBRO_SIGNUP_RATE_LIMIT_REQUESTS:-10}
       LIBRO_SIGNUP_RATE_LIMIT_WINDOW_SECONDS: ${LIBRO_SIGNUP_RATE_LIMIT_WINDOW_SECONDS:-3600}
       LIBRO_RATE_LIMIT_MAX_TRACKED_CLIENT_ROUTES: ${LIBRO_RATE_LIMIT_MAX_TRACKED_CLIENT_ROUTES:-10000}
+      # Optional 0000-0000 ID; blank by default and requires the other four bootstrap values to be set together.
+      LIBRO_BOOTSTRAP_LIBRARIAN_UNIVERSITY_ID: ${LIBRO_BOOTSTRAP_LIBRARIAN_UNIVERSITY_ID:-}
+      # Optional valid email up to 150 characters; blank by default and required with the other four values.
+      LIBRO_BOOTSTRAP_LIBRARIAN_EMAIL: ${LIBRO_BOOTSTRAP_LIBRARIAN_EMAIL:-}
+      # Optional nonblank first name up to 50 characters; blank by default and required with the other four values.
+      LIBRO_BOOTSTRAP_LIBRARIAN_FIRST_NAME: ${LIBRO_BOOTSTRAP_LIBRARIAN_FIRST_NAME:-}
+      # Optional nonblank last name up to 50 characters; blank by default and required with the other four values.
+      LIBRO_BOOTSTRAP_LIBRARIAN_LAST_NAME: ${LIBRO_BOOTSTRAP_LIBRARIAN_LAST_NAME:-}
+      # Optional BCrypt hash only; blank by default, requires all other values, and never accepts plaintext.
+      LIBRO_BOOTSTRAP_LIBRARIAN_PASSWORD_HASH: ${LIBRO_BOOTSTRAP_LIBRARIAN_PASSWORD_HASH:-}
+    # Hardening: cap memory (JVM heap is 75% of this via MaxRAMPercentage) and block privilege escalation.
+    mem_limit: 768m
+    security_opt:
+      - no-new-privileges:true
     ports:
-      # Open the API on your computer at http://localhost:8080.
-      - "8080:8080"
+      # Open the API on this computer only at http://localhost:8080.
+      # Remove the loopback prefix only when a trusted reverse proxy or firewall fronts the host.
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      # Probe public database readiness every 30s; allow 60s for migrations, then require success within 5s for three retries.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/actuator/health/readiness"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
 
 volumes:

@@ -11,7 +11,7 @@ This is the working implementation roadmap. It is not the public project overvie
 | Roles in Java and the current schema | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN (Flyway V3) |
 | Authentication | Local HS256 JWT login and stateless Bearer validation; issuer/audience are configured, maximum token lifetime is 900 seconds, and clock skew is 30 seconds |
 | Authorization | Book reads for all roles; ADMINISTRATOR/LIBRARIAN book CRUD; librarian creates faculty/library assistants; role-scoped service account checks |
-| Loans | Implemented in application and V4 migration; service/MVC rules and key PostgreSQL invariants covered, borrower-limit checkout race remains |
+| Loans | Implemented in application and V4 migration; service/MVC rules, PostgreSQL invariants and concurrent checkout races covered |
 | LIBRARIAN role and target owner/directory rules | Implemented with JWT Bearer authentication |
 
 See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md). Administrator means library assistant, not system administrator. The paginated directory and profile/password operations follow role and target-account boundaries; students/faculty may delete their own accounts. Loan policy and build guidance are in [Loan Implementation Guide](../docs/loan.md).
@@ -28,7 +28,7 @@ See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-
 - [x] Restrict the paginated directory and cross-account profile reads by caller and target roles.
 - [x] Allow ADMINISTRATOR and LIBRARIAN to add, update, and delete books.
 - [x] Add authorization tests for allowed and denied requests, including cross-account profile/password attempts.
-- [ ] Define a controlled first-librarian provisioning workflow before using librarian-only account routes; no librarian seed is installed.
+- [x] Add opt-in, all-or-nothing startup provisioning for the first librarian using an operator-supplied BCrypt hash; no librarian is seeded by migration.
 
 ### 2. Verify and harden loans
 
@@ -40,7 +40,7 @@ See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-
 - [x] Add focused loan service tests for borrower rules, availability, returns, lost-resolution scope, and history pagination.
 - [x] Add loan MVC/security tests for route roles, authenticated identity, and stateless requests without CSRF enforcement.
 - [x] Add PostgreSQL tests for returned history, the one-active-loan index, and protected deletion.
-- [ ] Add a concurrent checkout test proving the three-active-loan borrower limit cannot be exceeded.
+- [x] Add a concurrent checkout test proving the three-active-loan borrower limit and one-borrower-per-copy rule hold (`LoanConcurrencyIT`).
 - [x] Verify fresh V1-to-V5 startup through the PostgreSQL integration profile.
 - [x] Verify the V4-to-V5 upgrade path preserves existing replacement-cost values and schema validation.
 - [ ] Verify the V3-to-V4 upgrade path against PostgreSQL.
@@ -60,7 +60,8 @@ See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-
 - [x] Update AGENTS.md and Current System Engineering Reference with the new current facts and contributor rules.
 - [x] Update OpenAPI operation descriptions to match role boundaries.
 - [x] Add generated OpenAPI MVC assertions for Bearer security, public signup/login, and the login contract.
-- [ ] Review the live OpenAPI document and determine an access path for Swagger UI; both currently inherit the authenticated default route policy, so anonymous browser loading is not available.
+- [x] Serve Swagger UI and `/v3/api-docs` publicly by default, controlled by `LIBRO_API_DOCS_ENABLED`.
+- [ ] Review the live OpenAPI document and Swagger UI in a browser against the implementation.
 
 ## Database migration rule
 
@@ -70,7 +71,7 @@ Before changing a migration, establish whether that version has been applied to 
 
 - [x] Run the PostgreSQL-backed integration profile with Docker and a test-only BCrypt hash.
 - [x] Add configurable per-IP application throttling for public login and signup routes, standard 429 responses, and warning logs when a client reaches its quota.
-- [ ] Configure gateway throttling and monitoring for login and signup before public internet exposure; restrict direct app access and tune thresholds for the deployment.
+- [ ] Configure gateway throttling and monitoring for login and signup before public internet exposure; restrict direct app access and tune thresholds for the deployment. App-level trusted-proxy address resolution is implemented and remains disabled by default.
 - [ ] Complete an independent security review before public internet exposure.
 
 ## Source documents

@@ -62,68 +62,6 @@ public interface BookRepository extends JpaRepository<Book, Long> {
                           Pageable pageable);
 
     /**
-     * Performs a constant-time database reachability check without scanning the books table.
-     *
-     * @return {@code 1} when the database accepted the query
-     */
-    @Query(value = "SELECT 1", nativeQuery = true)
-    int pingDatabase();
-
-    /**
-     * Finds all books whose title contains the given substring (case-insensitive).
-     *
-     * @param title the substring to search for in the title (non-null)
-     * @return a list of books with a title containing {@code title} (ignoring case),
-     *         or an empty list if none found
-     */
-    List<Book> findByTitleContainingIgnoreCase(String title);
-
-    /**
-     * Finds all books whose author contains the given substring (case-insensitive).
-     *
-     * @param author the substring to search for in the author (non-null)
-     * @return a list of books with an author containing {@code author} (ignoring case),
-     *         or an empty list if none found
-     */
-    List<Book> findByAuthorContainingIgnoreCase(String author);
-
-    /**
-     * Finds all books whose genre contains the given substring (case-insensitive).
-     *
-     * @param genre the substring to search for in the genre (non-null)
-     * @return a list of books with a genre containing {@code genre} (ignoring case),
-     *         or an empty list if none found
-     */
-    List<Book> findByGenreContainingIgnoreCase(String genre);
-
-    /**
-     * Finds all books whose replacement cost is less than or equal to the specified maximum.
-     *
-     * @param replacementCost the maximum amount (inclusive)
-     * @return a list of books whose replacement cost is ≤ {@code replacementCost}
-     */
-    List<Book> findByReplacementCostLessThanEqual(BigDecimal replacementCost);
-
-    /**
-     * Finds all books with the exact given replacement cost.
-     *
-     * @param replacementCost the exact amount to match
-     * @return a list of books whose replacement cost equals {@code replacementCost}
-     */
-    List<Book> findByReplacementCost(BigDecimal replacementCost);
-
-    /**
-     * Finds all books whose replacement cost falls within the given inclusive range.
-     *
-     * @param minReplacementCost the minimum amount (inclusive)
-     * @param maxReplacementCost the maximum amount (inclusive)
-     * @return a list of books with a replacement cost between the bounds
-     */
-    @Query("SELECT b FROM Book b WHERE b.replacementCost BETWEEN :minReplacementCost AND :maxReplacementCost")
-    List<Book> findBooksByReplacementCostBetween(@Param("minReplacementCost") BigDecimal minReplacementCost,
-                                                 @Param("maxReplacementCost") BigDecimal maxReplacementCost);
-
-    /**
      * Retrieves the book with the highest replacement cost.
      *
      * <p>If multiple books share the same maximum replacement cost, only one is returned

@@ -21,7 +21,8 @@ release.properties
 dependency-reduced-pom.xml
 buildNumber.properties
 .mvn/timing.properties
-.mvn/wrapper/maven-wrapper.jar  # Actually keep this if using Maven wrapper
+# Script-only Maven Wrapper needs no JAR; ignore it if the wrapper type changes later.
+.mvn/wrapper/maven-wrapper.jar
 
 # ============================================
 # INTELIJ IDEA

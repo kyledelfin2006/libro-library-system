@@ -1,6 +1,6 @@
 # API Documentation Guideline
 
-This guide defines how to keep the authentication, book, user, and loan APIs complete in generated OpenAPI while keeping Spring MVC controller code focused on HTTP behavior. Swagger UI is intended to be the project's interactive API reference and portfolio demonstration; the OpenAPI document is the contract it renders. The current filter chain also protects the Swagger UI and `/v3/api-docs` routes, so anonymous browser access is not available and the intended interactive access path remains an open deployment decision.
+This guide defines how to keep the authentication, book, user, and loan APIs complete in generated OpenAPI while keeping Spring MVC controller code focused on HTTP behavior. Swagger UI is intended to be the project's interactive API reference and portfolio demonstration; the OpenAPI document is the contract it renders. Swagger UI and `/v3/api-docs` are public by default and can be removed with `LIBRO_API_DOCS_ENABLED=false`.
 
 ## Documentation ownership
 

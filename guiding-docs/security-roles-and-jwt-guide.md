@@ -8,7 +8,7 @@ This guide records the live role, account, loan, and JWT policy. The detailed as
 - Protected routes accept JWT Bearer tokens only. The filter chain is stateless and CSRF is disabled for the header-only API. Signup and login are the only public application POST routes.
 - Public login and signup requests are limited per client IP using configurable in-memory windows. The limits are per app instance and reset on restart; gateway throttling remains required before public exposure and multi-instance deployment.
 - `UserRole` contains `STUDENT`, `FACULTY`, `ADMINISTRATOR`, and `LIBRARIAN`; Flyway V3 adds the librarian value to the accepted database role constraint.
-- Role and account boundaries below remain in force under JWT. No librarian is seeded; first-account provisioning is deferred.
+- Role and account boundaries below remain in force under JWT. No librarian is seeded by migration; operators can opt into an idempotent first-account startup provisioner with a complete account definition and BCrypt hash.
 - Loan routes and persistence are implemented under JWT. A `Book` row represents one physical copy; only one active loan may reference a copy, and a copy marked lost cannot be loaned again.
 
 ## Role policy

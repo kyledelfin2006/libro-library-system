@@ -32,8 +32,9 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 
 - The project is a single-module Java 25 / Spring Boot 4.1 REST API using Spring MVC, Spring Data JPA, Hibernate, PostgreSQL, Flyway, and Maven.
 - Login at POST /app/auth/login authenticates through Spring Security, LibroUserDetailsService, and BCrypt, then issues a 15-minute HS256 JWT. Protected routes accept Bearer tokens only; HTTP Basic is removed.
-- POST /app/users/signup and POST /app/auth/login are public. All other routes require authentication. The filter chain is stateless and CSRF is disabled for this Authorization-header-only API.
-- Login and signup requests pass through a configurable per-IP fixed-window MVC interceptor after Spring Security and before body binding/controller invocation; over-limit requests return 429 without reaching the controller/service. Counters are per process and reset on restart. Use gateway throttling and private app ingress before scaling or public exposure.
+- POST /app/users/signup, POST /app/auth/login, and GET /actuator/health/** are public. Other routes require authentication. The filter chain is stateless and CSRF is disabled for this Authorization-header-only API.
+- Login and signup requests pass through a configurable per-IP fixed-window MVC interceptor after Spring Security and before body binding/controller invocation; over-limit requests return 429 without reaching the controller/service. Counters are per process and reset on restart. `SERVER_FORWARD_HEADERS_STRATEGY` defaults to `none`; use `native` only when the app port is reachable solely from the trusted OCI proxy. Use gateway throttling and private app ingress before scaling or public exposure.
+- CORS is disabled by default. `LIBRO_CORS_ALLOWED_ORIGINS` accepts comma-separated exact UI origins; wildcard origins are rejected, cookies are disabled, and `Retry-After` is exposed to browser clients.
 - JWT issuer/audience default to `libro-api`; `LIBRO_JWT_SECRET_BASE64` is required and must decode to at least 32 bytes. Tokens validate signature, issuer, single audience, time claims, subject, and exactly one known role. See [JWT Authentication Design](guiding-docs/jwt-authentication-design.md).
 - Passwords must satisfy the 8–72 character complexity policy and remain within BCrypt's 72 UTF-8 byte input limit. Signup, password changes, and login enforce the byte boundary.
 - The live UserRole values are STUDENT, FACULTY, ADMINISTRATOR, and LIBRARIAN.
@@ -42,7 +43,8 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 - A Book includes an optional description and a positive `replacementCost`; the public API uses replacement-cost names for search, sort, filtering, and statistics. The old `price` API names are removed.
 - Librarians create faculty and administrator/library-assistant accounts. Administrators can list/read/manage student and faculty accounts and delete those accounts; librarians may also manage/delete administrator accounts. Students and faculty can delete their own accounts. Staff cannot manage another librarian account; administrator and librarian accounts cannot delete themselves.
 - User account ownership and target-role rules are enforced in UserService as well as by route authorization. A role/password change or account deletion does not revoke an issued token before its expiry plus 30 seconds of clock skew.
-- No librarian account is seeded; librarian-only routes require an existing librarian account. The historical V2 administrator bootstrap remains in place.
+- No librarian account is seeded by migration. An opt-in startup runner can create the first librarian from five environment variables, including a BCrypt hash; the values are all-or-nothing, repeat starts are idempotent, and logs omit account data and the hash. The historical V2 administrator bootstrap remains in place.
+- Spring Boot Actuator exposes only `health`, with public liveness and readiness probes and hidden health details. Docker and Compose probe `/actuator/health/readiness`.
 - Loans are implemented under JWT Bearer authentication. Each Book row represents one physical copy; V4 adds loan history and copy status. V5 adds optional book descriptions and renames the stored monetary value to `replacement_cost` without changing existing values. See [Loan Implementation Guide](docs/loan.md).
 - Flyway owns schema changes; Hibernate uses ddl-auto=validate. V5 is the current latest migration.
 
@@ -53,7 +55,7 @@ These are a snapshot, not a substitute for checking the code when a task changes
 - Keep HTTP handling in controllers, business rules and transactions in services, persistence behind repositories, and entity/DTO mapping explicit.
 - Use request and response DTOs at API boundaries. Never accept a JPA entity from a client or return one directly.
 - For Java methods you add or materially change, write method-level JavaDocs and line comments that explain the business rules and meaningful implementation steps.
-- Keep secrets and real personal data out of source, migrations, docs, tests, logs, and examples. The historical administrator bootstrap migration accepts only a BCrypt hash through LIBRO_ADMIN_PASSWORD_HASH. No librarian account is seeded.
+- Keep secrets and real personal data out of source, migrations, docs, tests, logs, and examples. The historical administrator and optional librarian bootstrap accept BCrypt hashes only; no account password or live hash belongs in source control.
 - Add forward-only Flyway migrations for schema changes once a migration may have been applied to a persistent database. Keep SQL and JPA mappings aligned.
 - Preserve the physical-book-copy domain decision and enforce loan ownership from the authenticated principal.
 - Update the README, this guide, the engineering reference, OpenAPI, and the roadmap only where their owned facts changed.
@@ -62,7 +64,7 @@ These are a snapshot, not a substitute for checking the code when a task changes
 ## Don't
 
 - Don't add refresh tokens, token persistence, or a denylist as incidental JWT changes; those require a separate revocation decision.
-- Don't claim JWT or Bearer authentication is live until code and tests enforce it. Loan service rules, route role gates, and authenticated identity have focused tests; concurrent checkout races, especially the borrower active-loan limit, still need dedicated PostgreSQL coverage before release.
+- Don't claim JWT or Bearer authentication is live until code and tests enforce it. Loan service rules, route role gates, and authenticated identity have focused tests, and `LoanConcurrencyIT` covers concurrent checkout races on PostgreSQL.
 - Don't let public signup choose a privileged role.
 - Don't add repository access or domain workflows to controllers.
 - Don't pass arbitrary client sort properties through to persistence.

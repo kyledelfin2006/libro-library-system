@@ -71,7 +71,7 @@ public class User {
 
     @PrePersist
     private void prePersist(){
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = app.global.time.LibraryTime.now();
     }
 
 

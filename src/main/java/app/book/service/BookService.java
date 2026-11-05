@@ -310,47 +310,54 @@ public class BookService {
     }
 
     /**
-     * Retrieves all books whose replacement cost is at or below the specified maximum.
+     * Pages books whose replacement cost is at or below the specified maximum.
+     * Delegates to {@link #queryBooks} so sort validation and the stable id tie-breaker apply.
      *
      * @param maxReplacementCost the maximum replacement amount (inclusive)
-     * @return a list of copies at or below the specified replacement amount
+     * @param pageable requested page (size is capped by Spring's max-page-size) and allowlisted sort
+     * @return a page of copies at or below the specified replacement amount
+     * @throws IllegalArgumentException if the maximum is missing or the sort is unsupported
      */
-    public List<Book> getBooksAtOrBelowReplacementCost(BigDecimal maxReplacementCost) {
-        return repository.findByReplacementCostLessThanEqual(maxReplacementCost);
+    public Page<Book> getBooksAtOrBelowReplacementCost(BigDecimal maxReplacementCost, Pageable pageable) {
+        if (maxReplacementCost == null) {
+            throw new IllegalArgumentException("maxReplacementCost is required");
+        }
+        return queryBooks(null, null, null, null, maxReplacementCost, pageable);
     }
 
     /**
-     * Retrieves all books whose replacement cost falls within the given range (inclusive).
+     * Pages books whose replacement cost falls within the given range (inclusive).
      *
      * @param minReplacementCost the minimum amount (must be ≤ max)
      * @param maxReplacementCost the maximum amount (must be ≥ min)
-     * @return a list of books in the replacement-cost range
-     * @throws IllegalArgumentException if min > max
+     * @param pageable requested page and allowlisted sort
+     * @return a page of books in the replacement-cost range
+     * @throws IllegalArgumentException if a bound is missing or min > max
      */
-    public List<Book> getBooksInReplacementCostRange(BigDecimal minReplacementCost, BigDecimal maxReplacementCost) {
+    public Page<Book> getBooksInReplacementCostRange(BigDecimal minReplacementCost, BigDecimal maxReplacementCost,
+                                                     Pageable pageable) {
         if (minReplacementCost == null || maxReplacementCost == null) {
             throw new IllegalArgumentException("minReplacementCost and maxReplacementCost are required");
         }
-        if (minReplacementCost.compareTo(maxReplacementCost) > 0) {
-            throw new IllegalArgumentException("minReplacementCost must be less than or equal to maxReplacementCost");
-        }
-        return repository.findBooksByReplacementCostBetween(minReplacementCost, maxReplacementCost);
+        // queryBooks rejects a reversed range, so the bounds are not compared twice here.
+        return queryBooks(null, null, null, minReplacementCost, maxReplacementCost, pageable);
     }
 
     /**
-     * Searches for books by a specific field type and value.
+     * Pages books by a specific field type and value.
      * <p>
      * Supported search types: {@code author}, {@code title}, {@code genre}, {@code replacementCost}.
-     * For replacement cost, the value must be a valid numeric string.
+     * Text types match case-insensitive substrings; replacement cost requires an exact numeric value.
      * </p>
      *
      * @param type  the field to search on (case-insensitive, trimmed)
-     * @param value the search term (case-insensitive for text fields)
-     * @return a list of matching books
+     * @param value the search term
+     * @param pageable requested page and allowlisted sort
+     * @return a page of matching books
      * @throws IllegalArgumentException if the search type is unsupported or
      *                                  the replacement-cost value is not a valid number
      */
-    public List<Book> searchBooks(String type, String value) {
+    public Page<Book> searchBooks(String type, String value, Pageable pageable) {
         if (type == null || type.isBlank()) {
             throw new IllegalArgumentException("Search type is required");
         }
@@ -360,23 +367,23 @@ public class BookService {
 
         String formattedType = type.trim().toLowerCase(Locale.ROOT);
 
-        switch (formattedType) {
-            case "author":
-                return repository.findByAuthorContainingIgnoreCase(value);
-            case "title":
-                return repository.findByTitleContainingIgnoreCase(value);
-            case "genre":
-                return repository.findByGenreContainingIgnoreCase(value);
-            case "replacementcost":
+        return switch (formattedType) {
+            case "author" -> queryBooks(null, value, null, null, null, pageable);
+            case "title" -> queryBooks(value, null, null, null, null, pageable);
+            case "genre" -> queryBooks(null, null, value, null, null, pageable);
+            case "replacementcost" -> {
+                BigDecimal replacementCost;
                 try {
-                    BigDecimal replacementCost = new BigDecimal(value);
-                    return repository.findByReplacementCost(replacementCost);
+                    replacementCost = new BigDecimal(value);
                 } catch (NumberFormatException e) {
                     throw new IllegalArgumentException("Invalid replacement-cost format value: " + value);
                 }
-            default: // Handler for invalid types
-                throw new IllegalArgumentException("Invalid search type: " + type + ". Valid types: author, title, genre, replacementCost");
-        }
+                // An exact match is an inclusive range whose bounds are equal.
+                yield queryBooks(null, null, null, replacementCost, replacementCost, pageable);
+            }
+            default -> throw new IllegalArgumentException(
+                    "Invalid search type: " + type + ". Valid types: author, title, genre, replacementCost");
+        };
     }
 
     /**
@@ -395,34 +402,33 @@ public class BookService {
 
 
     /**
-     * Retrieves all books sorted by the specified field in ascending order.
+     * Pages all books sorted ascending by the specified field.
      * <p>
      * Allowed sort fields are: {@code title}, {@code author}, {@code id}, {@code replacementCost}, {@code genre}.
-     * If the provided field is {@code null} or empty, the list is returned unsorted.
+     * A null or blank field sorts by id. The field, not any sort carried by {@code pageable}, decides the order.
      * </p>
      *
      * @param field the name of the field to sort by (case-insensitive, trimmed)
-     * @return a list of books sorted accordingly
+     * @param pageable supplies the page number and size only
+     * @return a page of books sorted accordingly
      * @throws IllegalArgumentException if the field is not one of the allowed values
      */
-    public List<Book> getBooksSortedBy(String field) {
-        if (field == null || field.trim().isEmpty()) {
-            return repository.findAll();
+    public Page<Book> getBooksSortedBy(String field, Pageable pageable) {
+        String fieldName = "id";
+        if (field != null && !field.trim().isEmpty()) {
+            // Normalize ordinary fields to lowercase, but keep the JPA camel-case property spelling.
+            String normalized = field.trim().toLowerCase(Locale.ROOT);
+            fieldName = normalized.equals("replacementcost") ? "replacementCost" : normalized;
         }
 
-        // Normalize ordinary fields to lowercase, but keep the JPA camel-case property spelling.
-        String normalizedFieldName = field.trim().toLowerCase(Locale.ROOT);
-        String fieldName = normalizedFieldName.equals("replacementcost")
-                ? "replacementCost" : normalizedFieldName;
-
-        // Validate allowed fields to avoid SQL injection through Sort.by()
-        // If not allowed throw exception
+        // Validate against the allowlist so a client can never name an arbitrary entity property.
         if (!SORTABLE_BOOK_FIELDS.contains(fieldName)) {
             throw new IllegalArgumentException("Invalid sort field: " + field);
         }
 
-        Sort sort = Sort.by(fieldName).ascending();
-        return repository.findAll(sort);
+        Pageable sortedPage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                Sort.by(fieldName).ascending());
+        return queryBooks(null, null, null, null, null, sortedPage);
     }
 
     /**
@@ -500,12 +506,4 @@ public class BookService {
         return repository.count();
     }
 
-    /**
-     * Checks database reachability without calculating the exact book count.
-     *
-     * @return {@code true} when the database responds to a lightweight query
-     */
-    public boolean isDatabaseReachable() {
-        return repository.pingDatabase() == 1;
-    }
 }

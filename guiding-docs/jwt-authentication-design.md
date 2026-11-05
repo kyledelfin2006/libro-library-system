@@ -25,7 +25,8 @@
 | --- | --- | --- |
 | `POST /app/users/signup` | Public | Existing signup contract; service always assigns `STUDENT`; 429 when the client IP exceeds its configured quota |
 | `POST /app/auth/login` | Public | Validated credentials in; 200 token response on success; 400 for invalid request shape; generic 401 for rejected credentials; 429 when the client IP exceeds its configured quota |
-| All other routes | Bearer token required | Existing role, ownership, and response contracts continue to apply |
+| `GET /actuator/health/**` | Public | Liveness/readiness only; details are hidden and only the health endpoint is exposed |
+| All other application routes | Bearer token required | Existing role, ownership, and response contracts continue to apply |
 
 Login request:
 
@@ -34,6 +35,8 @@ Login request:
 ```
 
 For login and signup, Spring Security first permits the public route. Spring MVC then matches the route and calls `PublicRouteRateLimitInterceptor` before binding or validating the request body. If the client IP is over that route's quota, the interceptor returns HTTP 429 with `Retry-After` and the normal `ErrorResponse` body; it does not invoke the controller or service. Requests within quota continue through normal body validation and endpoint handling.
+
+The limiter keys on the servlet container's `getRemoteAddr()`. `SERVER_FORWARD_HEADERS_STRATEGY` accepts `none` (default) or `native`; use `native` only when the app port is reachable exclusively through the trusted OCI load balancer/proxy. Tomcat then resolves the forwarded client address before MVC. The interceptor does not parse `X-Forwarded-For` directly, so unprocessed client-supplied headers cannot rotate the quota. Gateway throttling remains necessary because in-memory counters are per process.
 
 Successful response:
 
@@ -93,6 +96,8 @@ Full role meanings and account-operation details are in the [role policy](securi
 | `LIBRO_SIGNUP_RATE_LIMIT_REQUESTS` | `libro.security.rate-limit.signup.requests` | `10` | Positive per-IP signup quota in each fixed window |
 | `LIBRO_SIGNUP_RATE_LIMIT_WINDOW_SECONDS` | `libro.security.rate-limit.signup.window-seconds` | `3600` | Positive and at most 86400 seconds |
 | `LIBRO_RATE_LIMIT_MAX_TRACKED_CLIENT_ROUTES` | `libro.security.rate-limit.max-tracked-client-routes` | `10000` | At least 2; bounds in-memory route/address counters |
+| `SERVER_FORWARD_HEADERS_STRATEGY` | `server.forward-headers-strategy` | `none` | `none` or `native`; only use `native` behind a trusted proxy with direct app access blocked |
+| `LIBRO_CORS_ALLOWED_ORIGINS` | `libro.security.cors.allowed-origins` | blank | Comma-separated exact origins; wildcards rejected and credentials disabled |
 
 Generate the key from cryptographically secure randomness and provide it through an untracked local environment file or deployment secret manager. For example, `openssl rand -base64 32` generates 32 random bytes and encodes them. Do not commit a real key, put one in a migration, or log one. Every application replica must share the same active key and issuer/audience settings. Replacing the shared HS256 key invalidates all existing tokens.
 

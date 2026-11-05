@@ -85,7 +85,8 @@ class OpenApiMvcTest {
                 .andExpect(jsonPath("$.paths['/app/auth/login'].post.responses['400']").exists())
                 .andExpect(jsonPath("$.paths['/app/auth/login'].post.responses['401']").exists())
                 .andExpect(jsonPath("$.paths['/app/auth/login'].post.responses['429']").exists())
-                .andExpect(jsonPath("$.paths['/app/books/{id}'].get.security[0].bearerAuth").exists())
+                // Protected operations inherit the global bearerAuth requirement asserted above, so none is repeated per operation.
+                .andExpect(jsonPath("$.paths['/app/books/{id}'].get.security").doesNotExist())
                 .andExpect(jsonPath("$.paths['/app/users/signup'].post.security").isEmpty())
                 .andExpect(jsonPath("$.paths['/app/books/{id}'].get.tags[0]").value("Books"))
                 .andExpect(jsonPath("$.paths['/app/books/query'].get.parameters[?(@.name == 'minReplacementCost')]").exists())

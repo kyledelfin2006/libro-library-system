@@ -1,7 +1,5 @@
 package app.auth.ratelimit;
 
-import app.global.responses.ErrorResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -19,7 +18,6 @@ import java.util.Map;
 public class PublicRouteRateLimitInterceptor implements HandlerInterceptor {
 
     private final RateLimitProperties properties;
-    private final ObjectMapper objectMapper;
     private final Map<ClientRoute, RequestWindow> windows = new LinkedHashMap<>();
     private long requestsSinceCleanup;
 
@@ -27,15 +25,15 @@ public class PublicRouteRateLimitInterceptor implements HandlerInterceptor {
      * Creates an in-memory limiter for the two public routes.
      *
      * @param properties configured quotas and maximum tracked client count
-     * @param objectMapper writes the standard API error body for rejected requests
      */
-    public PublicRouteRateLimitInterceptor(RateLimitProperties properties, ObjectMapper objectMapper) {
+    public PublicRouteRateLimitInterceptor(RateLimitProperties properties) {
         this.properties = properties;
-        this.objectMapper = objectMapper;
     }
 
     /**
      * Checks the matching POST request before controller validation or credential work.
+     * The servlet container's {@code getRemoteAddr()} is authoritative; trusted proxy handling may rewrite it
+     * before MVC, while this interceptor never reads spoofable {@code X-Forwarded-For} values directly.
      *
      * @param request incoming servlet request
      * @param response outgoing servlet response
@@ -60,9 +58,11 @@ public class PublicRouteRateLimitInterceptor implements HandlerInterceptor {
             return true;
         }
 
+        // Use the container-resolved client address so proxy headers are trusted only by configured container support.
+        String clientAddress = request.getRemoteAddr();
         long now = System.currentTimeMillis() / 1000;
         long windowNumber = now / limit.windowSeconds();
-        long retryAfter = acquire(route, request.getRemoteAddr(), limit, windowNumber, now);
+        long retryAfter = acquire(route, clientAddress, limit, windowNumber, now);
         if (retryAfter == 0) {
             return true;
         }
@@ -70,14 +70,19 @@ public class PublicRouteRateLimitInterceptor implements HandlerInterceptor {
         response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
         response.setHeader("Retry-After", Long.toString(retryAfter));
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        objectMapper.writeValue(response.getOutputStream(), new ErrorResponse(
-                "Too many requests", "Request limit exceeded. Please try again later.",
-                HttpStatus.TOO_MANY_REQUESTS.value()));
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        // This fixed response preserves the API error schema without depending on a Jackson version-specific mapper bean.
+        response.getWriter().write("""
+                {"error":"Too many requests","details":"Request limit exceeded. Please try again later.","timestamp":%d,"statusCode":429,"fieldErrors":{},"requestId":"%s"}
+                """.formatted(System.currentTimeMillis(),
+                // RequestIdFilter guarantees a safe [A-Za-z0-9-] value, so no JSON escaping is needed.
+                java.util.Objects.toString(org.slf4j.MDC.get("requestId"), "")));
         return false;
     }
 
     /**
-     * Atomically consumes one slot for a route and remote address.
+     * Atomically consumes one slot for a route and the container-resolved remote address.
+     * Forwarded headers are not parsed here because a request can spoof them when it reaches the app directly.
      *
      * @param route public route path
      * @param remoteAddress address reported by the servlet container

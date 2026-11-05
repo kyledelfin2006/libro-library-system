@@ -29,6 +29,7 @@ import java.util.List;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -275,37 +276,38 @@ class BookApiMvcTest {
     @Test
     void search_bindsAndForwardsQueryParameters() throws Exception {
         Book book = book(1L);
-        when(service.searchBooks("author", "orwell")).thenReturn(List.of(book));
-        when(mapper.toResponseDTOList(List.of(book))).thenReturn(List.of(response(1L)));
+        when(service.searchBooks(eq("author"), eq("orwell"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(book)));
+        when(mapper.toResponseDTO(book)).thenReturn(response(1L));
 
         mockMvc.perform(get("/app/books/search")
                         .queryParam("type", "author")
                         .queryParam("value", "orwell"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(1))
-                .andExpect(jsonPath("$[0].author").value("George Orwell"));
+                .andExpect(jsonPath("$.content[0].id").value(1))
+                .andExpect(jsonPath("$.content[0].author").value("George Orwell"));
 
-        verify(service).searchBooks("author", "orwell");
+        verify(service).searchBooks(eq("author"), eq("orwell"), any(Pageable.class));
     }
 
     @Test
     void replacementCostFilter_bindsDecimalQueryParameters() throws Exception {
-        when(service.getBooksInReplacementCostRange(new BigDecimal("10.00"), new BigDecimal("25.00")))
-                .thenReturn(List.of());
-        when(mapper.toResponseDTOList(List.of())).thenReturn(List.of());
+        when(service.getBooksInReplacementCostRange(eq(new BigDecimal("10.00")), eq(new BigDecimal("25.00")),
+                any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/app/books/replacement-cost")
                         .queryParam("minReplacementCost", "10.00")
                         .queryParam("maxReplacementCost", "25.00"))
                 .andExpect(status().isOk())
-                .andExpect(content().json("[]"));
+                .andExpect(jsonPath("$.content").isEmpty());
 
-        verify(service).getBooksInReplacementCostRange(new BigDecimal("10.00"), new BigDecimal("25.00"));
+        verify(service).getBooksInReplacementCostRange(eq(new BigDecimal("10.00")), eq(new BigDecimal("25.00")),
+                any(Pageable.class));
     }
 
     @Test
     void sorted_whenServiceRejectsField_returnsGlobalValidationResponse() throws Exception {
-        when(service.getBooksSortedBy("unknown"))
+        when(service.getBooksSortedBy(eq("unknown"), any(Pageable.class)))
                 .thenThrow(new IllegalArgumentException("Invalid sort field: unknown"));
 
         mockMvc.perform(get("/app/books/sorted").queryParam("category", "unknown"))
@@ -325,7 +327,7 @@ class BookApiMvcTest {
                 .andExpect(jsonPath("$.details", containsString("minReplacementCost")))
                 .andExpect(jsonPath("$.statusCode").value(400));
 
-        verify(service, never()).getBooksInReplacementCostRange(any(), any());
+        verify(service, never()).getBooksInReplacementCostRange(any(), any(), any());
     }
 
     @Test

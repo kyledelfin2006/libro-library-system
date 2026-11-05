@@ -1,6 +1,5 @@
 package app.auth.ratelimit;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -17,10 +16,9 @@ public class PublicRouteRateLimitConfig implements WebMvcConfigurer {
      * Creates MVC rate-limit registration with deployment-controlled quotas.
      *
      * @param properties route quotas
-     * @param objectMapper serializer for standard API errors
      */
-    public PublicRouteRateLimitConfig(RateLimitProperties properties, ObjectMapper objectMapper) {
-        this.interceptor = new PublicRouteRateLimitInterceptor(properties, objectMapper);
+    public PublicRouteRateLimitConfig(RateLimitProperties properties) {
+        this.interceptor = new PublicRouteRateLimitInterceptor(properties);
     }
 
     /** Registers the guard only for the two public POST route paths. */

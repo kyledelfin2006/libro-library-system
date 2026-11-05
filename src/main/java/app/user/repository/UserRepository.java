@@ -41,6 +41,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // finds users by role
     List<User> findByUserRole(UserRole userRole);
 
+    /** Returns whether any account already has the supplied role. */
+    boolean existsByUserRole(UserRole userRole);
+
     // Returns a pageable subset of users with one role.
     Page<User> findByUserRole(UserRole userRole, Pageable pageable);
 

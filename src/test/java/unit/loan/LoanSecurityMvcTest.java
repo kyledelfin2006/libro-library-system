@@ -62,6 +62,18 @@ class LoanSecurityMvcTest {
         LoanService loanService() {
             return mock(LoanService.class);
         }
+
+        /** SecurityConfig builds the login AuthenticationManager from these two collaborators; mocks avoid persistence. */
+        @Bean
+        app.auth.LibroUserDetailsService libroUserDetailsService() {
+            return mock(app.auth.LibroUserDetailsService.class);
+        }
+
+        /** Password encoder required by the AuthenticationManager bean; tokens here are mocked, so any encoder works. */
+        @Bean
+        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder() {
+            return new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(4);
+        }
     }
 
     /** Resets the service mock so every route test verifies only its own interactions. */

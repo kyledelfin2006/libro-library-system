@@ -17,7 +17,9 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -481,88 +483,133 @@ class BookServiceTest {
         verify(repository, never()).save(any());
     }
 
-    // ---------- getBooksAtOrBelowReplacementCost ----------
-    /** Verifies delegation to the inclusive less-than-or-equal budget repository query. */
+    // ---------- paginated list reads (all delegate to repository.queryBooks) ----------
+    private static final Pageable FIRST_PAGE = PageRequest.of(0, 12, Sort.by("id"));
+
+    /** Stubs the shared paged query for the given text filters and bounds, accepting any stable page. */
+    private void stubQuery(String title, String author, String genre, BigDecimal min, BigDecimal max, Page<Book> result) {
+        when(repository.queryBooks(eq(title), eq(author), eq(genre), eq(min), eq(max), any(Pageable.class)))
+                .thenReturn(result);
+    }
+
+    /** Verifies the budget read is an inclusive upper bound and stays paginated. */
     @Test
-    void getBooksAtOrBelowReplacementCost_shouldReturnBooksWithReplacementCostLessThanOrEqual() {
-        List<Book> expected = Arrays.asList(sampleBook, new Book("Cheap", "Author", "Genre", new BigDecimal("10.0")));
-        when(repository.findByReplacementCostLessThanEqual(new BigDecimal("30.0"))).thenReturn(expected);
+    void getBooksAtOrBelowReplacementCost_shouldQueryUpperBoundOnly() {
+        Page<Book> expected = new PageImpl<>(List.of(sampleBook));
+        stubQuery("", "", "", null, new BigDecimal("30.0"), expected);
 
-        List<Book> result = bookService.getBooksAtOrBelowReplacementCost(new BigDecimal("30.0"));
+        assertSame(expected, bookService.getBooksAtOrBelowReplacementCost(new BigDecimal("30.0"), FIRST_PAGE));
+    }
 
-        assertEquals(2, result.size());
-        verify(repository, times(1)).findByReplacementCostLessThanEqual(new BigDecimal("30.0"));
+    /** Verifies a missing maximum is rejected before any query. */
+    @Test
+    void getBooksAtOrBelowReplacementCost_whenMaximumMissing_shouldReject() {
+        assertThrows(IllegalArgumentException.class,
+                () -> bookService.getBooksAtOrBelowReplacementCost(null, FIRST_PAGE));
+        verifyNoInteractions(repository);
     }
 
     /** Verifies reversed replacementCost ranges are rejected before query execution. */
     @Test
     void getBooksInReplacementCostRange_whenMinimumExceedsMaximum_shouldReject() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> bookService.getBooksInReplacementCostRange(new BigDecimal("30.0"), new BigDecimal("10.0"))
-        );
-
-        verify(repository, never()).findBooksByReplacementCostBetween(any(), any());
+        assertThrows(IllegalArgumentException.class, () -> bookService.getBooksInReplacementCostRange(
+                new BigDecimal("30.0"), new BigDecimal("10.0"), FIRST_PAGE));
+        verifyNoInteractions(repository);
     }
 
     /** Verifies incomplete replacementCost ranges fail with a client-facing validation error. */
     @Test
     void getBooksInReplacementCostRange_whenBoundaryIsMissing_shouldReject() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> bookService.getBooksInReplacementCostRange(null, BigDecimal.TEN)
-        );
-
-        verify(repository, never()).findBooksByReplacementCostBetween(any(), any());
+        assertThrows(IllegalArgumentException.class,
+                () -> bookService.getBooksInReplacementCostRange(null, BigDecimal.TEN, FIRST_PAGE));
+        verifyNoInteractions(repository);
     }
 
-    // ---------- searchBooks ----------
-    /** Verifies author searches use the case-insensitive contains repository method. */
+    /** Verifies a valid range is forwarded with both inclusive bounds. */
     @Test
-    void searchBooks_byAuthor_shouldReturnMatchingBooks() {
-        List<Book> expected = List.of(sampleBook);
-        when(repository.findByAuthorContainingIgnoreCase("Bloch")).thenReturn(expected);
+    void getBooksInReplacementCostRange_shouldQueryBothBounds() {
+        Page<Book> expected = new PageImpl<>(List.of(sampleBook));
+        stubQuery("", "", "", BigDecimal.TEN, new BigDecimal("30"), expected);
 
-        List<Book> result = bookService.searchBooks("author", "Bloch");
-
-        assertEquals(expected, result);
-        verify(repository, times(1)).findByAuthorContainingIgnoreCase("Bloch");
+        assertSame(expected, bookService.getBooksInReplacementCostRange(BigDecimal.TEN, new BigDecimal("30"), FIRST_PAGE));
     }
 
-    /** Verifies search-type normalization is case-insensitive and trims surrounding whitespace. */
+    /** Verifies each text search type maps to its own filter, with type matching case- and whitespace-insensitive. */
     @Test
-    void searchBooks_byAuthor_isCaseAndWhitespaceInsensitiveForType() {
-        List<Book> expected = List.of(sampleBook);
-        when(repository.findByAuthorContainingIgnoreCase("Bloch")).thenReturn(expected);
+    void searchBooks_textTypes_shouldFilterTheMatchingField() {
+        Page<Book> expected = new PageImpl<>(List.of(sampleBook));
+        stubQuery("", "Bloch", "", null, null, expected);
+        stubQuery("Effective", "", "", null, null, expected);
+        stubQuery("", "", "Program", null, null, expected);
 
-        List<Book> result = bookService.searchBooks("  AUTHOR  ", "Bloch");
-
-        assertEquals(expected, result);
-        verify(repository, times(1)).findByAuthorContainingIgnoreCase("Bloch");
+        assertSame(expected, bookService.searchBooks("  AUTHOR  ", "Bloch", FIRST_PAGE));
+        assertSame(expected, bookService.searchBooks("title", "Effective", FIRST_PAGE));
+        assertSame(expected, bookService.searchBooks("genre", "Program", FIRST_PAGE));
     }
 
-    /** Verifies title searches use the case-insensitive contains repository method. */
+    /** Verifies replacementCost search is an exact match expressed as an equal-bounds range. */
     @Test
-    void searchBooks_byTitle_shouldReturnMatchingBooks() {
-        List<Book> expected = List.of(sampleBook);
-        when(repository.findByTitleContainingIgnoreCase("Effective")).thenReturn(expected);
+    void searchBooks_byReplacementCost_shouldUseEqualBounds() {
+        Page<Book> expected = new PageImpl<>(List.of(sampleBook));
+        stubQuery("", "", "", new BigDecimal("45"), new BigDecimal("45"), expected);
 
-        List<Book> result = bookService.searchBooks("title", "Effective");
-
-        assertEquals(expected, result);
-        verify(repository, times(1)).findByTitleContainingIgnoreCase("Effective");
+        assertSame(expected, bookService.searchBooks("replacementCost", "45", FIRST_PAGE));
     }
 
-    /** Verifies genre searches use the case-insensitive contains repository method. */
+    /** Verifies malformed replacementCost text is rejected without querying. */
     @Test
-    void searchBooks_byGenre_shouldReturnMatchingBooks() {
-        List<Book> expected = List.of(sampleBook);
-        when(repository.findByGenreContainingIgnoreCase("Program")).thenReturn(expected);
+    void searchBooks_byReplacementCost_withInvalidNumber_shouldThrowIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class,
+                () -> bookService.searchBooks("replacementCost", "not-a-number", FIRST_PAGE));
+        verifyNoInteractions(repository);
+    }
 
-        List<Book> result = bookService.searchBooks("genre", "Program");
+    /** Verifies unsupported search fields are rejected instead of becoming dynamic queries. */
+    @Test
+    void searchBooks_withInvalidType_shouldThrowIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks("invalid", "value", FIRST_PAGE));
+        verifyNoInteractions(repository);
+    }
 
-        assertEquals(expected, result);
-        verify(repository, times(1)).findByGenreContainingIgnoreCase("Program");
+    @Test
+    void searchBooks_withMissingTypeOrValue_shouldThrowIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks(null, "value", FIRST_PAGE));
+        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks("   ", "value", FIRST_PAGE));
+        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks("author", null, FIRST_PAGE));
+        verifyNoInteractions(repository);
+    }
+
+    /** Verifies the sorted read orders ascending by the normalized field, keeps the id tie-breaker, and pages. */
+    @Test
+    void getBooksSortedBy_validField_shouldPageSortedAscending() {
+        Page<Book> expected = new PageImpl<>(List.of(sampleBook));
+        when(repository.queryBooks(eq(""), eq(""), eq(""), isNull(), isNull(), any(Pageable.class))).thenReturn(expected);
+
+        assertSame(expected, bookService.getBooksSortedBy("  REPLACEMENTCOST  ", PageRequest.of(2, 5)));
+
+        ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
+        verify(repository).queryBooks(eq(""), eq(""), eq(""), isNull(), isNull(), page.capture());
+        assertEquals(2, page.getValue().getPageNumber());
+        assertEquals(5, page.getValue().getPageSize());
+        assertEquals(Sort.Direction.ASC, page.getValue().getSort().getOrderFor("replacementCost").getDirection());
+        assertNotNull(page.getValue().getSort().getOrderFor("id"));
+    }
+
+    /** Verifies the sort allowlist rejects unknown entity properties. */
+    @Test
+    void getBooksSortedBy_invalidField_shouldThrowIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () -> bookService.getBooksSortedBy("invalidField", FIRST_PAGE));
+        verifyNoInteractions(repository);
+    }
+
+    /** Verifies a null or blank field falls back to id order. */
+    @Test
+    void getBooksSortedBy_blankField_shouldSortById() {
+        Page<Book> expected = new PageImpl<>(List.of(sampleBook));
+        when(repository.queryBooks(any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(expected);
+
+        assertSame(expected, bookService.getBooksSortedBy(null, FIRST_PAGE));
+        assertSame(expected, bookService.getBooksSortedBy("   ", FIRST_PAGE));
     }
 
     // ---------- getGenreDistribution ----------
@@ -586,99 +633,6 @@ class BookServiceTest {
 
         assertTrue(bookService.getGenreDistribution().isEmpty());
         verify(repository).getGenres();
-    }
-
-    /** Verifies replacementCost text is converted to {@link BigDecimal} and matched exactly. */
-    @Test
-    void searchBooks_byReplacementCost_shouldReturnBooksWithMatchingReplacementCost() {
-        List<Book> expected = List.of(sampleBook);
-        // The service uses Long.parseLong, so pass an integer string
-        when(repository.findByReplacementCost(new BigDecimal("45"))).thenReturn(expected);
-
-        List<Book> result = bookService.searchBooks("replacementCost", "45");
-
-        assertEquals(expected, result);
-        verify(repository, times(1)).findByReplacementCost(new BigDecimal("45"));
-    }
-
-    /** Verifies malformed replacementCost text is rejected without invoking the replacementCost repository query. */
-    @Test
-    void searchBooks_byReplacementCost_withInvalidNumber_shouldThrowIllegalArgumentException() {
-        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks("replacementCost", "not-a-number"));
-        verify(repository, never()).findByReplacementCost(any(BigDecimal.class));
-    }
-
-    /** Verifies unsupported search fields are rejected instead of becoming dynamic queries. */
-    @Test
-    void searchBooks_withInvalidType_shouldThrowIllegalArgumentException() {
-        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks("invalid", "value"));
-        verify(repository, never()).findByAuthorContainingIgnoreCase(anyString());
-    }
-
-    @Test
-    void searchBooks_withMissingTypeOrValue_shouldThrowIllegalArgumentException() {
-        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks(null, "value"));
-        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks("   ", "value"));
-        assertThrows(IllegalArgumentException.class, () -> bookService.searchBooks("author", null));
-        verifyNoInteractions(repository);
-    }
-
-    // ---------- getBooksSortedBy ----------
-    /** Verifies an allowed field creates an ascending Spring Data {@link Sort}. */
-    @Test
-    void getBooksSortedBy_validField_shouldReturnSortedList() {
-        List<Book> expected = List.of(sampleBook);
-        when(repository.findAll(Sort.by("title").ascending())).thenReturn(expected);
-
-        List<Book> result = bookService.getBooksSortedBy("title");
-
-        assertEquals(expected, result);
-        verify(repository, times(1)).findAll(Sort.by("title").ascending());
-    }
-
-    /** Verifies sort-field normalization before constructing the ascending sort. */
-    @Test
-    void getBooksSortedBy_validFieldMixedCaseWithWhitespace_shouldReturnSortedList() {
-        List<Book> expected = List.of(sampleBook);
-        when(repository.findAll(Sort.by("replacementCost").ascending())).thenReturn(expected);
-
-        List<Book> result = bookService.getBooksSortedBy("  REPLACEMENTCOST  ");
-
-        assertEquals(expected, result);
-        verify(repository, times(1)).findAll(Sort.by("replacementCost").ascending());
-    }
-
-    /** Verifies the sort allowlist rejects unknown entity properties. */
-    @Test
-    void getBooksSortedBy_invalidField_shouldThrowIllegalArgumentException() {
-        assertThrows(IllegalArgumentException.class, () -> bookService.getBooksSortedBy("invalidField"));
-        verify(repository, never()).findAll(any(Sort.class));
-    }
-
-    /** Verifies a null sort field returns the repository's natural unsorted result. */
-    @Test
-    void getBooksSortedBy_nullField_shouldReturnAllUnsorted() {
-        List<Book> expected = List.of(sampleBook);
-        when(repository.findAll()).thenReturn(expected);
-
-        List<Book> result = bookService.getBooksSortedBy(null);
-
-        assertEquals(expected, result);
-        verify(repository, times(1)).findAll();
-        verify(repository, never()).findAll(any(Sort.class));
-    }
-
-    /** Verifies a whitespace-only sort field returns the unsorted result. */
-    @Test
-    void getBooksSortedBy_emptyField_shouldReturnAllUnsorted() {
-        List<Book> expected = List.of(sampleBook);
-        when(repository.findAll()).thenReturn(expected);
-
-        List<Book> result = bookService.getBooksSortedBy("   ");
-
-        assertEquals(expected, result);
-        verify(repository, times(1)).findAll();
-        verify(repository, never()).findAll(any(Sort.class));
     }
 
     // ---------- getTotalReplacementCost ----------
