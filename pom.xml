@@ -19,6 +19,8 @@
         <java.version>25</java.version>
         <!-- Overrides the Boot BOM so the Flyway engine and PostgreSQL module stay on one tested version. -->
         <flyway.version>13.3.0</flyway.version>
+        <!-- Overrides the Boot BOM: pgjdbc 42.7.4-42.7.11 is affected by CVE-2026-54291 (SCRAM-SHA-256-PLUS downgrade); fixed in 42.7.12. Drop once the BOM ships >= 42.7.12. -->
+        <postgresql.version>42.7.12</postgresql.version>
         <!-- Not managed by the Boot BOM; imported through testcontainers-bom below. -->
         <testcontainers.version>2.0.5</testcontainers.version>
     </properties>
