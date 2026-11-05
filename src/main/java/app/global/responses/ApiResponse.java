@@ -3,7 +3,7 @@ package app.global.responses;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 
-@Schema(description = "Success envelope used by selected API operations. Some read operations return their DTO directly.")
+@Schema(description = "Success envelope returned by every successful API operation. Errors use ErrorResponse instead.")
 @Getter
 public class ApiResponse<T> {
     // Getters
@@ -15,6 +15,17 @@ public class ApiResponse<T> {
     private T data; // actual data of the request
     @Schema(description = "Response creation time as Unix epoch milliseconds.", example = "1720000000000")
     private final long timestamp; // Time Of API Response
+
+    /**
+     * Wraps a successful result in the standard envelope.
+     *
+     * @param data the operation result (a DTO, a page, or a value)
+     * @param <T> result type
+     * @return a success envelope with the generic message "Success"
+     */
+    public static <T> ApiResponse<T> ok(T data) {
+        return new ApiResponse<>(true, "Success", data);
+    }
 
     public ApiResponse(boolean success, String message) {
         this.success = success;

@@ -1,0 +1,23 @@
+# Reference TLS-terminating reverse proxy for the Libro API (Caddy).
+# Started only with `docker compose --profile proxy up`; see docker-compose.yml.
+#
+# {$LIBRO_DOMAIN} is the public host name. For a real domain Caddy obtains and renews a Let's Encrypt certificate
+# automatically (ports 80 and 443 must be reachable). The default `localhost` uses Caddy's internal CA for local testing.
+{$LIBRO_DOMAIN:localhost} {
+	# Compress JSON responses.
+	encode zstd gzip
+
+	header {
+		# Tell browsers to use HTTPS only for this host for one year.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# Stop browsers from guessing content types.
+		X-Content-Type-Options "nosniff"
+		# Do not advertise the proxy software.
+		-Server
+	}
+
+	# Forward everything to the application over the private Compose network. Caddy sets X-Forwarded-For/-Proto,
+	# which the app trusts only when SERVER_FORWARD_HEADERS_STRATEGY=native (safe here because the app port is not
+	# published beyond loopback). The Actuator/Prometheus management port is never proxied.
+	reverse_proxy app:8080
+}

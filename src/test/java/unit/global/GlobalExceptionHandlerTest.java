@@ -56,6 +56,24 @@ class GlobalExceptionHandlerTest {
         assertError(response, HttpStatus.BAD_REQUEST, "Validation failed", "Replacement cost must be greater than 0");
     }
 
+    /** Verifies framework client errors keep their native 4xx status instead of falling into the 500 catch-all. */
+    @Test
+    void shouldKeepNativeStatusForFrameworkClientErrors() {
+        ResponseEntity<ErrorResponse> missing = handler.handleFrameworkClientError(
+                new org.springframework.web.bind.MissingServletRequestParameterException("type", "String"));
+        assertError(missing, HttpStatus.BAD_REQUEST, "Bad Request", "Required parameter 'type' is missing");
+
+        ResponseEntity<ErrorResponse> unsupported = handler.handleFrameworkClientError(
+                new org.springframework.web.HttpMediaTypeNotSupportedException("Unsupported"));
+        assertThat(unsupported.getStatusCode()).isEqualTo(HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+
+        ResponseEntity<ErrorResponse> unknownPath = handler.handleFrameworkClientError(
+                new org.springframework.web.servlet.resource.NoResourceFoundException(
+                        org.springframework.http.HttpMethod.GET, "/nope", "nope"));
+        assertThat(unknownPath.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(unknownPath.getBody().getDetails()).doesNotContain("/nope");
+    }
+
     /** Verifies numeric parsing failures return a safe message without echoing parser input. */
     @Test
     void shouldReturnBadRequestWhenNumberFormatExceptionThrown() {

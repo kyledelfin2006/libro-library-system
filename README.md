@@ -8,6 +8,7 @@
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-6DB33F?logo=springboot&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
+[![CI](https://github.com/kyledelfin2006/libro-library-system/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kyledelfin2006/libro-library-system/actions/workflows/ci.yml)
 
 Libro is a Spring Boot-based library management system for Aklan State University – College of Computer Studies (ASU-CCS). It manages physical book copies, user accounts, and loan history.
 
@@ -16,13 +17,13 @@ Libro is a Spring Boot-based library management system for Aklan State Universit
 - **Catalog:** Manage physical copies; search and filter by title, author, genre, or replacement cost; sort and paginate results.
 - **Loans:** Students and faculty borrow and return copies. Loans last 14 days, allow up to three active loans per borrower, and block new checkouts while a loan is overdue.
 - **Accounts:** Public signup creates student accounts; librarians create faculty and library-assistant accounts. Role-based permissions protect account and staff workflows.
-- **Insights and operations:** View collection and genre statistics; run the API with PostgreSQL, Flyway, and Docker Compose. Validation, consistent errors, and a health endpoint support reliable use.
+- **Insights and operations:** View collection and genre statistics; run the API with PostgreSQL, Flyway, and Docker Compose. Public liveness/readiness probes support load balancers and container health checks.
 
 Each catalog record is one physical copy. Replacement cost records its value for replacement; it is not a borrower charge. See the [Loan Implementation Guide](docs/loan.md) and [Domain Decisions](docs/domain-decisions.md) for details.
 
 ### API access
 
-The API contract is generated at [Swagger UI](http://localhost:8080/swagger-ui.html) and [`/v3/api-docs`](http://localhost:8080/v3/api-docs). Both documentation routes currently require authentication under the default route policy, like every route except `POST /app/users/signup` and `POST /app/auth/login`. The API is stateless and does not require a CSRF token for header-authenticated requests. Browser access to the protected Swagger UI has not been verified; see the [roadmap](guiding-docs/TODO.md). See [JWT Authentication Design](guiding-docs/jwt-authentication-design.md), [Institutional Context](docs/institutional-context.md), and the [API Documentation Guideline](docs/api-documentation-guideline.md).
+The API contract is generated at [Swagger UI](http://localhost:8080/swagger-ui.html) and [`/v3/api-docs`](http://localhost:8080/v3/api-docs). Both documentation routes are **disabled by default**; set `LIBRO_API_DOCS_ENABLED=true` (the local `.env.example` does) to serve them publicly without a token. Every other route except `POST /app/users/signup`, `POST /app/auth/login` and the health probes requires a Bearer token. The API is stateless and does not require a CSRF token for header-authenticated requests. See [JWT Authentication Design](guiding-docs/jwt-authentication-design.md), [Institutional Context](docs/institutional-context.md), and the [API Documentation Guideline](docs/api-documentation-guideline.md).
 
 Main Developer: **Aldrin Kyle Delfin**
 
@@ -185,7 +186,7 @@ Account and loan access is checked against the authenticated user's university I
 
 | Current rule | Allowed access |
 | --- | --- |
-| Public signup and login | POST /app/users/signup; POST /app/auth/login |
+| Public operations | POST /app/users/signup; POST /app/auth/login; GET /livez and /readyz |
 | Read books | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN |
 | Add, update, or delete books | ADMINISTRATOR, LIBRARIAN |
 | Create school faculty and library assistant accounts | LIBRARIAN |
@@ -284,7 +285,7 @@ AGENTS.md
 README.md
 Dockerfile
 docker-compose.yml
-envFileExample
+.env.example
 pom.xml
 docs/
   api-documentation-guideline.md
@@ -305,6 +306,7 @@ src/main/java/app/
     controller/AuthAPI.java
     dto/LoginRequestDTO.java and TokenResponseDTO.java
     service/AuthService.java
+    JsonSecurityErrorHandler.java
     SecurityConfig.java
     LibroUserDetailsService.java
   loan/
@@ -345,6 +347,10 @@ src/main/java/app/
       ErrorApiResponse.java and ErrorApiResponses.java
     exceptions/
       GlobalExceptionHandler.java
+    logging/
+      RequestIdFilter.java
+    time/
+      LibraryTime.java
     responses/
       ApiResponse.java
       ErrorResponse.java
@@ -473,7 +479,7 @@ Each `Book` is one physical borrowable copy. Separate copies can share a title o
 - Create, view, replace, partially update, and delete copy records.
 - Search by title, author, genre, or exact replacement cost; combine text and inclusive replacement-cost filters.
 - Paginate and sort results, with supported sort fields validated by the API.
-- Filter by a replacement-cost range or a maximum budget.
+- Filter by a replacement-cost range or a maximum budget. Every successful response uses the `ApiResponse` envelope (`success`, `message`, `data`, `timestamp`); errors use `ErrorResponse`. Every list endpoint is paginated (zero-based `page`, default `size` 12, maximum 100, `sort=property,direction`).
 - Record an optional description and a positive replacement cost. Replacement cost is catalog information, not a fee charged to a borrower.
 
 ### Collection insight
@@ -497,9 +503,9 @@ Collection statistics include the number of copies, total and average replacemen
 
 - Springdoc OpenAPI 3 generates Swagger UI and `/v3/api-docs` from the API contract.
 - Request validation and shared error responses give clients structured field-level details for invalid requests and consistent responses for other expected failures.
-- Spring Security uses stateless JWT Bearer authentication; signup and login are public, and other routes require an Authorization header token.
+- Spring Security uses stateless JWT Bearer authentication; signup, login, and Actuator health probes are public, and other routes require an Authorization header token.
 - PostgreSQL stores the catalog, accounts, and loan history. Flyway applies versioned schema changes, while Hibernate validates mappings at startup.
-- Docker Compose runs the application with PostgreSQL, and the health endpoint reports API and database reachability.
+- Docker Compose builds the application from source, starts it after PostgreSQL is healthy, and checks the public Actuator readiness endpoint.
 
 ## Request Lifecycle
 
@@ -540,7 +546,7 @@ sequenceDiagram
     App-->>Compose: API ready on port 8080
 ```
 
-Flyway owns schema creation and updates; Hibernate validates the resulting schema instead of changing it. The filter chain exposes public signup/login, accepts only Bearer tokens for protected routes, and enforces the current route rules.
+Flyway owns schema creation and updates; Hibernate validates the resulting schema instead of changing it. The filter chain exposes signup, login, and Actuator health probes; protected API routes accept only Bearer tokens and enforce the current route rules.
 
 ## Code Highlights
 
@@ -614,22 +620,23 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 
 | Method | Path | Description | Example Request | Example Response |
 | --- | --- | --- | --- | --- |
-| `GET` | `/app/books/health` | Health check for the API | `GET /app/books/health` | `{"success":true,"message":"Health check","data":{"api":true,"database":true},"timestamp":172...}` |
-| `GET` | `/app/books/all` | Returns a paginated list of books | `GET /app/books/all?page=0&size=12&sort=id,asc` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}],"pageable":{...}}` |
-| `GET` | `/app/books/query` | Paginates books with optional title, author, genre, and inclusive replacement cost filters | `GET /app/books/query?author=orwell&minReplacementCost=10&sort=replacementCost,desc&page=0&size=12` | `{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}],"totalElements":1,"totalPages":1,...}` |
-| `GET` | `/app/books/{id}` | Fetches a single book by ID | `GET /app/books/1` | `{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}` |
+| `GET` | `/app/books/all` | Returns a paginated list of books | `GET /app/books/all?page=0&size=12&sort=id,asc` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}],"pageable":{...}}}` |
+| `GET` | `/app/books/query` | Paginates books with optional title, author, genre, and inclusive replacement cost filters | `GET /app/books/query?author=orwell&minReplacementCost=10&sort=replacementCost,desc&page=0&size=12` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}],"totalElements":1,"totalPages":1,...}}` |
+| `GET` | `/app/books/{id}` | Fetches a single book by ID | `GET /app/books/1` | `{"success":true,"message":"Success","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}}` |
 | `POST` | `/app/books/add` | Creates a new book using `BookRequestDTO` validation | `POST /app/books/add` with `{"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}` | `{"success":true,"message":"Book Added Successfully","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99},"timestamp":172...}` |
 | `PATCH` | `/app/books/{id}` | Partially updates a book | `PATCH /app/books/1` with `{"replacementCost":15.99}` | `{"success":true,"message":"Book updated successfully","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":15.99},"timestamp":172...}` |
 | `PUT` | `/app/books/{id}` | Replaces a book completely | `PUT /app/books/1` with full DTO payload | `{"success":true,"message":"Book updated successfully","data":{"id":1,"title":"Animal Farm","author":"George Orwell","genre":"Political Satire","description":"A farmyard allegory.","replacementCost":12.99},"timestamp":172...}` |
 | `DELETE` | `/app/books/{id}` | Deletes a book by ID | `DELETE /app/books/1` | `{"success":true,"message":"Book deleted successfully","timestamp":172...}` |
-| `GET` | `/app/books/search?type=title&value=orwell` | Searches by title, author, genre, or replacement cost | `GET /app/books/search?type=author&value=orwell` | `[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}]` |
-| `GET` | `/app/books/budget?maxReplacementCost=20` | Returns copies with a replacement cost at or below the given value | `GET /app/books/budget?maxReplacementCost=20` | `[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}]` |
-| `GET` | `/app/books/sorted?category=title` | Returns books sorted by title, author, genre, replacement cost, or id | `GET /app/books/sorted?category=replacementCost` | `[{"id":2,"title":"Animal Farm","author":"George Orwell","genre":"Political Satire","description":"A farmyard allegory.","replacementCost":12.99}]` |
-| `GET` | `/app/books/genre` | Returns genre distribution counts | `GET /app/books/genre` | `{"Fiction":3,"Fantasy":2,"Dystopian":1}` |
-| `GET` | `/app/books/replacement-cost?minReplacementCost=10&maxReplacementCost=25` | Returns books within a replacement cost range | `GET /app/books/replacement-cost?minReplacementCost=10&maxReplacementCost=25` | `[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}]` |
-| `GET` | `/app/books/stats` | Returns total books, total replacement cost, and the copy with the highest replacement cost | `GET /app/books/stats` | `{"totalBooks":6,"totalReplacementCost":123.45,"highestReplacementCostBook":{"id":4,"title":"...","author":"...","genre":"...","replacementCost":49.99}}` |
+| `GET` | `/app/books/search?type=title&value=orwell` | Searches by title, author, genre, or replacement cost (paginated) | `GET /app/books/search?type=author&value=orwell&page=0&size=12` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}}` |
+| `GET` | `/app/books/budget?maxReplacementCost=20` | Returns a page of copies with a replacement cost at or below the given value | `GET /app/books/budget?maxReplacementCost=20` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}}` |
+| `GET` | `/app/books/sorted?category=title` | Returns a page sorted ascending by title, author, genre, replacement cost, or id | `GET /app/books/sorted?category=replacementCost&page=0&size=12` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}}` |
+| `GET` | `/app/books/genre` | Returns genre distribution counts | `GET /app/books/genre` | `{"success":true,"message":"Success","data":{"Fiction":3,"Fantasy":2,"Dystopian":1}}` |
+| `GET` | `/app/books/replacement-cost?minReplacementCost=10&maxReplacementCost=25` | Returns a page of books within a replacement cost range | `GET /app/books/replacement-cost?minReplacementCost=10&maxReplacementCost=25` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}}` |
+| `GET` | `/app/books/stats` | Returns total books, total replacement cost, and the copy with the highest replacement cost | `GET /app/books/stats` | `{"success":true,"message":"Success","data":{"totalBooks":6,"totalReplacementCost":123.45,"highestReplacementCostBook":{"id":4,"title":"...","author":"...","genre":"...","replacementCost":49.99}}}` |
 | `GET` | `/app/books/stats/average-replacement-cost` | Returns the average replacement cost of all books | `GET /app/books/stats/average-replacement-cost` | `{"success":true,"message":"Average replacement cost of collection","data":20.50,"timestamp":172...}` |
 | `GET` | `/app/books/stats/count` | Returns the total number of books | `GET /app/books/stats/count` | `{"success":true,"message":"Book Collection Count","data":6,"timestamp":172...}` |
+
+Unauthenticated operational probes are `GET /livez` and `GET /readyz`. Readiness includes the database health indicator; details are hidden. Actuator `health` and the Prometheus scrape endpoint (`/actuator/prometheus`) are served only on a private management port (`MANAGEMENT_SERVER_PORT`, default 9091), which Compose does not publish. Every response carries an `X-Request-Id` header that also appears in logs and in the `requestId` field of error bodies.
 
 `/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minReplacementCost` and `maxReplacementCost` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `replacementCost`; invalid ranges, decimals, or sort fields return HTTP 400. The `replacementCost` JSON field is the recorded amount used to replace one physical copy; it does not trigger a charge. `description` is optional and limited to 2,000 characters. Existing list routes retain their response shapes apart from the renamed and added book fields. `BookResponseDTO` also includes `copyStatus` (`IN_COLLECTION` or `LOST`); the compact book examples above omit it for readability.
 
@@ -639,16 +646,16 @@ public LibraryStatisticsDTO getLibraryStatistics() {
 
 | Method | Path | Description | Request | Response |
 | --- | --- | --- | --- | --- |
-| `POST` | `/app/auth/login` | Public login; authenticates through Spring Security and BCrypt | `{"universityId":"2025-4321","password":"<password>"}` | `{"accessToken":"<signed-token>","tokenType":"Bearer","expiresIn":900}` |
+| `POST` | `/app/auth/login` | Public login; authenticates through Spring Security and BCrypt | `{"universityId":"2025-4321","password":"<password>"}` | `{"success":true,"message":"Success","data":{"accessToken":"<signed-token>","tokenType":"Bearer","expiresIn":900}}` |
 
 ### User API
 
-Signup is public and always creates a student. Only librarians can create faculty and library assistant accounts. Administrators can manage student and faculty accounts; librarians can also manage library assistant accounts. Students and faculty can manage their own profiles and passwords and delete their own accounts. Staff cannot manage another librarian account or delete their own account. All other routes require a valid JWT Bearer token. See the [role permissions table](guiding-docs/security-roles-and-jwt-guide.md#role-policy) for the full policy.
+Signup is public and always creates a student. Only librarians can create faculty and library assistant accounts. Administrators can manage student and faculty accounts; librarians can also manage library assistant accounts. Students and faculty can manage their own profiles and passwords and delete their own accounts. Staff cannot manage another librarian account or delete their own account. Other application routes require a valid JWT Bearer token. See the [role permissions table](guiding-docs/security-roles-and-jwt-guide.md#role-policy) for the full policy.
 
 | Method | Path | Description | Example Request | Example Response |
 | --- | --- | --- | --- | --- |
-| `GET` | `/app/users` | Lists student/faculty accounts for administrators; librarians also see library assistants | `GET /app/users?page=0&size=12` | Spring `Page<UserResponseDTO>` |
-| `GET` | `/app/users/{universityId}` | Gets own profile or a profile visible to the caller's staff role | `GET /app/users/2025-4321` | `UserResponseDTO` |
+| `GET` | `/app/users` | Lists student/faculty accounts for administrators; librarians also see library assistants | `GET /app/users?page=0&size=12` | `ApiResponse<Page<UserResponseDTO>>` |
+| `GET` | `/app/users/{universityId}` | Gets own profile or a profile visible to the caller's staff role | `GET /app/users/2025-4321` | `ApiResponse<UserResponseDTO>` |
 | `POST` | `/app/users/signup` | Creates a user account | `POST /app/users/signup` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 | `POST` | `/app/users/faculty` | Librarian creates a faculty account | `POST /app/users/faculty` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 | `PATCH` | `/app/users/{universityId}` | Updates supplied profile fields | `PATCH /app/users/2025-4321` with `UserCreateUpdateDTO` | `ApiResponse<UserResponseDTO>` |
@@ -675,7 +682,7 @@ Docker is the preferred way to run the project because it brings up both Postgre
 
 1. Create your environment file from the example:
     ```powershell
-    Copy-Item envFileExample .env
+    Copy-Item .env.example .env
     ```
     Use values like:
     ```env
@@ -685,16 +692,15 @@ Docker is the preferred way to run the project because it brings up both Postgre
     LIBRO_ADMIN_PASSWORD_HASH=<BCrypt hash for a password you choose>
     LIBRO_JWT_SECRET_BASE64=<output of openssl rand -base64 32>
     ```
-    Replace both placeholders before starting the app. Flyway V2 seeds the historical `ADMINISTRATOR` account (library-assistant role) as university ID `0000-0000`; no librarian is seeded. Only BCrypt hashes are stored in the database. Keep `.env` private. Librarian-only routes require an existing librarian account; initial librarian provisioning is deferred.
-2. Build the application jar:
-    ```bash
-    mvn clean package
-    ```
-3. Start the full stack:
+    Replace both placeholders before starting the app. Flyway V2 seeds the historical `ADMINISTRATOR` account (library-assistant role) as university ID `0000-0000`; no librarian is seeded by migration. For the first librarian, optionally set all five `LIBRO_BOOTSTRAP_LIBRARIAN_*` values in `.env.example`, including a BCrypt hash, before startup. The application creates that account once and ignores the bootstrap values after any librarian exists. Keep `.env` private.
+2. Start the full stack; Docker builds the JAR from a clean checkout:
     ```bash
     docker compose up --build
     ```
-4. Log in through `POST /app/auth/login`, then send the returned token as a Bearer credential on protected API requests. Swagger UI and `/v3/api-docs` remain behind the protected default route policy. The OpenAPI document declares signup and login public and all other operations Bearer-protected.
+    To terminate TLS in front of the API, add the optional Caddy proxy profile, set `LIBRO_DOMAIN` and `SERVER_FORWARD_HEADERS_STRATEGY=native` in `.env`, and start with `docker compose --profile proxy up --build`. The proxy listens on ports 80 and 443 and is the only public entry point; the app and database stay on `127.0.0.1`. See [`deploy/Caddyfile`](deploy/Caddyfile).
+3. Check `http://localhost:8080/readyz` without a token. Log in through `POST /app/auth/login`, then send the returned token as a Bearer credential on protected API requests. Swagger UI and `/v3/api-docs` are served only when `LIBRO_API_DOCS_ENABLED=true` (set in the local `.env`).
+
+Set `LIBRO_CORS_ALLOWED_ORIGINS` to a comma-separated list of exact UI origins to enable browser access; it defaults to blank and wildcards are rejected. Set `SERVER_FORWARD_HEADERS_STRATEGY=native` only when the app port is reachable exclusively from the trusted OCI load balancer or proxy. The default is `none`.
 
 ### Local development
 
@@ -715,7 +721,7 @@ If you prefer to run the application directly on the host machine, start only Po
     Maven does not read Docker Compose's `.env` file. Set the datasource variables, `LIBRO_ADMIN_PASSWORD_HASH`, and `LIBRO_JWT_SECRET_BASE64` in the process environment used to run the app. Issuer, audience, and token lifetime have defaults; the JWT secret must decode to at least 32 random bytes.
 3. Run the app:
     ```bash
-    mvn spring-boot:run
+    ./mvnw spring-boot:run
     ```
 
 ## Troubleshooting
@@ -731,18 +737,18 @@ If you prefer to run the application directly on the host machine, start only Po
 | `401 Unauthorized` on a protected API or documentation route | Bearer token is missing, expired, malformed, or invalid | Log in at `POST /app/auth/login` and send the returned token in `Authorization: Bearer <token>` |
 | `403 Forbidden` with a valid token | The token's role does not satisfy the route or service ownership rule | Check the [role policy](guiding-docs/security-roles-and-jwt-guide.md#role-policy) and the target account/loan scope |
 | App fails during startup mentioning `LIBRO_JWT_SECRET_BASE64` | The required key is absent, invalid Base64, or decodes to fewer than 32 bytes | Generate a random key with `openssl rand -base64 32` and provide it through the environment |
-| Docker app container fails to start | The jar was not built before `docker compose up --build` | Run `mvn clean package` first |
+| Docker app container fails to start | Docker build, configuration, or health probe failed | Inspect `docker compose logs app` and `docker compose ps`; the image builds the JAR from source |
 | `library-app` keeps restarting with a schema validation error | Inspect `docker compose logs app`; an old development volume may have `books.id` as `INTEGER` while Hibernate expects `BIGINT` | If the volume contains only disposable development data, back up anything needed and intentionally remove it with `docker compose down -v`; otherwise preserve the volume and resolve the schema through a forward migration. Then rebuild with `docker compose up -d --build` |
-| No Flyway messages or `flyway_schema_history` table | The Boot 4 Flyway starter is absent, or the container contains an old jar | Keep `spring-boot-starter-flyway`, rebuild the jar, and rebuild the image |
+| No Flyway messages or `flyway_schema_history` table | The Boot 4 Flyway starter is absent, or the container is running an old image | Keep `spring-boot-starter-flyway` and rebuild the image |
 
 The complete diagnosis, pre-release reset procedure, clean-install behavior, and production-data warning are in [Development Problems Solved](docs/development-problems-solved.md).
 
 ## Quick Start
 
-1. Copy `envFileExample` to `.env` and fill in PostgreSQL credentials, the BCrypt `LIBRO_ADMIN_PASSWORD_HASH`, and a random `LIBRO_JWT_SECRET_BASE64` from `openssl rand -base64 32`.
-2. Run `mvn clean package`.
-3. Run `docker compose up --build`.
-4. Log in through `POST /app/auth/login` and open `http://localhost:8080/app/books/health` with the returned Bearer token; the health endpoint is protected like other application routes.
+1. Copy `.env.example` to `.env` and fill in PostgreSQL credentials, the BCrypt `LIBRO_ADMIN_PASSWORD_HASH`, and a random `LIBRO_JWT_SECRET_BASE64` from `openssl rand -base64 32`.
+2. Optionally set all five `LIBRO_BOOTSTRAP_LIBRARIAN_*` values, using a BCrypt hash, to provision the first librarian at startup.
+3. Run `docker compose up --build`; Docker builds the application from source.
+4. Probe `http://localhost:8080/readyz` without a token.
 
 ## Data Management
 
@@ -766,7 +772,7 @@ The complete diagnosis, pre-release reset procedure, clean-install behavior, and
 
 ## Testing
 
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The Docker-free suite covers authentication, book, user, and loan service/MVC contracts, generated OpenAPI security-sensitive schemas, DTOs, mappings, and exception handling. The opt-in PostgreSQL profile checks Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, database constraints, loan lifecycle persistence, and the race between catalog edits and lost-loan resolution. A concurrent borrower-limit checkout test and the V3-to-V4 migration upgrade test remain outstanding. PostgreSQL integration execution requires Docker and a valid test-only `LIBRO_ADMIN_PASSWORD_HASH` for Flyway V2. Set the variable in the environment inherited by Maven; Maven does not load Docker Compose's `.env` file.
+The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The Docker-free suite covers authentication, book, user, and loan service/MVC contracts, generated OpenAPI security-sensitive schemas, DTOs, mappings, and exception handling. The opt-in PostgreSQL profile checks Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, database constraints, loan lifecycle persistence, and the race between catalog edits and lost-loan resolution. `LoanConcurrencyIT` races simultaneous checkouts to prove the three-active-loan limit and one-borrower-per-copy rules under real PostgreSQL locking. The V3-to-V4 migration upgrade test remains outstanding. PostgreSQL integration execution requires Docker and a valid test-only `LIBRO_ADMIN_PASSWORD_HASH` for Flyway V2. Set the variable in the environment inherited by Maven; Maven does not load Docker Compose's `.env` file.
 
 Tests are grouped by test scope and domain: `src/test/java/unit/auth`, `src/test/java/unit/loan`, `src/test/java/unit/book`, `src/test/java/unit/user`, and `src/test/java/unit/global`; PostgreSQL integration tests live under `src/test/java/integration/book`, `src/test/java/integration/loan`, and `src/test/java/integration/user`. Keep new tests with the domain they exercise. Shared PostgreSQL test configuration lives directly under `integration` so all integration classes use one Spring context and container.
 
@@ -774,8 +780,10 @@ Tests are grouped by test scope and domain: `src/test/java/unit/auth`, `src/test
 - `BookApiMvcTest` verifies routes, status codes, JSON response shapes, invalid request payloads, pagination/query binding, and global exception responses without starting JPA or PostgreSQL.
 - `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.
 - `BookServiceTest` verifies service rules, repository interaction, search, sorting, replacement-cost behavior, typed statistics projections, genre-distribution mapping, and dirty-checking expectations.
-- `UserApiMvcTest` verifies all user routes, request binding and validation, paging defaults, direct DTO versus envelope response shapes, 404/409 error responses, and that public responses do not expose password fields. It mocks `UserService` and does not start JPA or PostgreSQL.
-- `SecurityFlowMvcTest` exercises the real filter chain, BCrypt login, JWT issue/validation, claim/signature/algorithm/transport edge cases, role denials, and Basic rejection with a mocked user repository.
+- `UserApiMvcTest` verifies all user routes, request binding and validation, paging defaults, envelope response shapes, 404/409 error responses, and that public responses do not expose password fields. It mocks `UserService` and does not start JPA or PostgreSQL.
+- `SecurityFlowMvcTest` exercises the real filter chain, CORS preflight allow/deny rules, BCrypt login, JWT issue/validation, claim/signature/algorithm/transport edge cases, role denials, and Basic rejection with a mocked user repository.
+- `HealthEndpointMvcTest` checks public readiness output and protects unexposed Actuator paths.
+- `PublicRouteRateLimitInterceptorTest` checks per-client quotas, Spring forwarded-header address handling, and rejection of spoofed forwarding headers when proxy handling is off.
 - `JwtConfigurationTest` verifies that malformed or undersized JWT signing keys fail startup and that the minimum accepted key decodes correctly.
 - `LoanServiceTest` covers checkout rules, active-loan/overdue rejection, return ownership, staff loss scope, history permissions, and pagination restrictions.
 - `LoanSecurityMvcTest` exercises loan route role rules, principal-derived identity, authenticated history, and stateless requests without CSRF through the real filter chain.
@@ -784,7 +792,8 @@ Tests are grouped by test scope and domain: `src/test/java/unit/auth`, `src/test
 - `UserServiceTest` verifies partial-update normalization, DTO and business validation, password verification and encoding, the 72 UTF-8 byte BCrypt boundary, unchanged-email handling, duplicate-email rejection, and dirty-checking expectations. Academic combinations still need focused coverage; `UserPersistenceIT` covers selected real-database paths.
 - `BookPersistenceIT` runs only with the `integration` profile and Docker. It checks fresh V1-to-V5 migration/schema validation, the V4-to-V5 value-preserving upgrade, PostgreSQL book queries and projections, committed PATCH/PUT updates, and that an edit waiting for a concurrent lost-loan resolution preserves the copy's `LOST` status.
 - `LoanPersistenceIT` checks returned history persistence, the one-active-loan-per-copy database index, and deletion restrictions for borrowers and copies with history.
-- `UserPersistenceIT` checks normalized user creation, stored password hashes, committed profile/password changes, and PostgreSQL uniqueness and ID-format constraints. All three integration classes share a PostgreSQL 18 container and serialize access to it; running them requires Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH`.
+- `UserPersistenceIT` checks normalized user creation, stored password hashes, committed profile/password changes, and PostgreSQL uniqueness and ID-format constraints.
+- `LibrarianBootstrapIT` checks one-time first-librarian creation, repeated-start idempotence, unset configuration, and invalid bootstrap inputs. Integration classes share a PostgreSQL 18 container and serialize access to it; running them requires Docker.
 
 ### Unit-test performance
 
@@ -797,42 +806,42 @@ The suite is configured for fast, deterministic feedback:
 - `GlobalExceptionHandlerTest` uses one stateless handler and real Spring exception objects instead of unnecessary mocks.
 - `logback-test.xml` disables application logs during tests so expected exception scenarios do not spend time printing stack traces.
 
-Use `mvn test` for incremental feedback and `mvn clean verify` for the default verification lifecycle. Read test counts and failures from the reports produced by that run under `target/surefire-reports/`; the opt-in integration profile writes its results under `target/failsafe-reports/`. Build times depend on the machine, cache, and dependency downloads.
+Use `.\mvnw.cmd test` for incremental feedback and `.\mvnw.cmd clean verify` for the default verification lifecycle on Windows; use `./mvnw` on Linux/macOS. Read test counts and failures from the reports produced by that run under `target/surefire-reports/`; the opt-in integration profile writes its results under `target/failsafe-reports/`. Build times depend on the machine, cache, and dependency downloads.
 
 Run all unit tests:
 
 ```powershell
-mvn clean test
+.\mvnw.cmd clean test
 ```
 
-Run PostgreSQL integration tests (requires Docker and `LIBRO_ADMIN_PASSWORD_HASH` set in the shell environment inherited by Maven to a test-only BCrypt hash):
+Run PostgreSQL integration tests (requires Docker; the test-only BCrypt hash for Flyway V2 is in test properties):
 
 ```powershell
-mvn -Pintegration verify
+.\mvnw.cmd -Pintegration verify
 ```
 
 Run only the global exception-handler tests:
 
 ```powershell
-mvn -Dtest=GlobalExceptionHandlerTest test
+.\mvnw.cmd -Dtest=GlobalExceptionHandlerTest test
 ```
 
 Run only the user API MVC contract tests:
 
 ```powershell
-mvn -Dtest=UserApiMvcTest test
+.\mvnw.cmd -Dtest=UserApiMvcTest test
 ```
 
 Run only book unit/MVC tests:
 
 ```powershell
-mvn -Dtest=BookApiMvcTest,BookMapperTest,BookServiceTest,BookTest test
+.\mvnw.cmd -Dtest=BookApiMvcTest,BookMapperTest,BookServiceTest,BookTest test
 ```
 
 Generate the JaCoCo report at `target/site/jacoco/index.html`:
 
 ```powershell
-mvn clean verify
+.\mvnw.cmd clean verify
 ```
 
 The default suite includes plain unit tests and MVC slices. It verifies JWT login, token validation, role mapping, Basic rejection, and request protection through the real filter chain, while real JPA transactions, Flyway migrations, and PostgreSQL constraints require the Docker-backed integration profile. JWT requires no database migration.
@@ -867,9 +876,9 @@ The [Development Problems Solved](docs/development-problems-solved.md) write-up 
 
 ## Upcoming Improvements
 
-- Review the generated OpenAPI document and determine an intended access path for Swagger UI, which currently inherits the authenticated default route policy; verify parameter defaults, request/response schemas, statuses, errors, and examples against the implementation.
-- Configure and verify gateway throttling and monitoring for repeated login attempts before public internet exposure.
-- Add a concurrent borrower-limit checkout test and a V3-to-V4 migration upgrade test; include the PostgreSQL integration profile in CI when a CI workflow is introduced.
+- Review the generated OpenAPI document and Swagger UI in a browser; verify parameter defaults, request/response schemas, statuses, errors, and examples against the implementation.
+- Deploy behind TLS (the `proxy` profile or an OCI load balancer) and alert on `libro.auth.logins{result="failure"}` and `libro.rate_limit.rejections` before public internet exposure; see the [JWT Authentication Design](guiding-docs/jwt-authentication-design.md) for the abuse-control and revocation policy.
+- Add a V3-to-V4 migration upgrade test against PostgreSQL.
 - Benchmark case-insensitive substring searches as the catalog grows; add database search indexes only if measurements justify them.
 
 ## License

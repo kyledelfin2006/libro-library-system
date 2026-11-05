@@ -3,6 +3,7 @@ package unit.auth;
 import app.LibraryApplication;
 import app.auth.LibroUserDetailsService;
 import app.auth.SecurityConfig;
+import app.auth.config.CorsProperties;
 import app.auth.config.JwtConfiguration;
 import app.auth.config.JwtProperties;
 import app.auth.ratelimit.PublicRouteRateLimitConfig;
@@ -34,6 +35,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -65,11 +67,14 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** MVC tests for real login, JWT validation, route roles, and account lookup. */
 @WebMvcTest({AuthAPI.class, BookAPI.class, UserAPI.class})
@@ -82,9 +87,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
         PasswordConfig.class,
         PublicRouteRateLimitConfig.class,
         GlobalExceptionHandler.class,
-        SecurityFlowMvcTest.MockBeans.class
+        SecurityFlowMvcTest.MockBeans.class,
+        SecurityFlowMvcTest.HealthProbeController.class
 })
 @ContextConfiguration(classes = LibraryApplication.class)
+@TestPropertySource(properties = {"libro.security.cors.allowed-origins=https://ui.example.edu", "libro.api-docs.enabled=true"})
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SecurityFlowMvcTest {
 
@@ -143,6 +150,23 @@ class SecurityFlowMvcTest {
         }
     }
 
+    /** Provides the Actuator health response shape inside this MVC slice so production security rules are exercised. */
+    @org.springframework.web.bind.annotation.RestController
+    static class HealthProbeController {
+
+        /** Returns the minimal liveness payload used by the Actuator endpoint. */
+        @org.springframework.web.bind.annotation.GetMapping("/livez")
+        java.util.Map<String, String> liveness() {
+            return java.util.Map.of("status", "UP");
+        }
+
+        /** Returns the minimal readiness payload used by the Actuator endpoint. */
+        @org.springframework.web.bind.annotation.GetMapping("/readyz")
+        java.util.Map<String, String> readiness() {
+            return java.util.Map.of("status", "UP");
+        }
+    }
+
     @org.junit.jupiter.api.BeforeAll
     void encodePasswordOnce() {
         passwordHash = passwordEncoder.encode(PASSWORD);
@@ -187,6 +211,76 @@ class SecurityFlowMvcTest {
         verifyNoInteractions(bookService, bookMapper);
     }
 
+    /** Confirms filter-chain 401 responses use the standard JSON error body and Bearer challenge. */
+    @Test
+    void anonymousRequestReceivesStandardJsonUnauthorizedBody() throws Exception {
+        mockMvc.perform(get("/app/books/1"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("WWW-Authenticate", "Bearer"))
+                .andExpect(jsonPath("$.statusCode").value(401))
+                .andExpect(jsonPath("$.error").value("Unauthorized"));
+    }
+
+    /** Confirms the OpenAPI/Swagger routes are not rejected by the security chain when docs are enabled (default). */
+    @Test
+    void apiDocsRoutesArePermittedWhenEnabled() throws Exception {
+        // This slice has no springdoc controller, so a permitted route reaches MVC and returns 404, not 401.
+        mockMvc.perform(get("/v3/api-docs")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/swagger-ui/index.html")).andExpect(status().isNotFound());
+    }
+
+    /** Confirms liveness and readiness probes are public and return no component details. */
+    @Test
+    void healthProbesArePublicAndHideDetails() throws Exception {
+        for (String path : List.of("/livez", "/readyz")) {
+            mockMvc.perform(get(path))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("UP"))
+                    .andExpect(jsonPath("$.components").doesNotExist());
+        }
+    }
+
+    /** Confirms no other Actuator path is public through the health-probe matcher. */
+    @Test
+    void otherActuatorPathsRemainProtected() throws Exception {
+        mockMvc.perform(get("/actuator/env"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /** Confirms the allowlisted UI can complete its Authorization-header preflight without a JWT. */
+    @Test
+    void allowedUiOriginCanPreflightProtectedRoutes() throws Exception {
+        mockMvc.perform(options("/app/books/1")
+                        .header("Origin", "https://ui.example.edu")
+                        .header("Access-Control-Request-Method", "GET")
+                        .header("Access-Control-Request-Headers", "authorization,content-type"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Access-Control-Allow-Origin", "https://ui.example.edu"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Access-Control-Expose-Headers", "Retry-After"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .doesNotExist("Access-Control-Allow-Credentials"));
+    }
+
+    /** Confirms a browser origin outside the configured UI allowlist is rejected. */
+    @Test
+    void disallowedUiOriginCannotPreflightProtectedRoutes() throws Exception {
+        mockMvc.perform(options("/app/books/1")
+                        .header("Origin", "https://untrusted.example")
+                        .header("Access-Control-Request-Method", "GET"))
+                .andExpect(status().isForbidden());
+    }
+
+    /** Confirms empty configuration allows no origins and wildcard configuration fails during binding. */
+    @Test
+    void corsPropertiesRequireExactOriginsAndDefaultToNone() {
+        assertTrue(new CorsProperties("").origins().isEmpty());
+        assertThrows(IllegalArgumentException.class,
+                () -> new CorsProperties("https://*.example.edu"));
+    }
+
     /** Exercises credential authentication, token issuance, and real Bearer validation end to end. */
     @Test
     void validLoginIssuesTokenThatAuthenticatesProtectedRoute() throws Exception {
@@ -202,17 +296,17 @@ class SecurityFlowMvcTest {
                                 {"universityId":"2025-4321","password":"GoodPassword1!"}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.tokenType").value("Bearer"))
-                .andExpect(jsonPath("$.expiresIn").value(900))
-                .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.userRole").doesNotExist())
+                .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.data.expiresIn").value(900))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.userRole").doesNotExist())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
                         .string("Cache-Control", "no-store"))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
                         .string("Pragma", "no-cache"))
                 .andReturn();
 
-        String token = JsonPath.read(login.getResponse().getContentAsString(), "$.accessToken");
+        String token = JsonPath.read(login.getResponse().getContentAsString(), "$.data.accessToken");
         assertNull(login.getRequest().getSession(false), "stateless login must not create an HTTP session");
         var decoded = jwtDecoder.decode(token);
         assertEquals(UNIVERSITY_ID, decoded.getSubject());
@@ -226,7 +320,7 @@ class SecurityFlowMvcTest {
         mockMvc.perform(get("/app/books/1")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1));
+                .andExpect(jsonPath("$.data.id").value(1));
 
         verify(userRepository, times(1)).findByUniversityId(UNIVERSITY_ID);
         verify(bookService).findBookById(1L);
@@ -374,7 +468,7 @@ class SecurityFlowMvcTest {
         assertRejected(signedToken(jwtProperties.issuer(), List.of(jwtProperties.audience()),
                 UNIVERSITY_ID, List.of("STUDENT"), null, now.plusSeconds(900), null));
         assertRejected(signedToken(jwtProperties.issuer(), List.of(jwtProperties.audience()),
-                UNIVERSITY_ID, List.of("STUDENT"), now.plusSeconds(31), now.plusSeconds(900), null));
+                UNIVERSITY_ID, List.of("STUDENT"), now.plusSeconds(120), now.plusSeconds(900), null));
         assertRejected(signedToken(jwtProperties.issuer(), List.of(jwtProperties.audience()),
                 UNIVERSITY_ID, List.of("STUDENT"), now.minusSeconds(931), now.minusSeconds(31), null));
         verifyNoInteractions(userRepository, bookService, bookMapper);

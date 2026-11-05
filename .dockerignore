@@ -1,20 +1,26 @@
-# The build context is the repository root, but the Dockerfile only needs the
-# already-packaged JAR in target/. Keep credentials and local tooling out of it.
+# Keep credentials, local databases, and source-control metadata out of every build stage.
 .git/
-.idea/
-.run/
-.kilo/
 .env
 .env.*
+data/
+*.db
+*.sqlite
 
-# Source, docs, and project metadata are not copied into the runtime image.
-# Keep target/ available because Dockerfile copies target/*.jar.
-src/
+# Exclude local build artifacts so Docker always compiles the current source in its build stage.
+target/
+out/
+build/
+
+# Exclude IDE and local-runner metadata that the Maven build does not need.
+.idea/
+.run/
+.vscode/
+.kilo/
+
+# Exclude project documentation and examples that are not part of the executable application.
 docs/
 guiding-docs/
 assets/
 README.md
 AGENTS.md
-pom.xml
-docker-compose.yml
-envFileExample
+issues.md

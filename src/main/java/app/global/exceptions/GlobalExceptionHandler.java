@@ -17,7 +17,12 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MissingPathVariableException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -372,6 +377,38 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleUserNotFound(UserNotFoundException ex) {
         ErrorResponse error = new ErrorResponse("User not found", ex.getMessage(), 404);
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    /**
+     * Keeps Spring MVC's own client-error exceptions at their native 4xx status.
+     * <p>
+     * Without this, the catch-all below would report ordinary client mistakes (missing parameter, wrong
+     * content type, unknown path) as HTTP 500 and log a stack trace for each. All of these exceptions implement
+     * Spring's {@link org.springframework.web.ErrorResponse}, which supplies the status and any required headers
+     * (for example {@code Accept} on a 415). Only the generic reason phrase is returned to the client.
+     * </p>
+     *
+     * @param ex a framework exception that carries its own HTTP status
+     * @return the framework's status with the standard error body
+     */
+    @ExceptionHandler({
+            MissingServletRequestParameterException.class,
+            MissingPathVariableException.class,
+            HttpMediaTypeNotSupportedException.class,
+            HttpMediaTypeNotAcceptableException.class,
+            NoResourceFoundException.class
+    })
+    public ResponseEntity<ErrorResponse> handleFrameworkClientError(Exception ex) {
+        org.springframework.web.ErrorResponse framework = (org.springframework.web.ErrorResponse) ex;
+        HttpStatus status = HttpStatus.valueOf(framework.getStatusCode().value());
+        // Warn without a stack trace: these are caller mistakes, not server faults.
+        log.warn("Client error {}: {}", status.value(), ex.getClass().getSimpleName());
+        String details = ex instanceof MissingServletRequestParameterException missing
+                ? "Required parameter '" + missing.getParameterName() + "' is missing"
+                : status.getReasonPhrase();
+        return ResponseEntity.status(status)
+                .headers(framework.getHeaders())
+                .body(new ErrorResponse(status.getReasonPhrase(), details, status.value()));
     }
 
     /**

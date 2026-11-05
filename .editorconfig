@@ -1,0 +1,23 @@
+# EditorConfig keeps indentation and line endings consistent across IDEs.
+# Line endings for specific files (mvnw, Dockerfile) are enforced separately by .gitattributes.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Declarative formats in this repository use two spaces.
+[*.{yml,yaml,json}]
+indent_size = 2
+
+# Markdown relies on trailing double spaces for hard line breaks in a few places.
+[*.md]
+trim_trailing_whitespace = false
+
+# The Windows Maven launcher must keep CRLF.
+[*.cmd]
+end_of_line = crlf

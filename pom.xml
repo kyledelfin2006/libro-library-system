@@ -15,11 +15,13 @@
     </parent>
 
     <properties>
+        <!-- Boot's parent maps this to maven.compiler.release, so the JDK level is declared exactly once. -->
         <java.version>25</java.version>
-        <maven.compiler.source>25</maven.compiler.source>
-        <maven.compiler.target>25</maven.compiler.target>
-        <lombok.version>1.18.46</lombok.version>
+        <!-- Overrides the Boot BOM so the Flyway engine and PostgreSQL module stay on one tested version. -->
         <flyway.version>13.3.0</flyway.version>
+        <!-- Overrides the Boot BOM: pgjdbc 42.7.4-42.7.11 is affected by CVE-2026-54291 (SCRAM-SHA-256-PLUS downgrade); fixed in 42.7.12. Drop once the BOM ships >= 42.7.12. -->
+        <postgresql.version>42.7.12</postgresql.version>
+        <!-- Not managed by the Boot BOM; imported through testcontainers-bom below. -->
         <testcontainers.version>2.0.5</testcontainers.version>
     </properties>
 
@@ -41,6 +43,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Health probes for load balancers/containers, plus Micrometer metrics on a private management port. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
         <!-- Validation (JSR-303 / Jakarta Validation) – REQUIRED for @Valid annotations -->
@@ -67,13 +75,6 @@
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
 
-        <!-- Database – for testing/development -->
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-
         <!-- PostgreSQL – for production -->
         <dependency>
             <groupId>org.postgresql</groupId>
@@ -81,10 +82,18 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Spring Boot DevTools -->
+        <!-- Prometheus registry; /actuator/prometheus is served only on the private management port. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Spring Boot DevTools: local restarts only; optional keeps it out of dependent artifacts. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
             <optional>true</optional>
         </dependency>
 
@@ -125,12 +134,11 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Lombok: for boilerplate reduction via annotations -->
+        <!-- Lombok: version managed by the Spring Boot BOM (single source of truth). -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.46</version>
-            <scope>compile</scope>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Spring Boot 4 requires its Flyway starter to activate migration auto-configuration. -->
@@ -149,6 +157,7 @@
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <!-- Not managed by the Spring Boot BOM. -->
             <version>3.1.1</version>
         </dependency>
 
@@ -176,8 +185,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.15.0</version>
                 <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
+                    <!-- Language level comes from maven.compiler.release (set by the Boot parent from java.version). -->
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -189,6 +197,32 @@
             </plugin>
 
             <!-- JaCoco for unit test coverage and branch coverage  -->
+            <!-- Fails fast on the wrong JDK or Maven instead of producing confusing compiler errors. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-toolchain</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[${java.version},)</version>
+                                    <message>This project requires JDK ${java.version} or newer.</message>
+                                </requireJavaVersion>
+                                <requireMavenVersion>
+                                    <version>[3.9,)</version>
+                                    <message>This project requires Maven 3.9 or newer (use ./mvnw).</message>
+                                </requireMavenVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -208,6 +242,28 @@
                         <goals>
                             <goal>report</goal>
                         </goals>
+                    </execution>
+                    <!-- Coverage floor: fails `verify` if line coverage drops below 80% (measured: ~85% unit-only, ~90% with integration). -->
+                    <execution>
+                        <id>check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.80</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

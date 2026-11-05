@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <root level="OFF"/>
+    <!-- WARN keeps real failures visible in test output without framework noise. -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder><pattern>%d{HH:mm:ss} %-5level [%X{requestId:-}] %logger{20} - %msg%n</pattern></encoder>
+    </appender>
+    <root level="WARN"><appender-ref ref="CONSOLE"/></root>
 </configuration>

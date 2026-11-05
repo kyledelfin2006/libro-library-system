@@ -1,0 +1,20 @@
+# Dependabot opens weekly pull requests for outdated dependencies so security releases are not missed.
+# Spring Boot-managed libraries should be updated by raising the parent version in pom.xml, not individually.
+version: 2
+updates:
+  # Maven dependencies and plugins declared in pom.xml.
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  # Base images referenced by the Dockerfile.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+  # Actions used by .github/workflows (pinned by commit SHA; Dependabot updates the SHA and version comment).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

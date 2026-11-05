@@ -159,11 +159,12 @@ class BookPersistenceIT {
                 new Book("The Hobbit", "J. R. R. Tolkien", "Fantasy", new BigDecimal("24.00"))
         ));
 
-        assertEquals(2, bookRepository.findByAuthorContainingIgnoreCase("ORWELL").size());
-        assertEquals(2, bookRepository.findBooksByReplacementCostBetween(
-                new BigDecimal("12.00"), new BigDecimal("18.00")).size());
+        org.springframework.data.domain.Pageable firstPage = org.springframework.data.domain.PageRequest.of(0, 10);
+        assertEquals(2, bookRepository.queryBooks("", "ORWELL", "", null, null, firstPage).getTotalElements());
+        assertEquals(2, bookRepository.queryBooks("", "", "",
+                new BigDecimal("12.00"), new BigDecimal("18.00"), firstPage).getTotalElements());
 
-        Book described = bookRepository.findByTitleContainingIgnoreCase("Animal Farm").getFirst();
+        Book described = bookRepository.queryBooks("Animal Farm", "", "", null, null, firstPage).getContent().getFirst();
         assertEquals("A political allegory.", described.getDescription());
         assertEquals(0, new BigDecimal("12.00").compareTo(described.getReplacementCost()));
 

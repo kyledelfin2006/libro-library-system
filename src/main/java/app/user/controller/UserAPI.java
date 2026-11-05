@@ -112,16 +112,16 @@ public class UserAPI {
             description = "Library assistants may list student and school faculty profiles. The librarian may also list library assistant profiles. Page numbering starts at zero. The default is page 0, size 12, sorted by universityId ascending; the maximum page size is 100. Sort with sort=property,direction using universityId, firstName, lastName, middleInitial, email, userRole, userCourse, or major. Unsupported sort properties return 400.")
     @ErrorApiResponse(responseCode = "400", description = "Invalid pagination or sort parameter")
     @ErrorApiResponse(responseCode = "403", description = "Only library assistants and the librarian may list accounts")
-    public ResponseEntity<Page<UserResponseDTO>> getAllUsers(
+    public ResponseEntity<ApiResponse<Page<UserResponseDTO>>> getAllUsers(
             @ParameterObject @PageableDefault(size = 12, sort = "universityId") Pageable pageable,
             Authentication authentication) {
         // Forward the verified caller identity and roles for the service authorization check.
-        return ResponseEntity.ok(service.getAllUsers(pageable, authentication.getName(),
-                authentication.getAuthorities()));
+        return ResponseEntity.ok(ApiResponse.ok(service.getAllUsers(pageable, authentication.getName(),
+                authentication.getAuthorities())));
     }
 
     /**
-     * Retrieves one public profile without wrapping it in {@link ApiResponse}.
+     * Retrieves one public profile in the standard success envelope.
      *
      * @param universityId path identifier of the user
      * @return the matching public profile
@@ -132,13 +132,13 @@ public class UserAPI {
     @ErrorApiResponse(responseCode = "400", description = "University ID must use the ####-#### format")
     @ErrorApiResponse(responseCode = "404", description = "User not found")
     @ErrorApiResponse(responseCode = "403", description = "Only the account owner or authorized staff may view this profile")
-    public ResponseEntity<UserResponseDTO> getUserByUniversityId(
+    public ResponseEntity<ApiResponse<UserResponseDTO>> getUserByUniversityId(
             @Parameter(description = "University identifier in ####-#### format.", example = "2025-4321")
             @PathVariable String universityId,
             Authentication authentication) {
         // Pass the requested account and verified caller context to the service.
-        return ResponseEntity.ok(service.getUserByUniversityId(authentication.getName(), universityId,
-                authentication.getAuthorities()));
+        return ResponseEntity.ok(ApiResponse.ok(service.getUserByUniversityId(authentication.getName(), universityId,
+                authentication.getAuthorities())));
     }
 
     /**

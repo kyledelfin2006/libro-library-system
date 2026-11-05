@@ -32,12 +32,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/app/books")
-@Tag(name = "Books", description = "Book catalog, search, filtering, statistics, and health operations")
+@Tag(name = "Books", description = "Book catalog, search, filtering, and statistics")
 public class BookAPI {
 
     private final BookService service;
@@ -48,45 +47,39 @@ public class BookAPI {
         this.mapper = mapper;
     }
 
-    @GetMapping("/health")
-    @Operation(summary = "Check API and database health",
-            description = "Runs a database query to confirm the database is reachable. A successful response includes true api and database statuses; a database failure returns the standard error response.")
-    @ErrorApiResponse(responseCode = "500", description = "Database health query failed")
-    public ResponseEntity<ApiResponse<Map<String, Boolean>>> healthCheck() {
-        Map<String, Boolean> status = Map.of("api", true, "database", service.isDatabaseReachable());
-        return ResponseEntity.ok(new ApiResponse<>(true, "Health check", status));
-    }
-
     /** Returns catalog totals based on the recorded replacement amounts for physical copies. */
     @GetMapping("/stats")
     @Operation(summary = "Get library statistics",
             description = "Returns the collection count and total recorded replacement cost, plus the copy with the highest replacement cost. The highest-cost copy is null when the collection is empty.")
-    public ResponseEntity<LibraryStatisticsDTO> getStats() {
-        return ResponseEntity.ok(service.getLibraryStatistics());
+    public ResponseEntity<ApiResponse<LibraryStatisticsDTO>> getStats() {
+        return ResponseEntity.ok(ApiResponse.ok(service.getLibraryStatistics()));
     }
 
     /** Searches text fields by substring and replacement cost by an exact decimal amount. */
     @GetMapping("/search")
     @Operation(summary = "Search books",
-            description = "Search title, author, or genre with a case-insensitive substring. Replacement-cost searches require an exact numeric value.")
+            description = "Search title, author, or genre with a case-insensitive substring. Replacement-cost searches require an exact numeric value. Results are paginated: page numbering starts at zero, default size 12, maximum 100; sort with sort=property,direction.")
     @ErrorApiResponse(responseCode = "400", description = "Unsupported search type or invalid replacement-cost value")
-    public ResponseEntity<List<BookResponseDTO>> searchBooks(
+    public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> searchBooks(
             @Parameter(description = "Field to search: author, title, genre, or replacementCost.", example = "title", schema = @Schema(allowableValues = {"author", "title", "genre", "replacementCost"}))
             @RequestParam String type,
             @Parameter(description = "Text fragment for title, author, or genre; exact decimal value for replacement cost.", example = "1984")
-            @RequestParam String value) {
-        return ResponseEntity.ok(mapper.toResponseDTOList(service.searchBooks(type, value)));
+            @RequestParam String value,
+            @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.ok(service.searchBooks(type, value, pageable).map(mapper::toResponseDTO)));
     }
 
     /** Filters copies using an inclusive maximum recorded replacement amount. */
     @GetMapping("/budget")
     @Operation(summary = "Find books by maximum replacement cost",
-            description = "Returns all copies whose recorded replacement cost is at or below maxReplacementCost, inclusively. Results are unpaginated.")
+            description = "Returns all copies whose recorded replacement cost is at or below maxReplacementCost, inclusively. Results are paginated: page numbering starts at zero, default size 12, maximum 100.")
     @ErrorApiResponse(responseCode = "400", description = "maxReplacementCost is not a valid decimal")
-    public ResponseEntity<List<BookResponseDTO>> budgetBooks(
+    public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> budgetBooks(
             @Parameter(description = "Inclusive maximum replacement cost.", example = "25.00")
-            @RequestParam BigDecimal maxReplacementCost) {
-        return ResponseEntity.ok(mapper.toResponseDTOList(service.getBooksAtOrBelowReplacementCost(maxReplacementCost)));
+            @RequestParam BigDecimal maxReplacementCost,
+            @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.ok(service.getBooksAtOrBelowReplacementCost(maxReplacementCost, pageable)
+                .map(mapper::toResponseDTO)));
     }
 
     /** Creates one physical copy after request DTO validation and maps it to the public response shape. */
@@ -107,8 +100,8 @@ public class BookAPI {
     @Operation(summary = "Get a book by ID")
     @ErrorApiResponse(responseCode = "400", description = "Book ID must be a number")
     @ErrorApiResponse(responseCode = "404", description = "Book not found")
-    public ResponseEntity<BookResponseDTO> getBookById(@PathVariable Long id) {
-        return ResponseEntity.ok(mapper.toResponseDTO(service.findBookById(id)));
+    public ResponseEntity<ApiResponse<BookResponseDTO>> getBookById(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(mapper.toResponseDTO(service.findBookById(id))));
     }
 
     @DeleteMapping("/{id}")
@@ -126,9 +119,9 @@ public class BookAPI {
     @Operation(summary = "List books with pagination",
             description = "Page numbering starts at zero. The default is page 0, size 12, sorted by id ascending; the maximum page size is 100. Sort with sort=property,direction using id, title, author, genre, or replacementCost. Unsupported sort properties return 400.")
     @ErrorApiResponse(responseCode = "400", description = "Invalid pagination or sort parameter")
-    public ResponseEntity<Page<BookResponseDTO>> getAllBooks(
+    public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> getAllBooks(
             @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(service.getBooks(pageable).map(mapper::toResponseDTO));
+        return ResponseEntity.ok(ApiResponse.ok(service.getBooks(pageable).map(mapper::toResponseDTO)));
     }
 
     /** Validates the replacement-cost bounds and delegates pagination and filtering to the service. */
@@ -142,7 +135,7 @@ public class BookAPI {
     })
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Matching book page", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Invalid decimal, replacement-cost range, pagination, or sort field")
-    public ResponseEntity<Page<BookResponseDTO>> queryBooks(
+    public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> queryBooks(
             @RequestParam(required = false) String title,
             @RequestParam(required = false) String author,
             @RequestParam(required = false) String genre,
@@ -151,39 +144,41 @@ public class BookAPI {
             @Parameter(description = "Inclusive maximum replacement cost; may be used without minReplacementCost.", example = "25.00")
             @RequestParam(required = false) BigDecimal maxReplacementCost,
             @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(service.queryBooks(title, author, genre, minReplacementCost, maxReplacementCost, pageable)
-                .map(mapper::toResponseDTO));
+        return ResponseEntity.ok(ApiResponse.ok(service.queryBooks(title, author, genre, minReplacementCost, maxReplacementCost, pageable)
+                .map(mapper::toResponseDTO)));
     }
 
     @GetMapping("/sorted")
     @Operation(summary = "List books sorted by a field",
-            description = "Returns an unpaginated list sorted ascending by title, author, id, replacementCost, or genre. The default field is title.")
+            description = "Returns a page sorted ascending by title, author, id, replacementCost, or genre. The default field is title. The category parameter decides the order; page and size are honored (default size 12, maximum 100).")
     @ErrorApiResponse(responseCode = "400", description = "Unsupported sort field")
-    public ResponseEntity<List<BookResponseDTO>> getSortedBooks(
+    public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> getSortedBooks(
             @Parameter(description = "Allowed values: title, author, id, replacementCost, genre.", schema = @Schema(allowableValues = {"title", "author", "id", "replacementCost", "genre"}))
-            @RequestParam(required = false, defaultValue = "title") String category) {
-        return ResponseEntity.ok(mapper.toResponseDTOList(service.getBooksSortedBy(category)));
+            @RequestParam(required = false, defaultValue = "title") String category,
+            @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.ok(service.getBooksSortedBy(category, pageable).map(mapper::toResponseDTO)));
     }
 
     @GetMapping("/genre")
     @Operation(summary = "Get genre distribution",
             description = "Returns a map from each genre name to the number of book records in that genre.")
-    public ResponseEntity<Map<String, Long>> getGenre() {
-        return ResponseEntity.ok(service.getGenreDistribution());
+    public ResponseEntity<ApiResponse<Map<String, Long>>> getGenre() {
+        return ResponseEntity.ok(ApiResponse.ok(service.getGenreDistribution()));
     }
 
     /** Returns copies whose recorded replacement amounts fall within the inclusive range. */
     @GetMapping("/replacement-cost")
     @Operation(summary = "Filter books by replacement-cost range",
-            description = "Returns copies with replacement costs between minReplacementCost and maxReplacementCost, inclusive. minReplacementCost must not exceed maxReplacementCost.")
+            description = "Returns copies with replacement costs between minReplacementCost and maxReplacementCost, inclusive. minReplacementCost must not exceed maxReplacementCost. Results are paginated: page numbering starts at zero, default size 12, maximum 100.")
     @ErrorApiResponse(responseCode = "400", description = "Invalid decimal value or minimum replacement cost exceeds maximum")
-    public ResponseEntity<List<BookResponseDTO>> getReplacementCostRangedBooks(
+    public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> getReplacementCostRangedBooks(
             @Parameter(description = "Inclusive minimum replacement cost.", example = "10.00")
             @RequestParam BigDecimal minReplacementCost,
             @Parameter(description = "Inclusive maximum replacement cost.", example = "25.00")
-            @RequestParam BigDecimal maxReplacementCost) {
-        return ResponseEntity.ok(mapper.toResponseDTOList(
-                service.getBooksInReplacementCostRange(minReplacementCost, maxReplacementCost)));
+            @RequestParam BigDecimal maxReplacementCost,
+            @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.ok(service.getBooksInReplacementCostRange(minReplacementCost, maxReplacementCost, pageable)
+                .map(mapper::toResponseDTO)));
     }
 
     /** Returns the average replacement amount, using zero for an empty collection. */

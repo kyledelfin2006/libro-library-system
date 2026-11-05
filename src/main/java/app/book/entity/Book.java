@@ -129,7 +129,7 @@ public class Book {
      */
     @PrePersist
     public void prePersist() {
-        // Preserve the catalog's existing creation-time behavior; loan events use the Manila Clock.
-        this.createdAt = LocalDateTime.now();
+        // Use the library zone so catalog and loan timestamps share one clock.
+        this.createdAt = app.global.time.LibraryTime.now();
     }
 }

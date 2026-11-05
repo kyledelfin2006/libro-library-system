@@ -9,7 +9,6 @@ import jakarta.validation.ValidatorFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -114,7 +113,8 @@ class BookTest {
         book.prePersist();
 
         assertNotNull(book.getCreatedAt());
-        assertFalse(book.getCreatedAt().isAfter(LocalDateTime.now()));
+        // Book stamps createdAt in the library zone (Asia/Manila), so compare against the same clock, not the JVM default.
+        assertFalse(book.getCreatedAt().isAfter(app.global.time.LibraryTime.now()));
     }
 
 }
