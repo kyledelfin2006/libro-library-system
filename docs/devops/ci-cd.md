@@ -1,86 +1,101 @@
 # CI/CD and DevOps
 
-This page describes how Libro validates proposed changes and what is in place for container operations. It distinguishes the automated continuous-integration workflow from deployment automation: **CI is implemented; the GitHub Actions workflow does not currently publish or deploy the application.**
+Libro is validated by an implemented GitHub Actions pipeline and packaged as a container. The deployment target is a single Oracle Cloud (OCI) Always Free VM running Docker Compose. This page explains what each stage does and why it was chosen.
 
-## Delivery pipeline
-
-The workflow is [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml). It uses GitHub-hosted Ubuntu runners and has two triggers:
-
-| Event | What starts the workflow |
+| Area | Status |
 | --- | --- |
-| `pull_request` | Runs when a pull request is opened, updated with new commits, or reopened. There is no base-branch filter, so PRs into any target branch are covered. A push to a branch with no open PR does not trigger this event. |
-| `push` to `main` | Runs after each push event to `main`, including a merge that updates `main`. Direct pushes to other branches do not match this trigger. |
+| Continuous integration (`test`, `integration`, `security`) | Implemented in [`ci.yml`](../../.github/workflows/ci.yml) |
+| Container image and Compose stack with health checks | Implemented ([Dockerfile](../../Dockerfile), [docker-compose.yml](../../docker-compose.yml)) |
+| TLS reverse proxy (Caddy) | Implemented as an opt-in Compose profile |
+| Continuous delivery to OCI | Designed below; no deploy workflow or provisioned VM exists |
 
-When a source branch has an open PR, pushing commits to it updates the PR and starts a new run. The `concurrency` setting cancels an older in-progress run for the same PR or branch when a newer run starts. The three jobs run independently and can execute in parallel.
+## Target environment
 
-## Quality and security gates
-
-| Job | Timeout | What it checks |
-| --- | ---: | --- |
-| `test` | 15 minutes | Runs `./mvnw -B -ntp verify` for the Docker-free unit and MVC suite, Maven verification, and the JaCoCo 80% line-coverage floor. Uploads test and coverage reports. |
-| `integration` | 25 minutes | Runs `./mvnw -B -ntp -Pintegration verify`, activating the Failsafe PostgreSQL integration suite with Testcontainers. This Maven lifecycle also runs the regular unit/MVC tests. Uploads Surefire, Failsafe, and coverage reports. |
-| `security` | 20 minutes | Uses Trivy to scan dependency manifests and the built application image. It fails on fixable HIGH or CRITICAL vulnerabilities; findings without an available fix are ignored. |
-
-The integration profile uses PostgreSQL 18 through Testcontainers, so the CI runner must provide Docker. The security job builds the production Dockerfile as `libro-api:ci` before scanning it. That image stays on the runner: the workflow does not push it to a registry.
-
-Test report artifacts are retained for 14 days. Each job has its own timeout, so the limits are not added together; overall elapsed time is driven by the slowest job plus runner startup and queue time. If any job fails, the workflow fails.
-
-## Runner and workflow controls
-
-- Workflow permissions are limited to `contents: read`; CI has no deployment credentials.
-- Java 25 is installed from Temurin, with Maven dependency caching enabled.
-- Third-party GitHub Actions are pinned to commit SHAs. Trivy runs from its versioned official container image.
-- Superseded runs for a matching ref are canceled to avoid spending runner time on stale commits.
-- Trivy ignores unfixed findings. Accepted, time-bounded exceptions are recorded in [`.trivyignore`](../../.trivyignore) with an expiry comment.
-
-The workflow reports check results to GitHub. Requiring `test`, `integration`, and `security` before merging is a separate repository branch-protection or ruleset setting; it is not configured by this workflow file. The engineering reference recommends requiring all three checks for `main`.
-
-## Container operations
-
-The repository includes a multi-stage [Dockerfile](../../Dockerfile) that compiles with JDK 25 and runs the packaged application on a JRE-only Alpine image as an unprivileged user. The image defines a readiness health check. [Docker Compose](../../docker-compose.yml) runs PostgreSQL with a persistent named volume, waits for database health before starting the API, and checks the API readiness endpoint.
-
-An optional Caddy profile terminates TLS and keeps the API and database behind the proxy. It is a local/reference deployment setup, not a hosted production deployment. The app and database bind to loopback in the default Compose configuration; only the optional proxy binds public HTTP/HTTPS ports.
-
-## Proposed OCI Always Free MVP
-
-This is a deployment design, not provisioned infrastructure. The MVP target is one low-traffic demo VM running the API, PostgreSQL, and Caddy with Docker Compose. It intentionally has no high availability, autoscaling, or production patron data.
+**One OCI Always Free Ampere A1 (ARM64) VM** running the API, PostgreSQL, and Caddy under Docker Compose. It is a low-traffic demo with synthetic data. It deliberately has no high availability or autoscaling, because neither improves a single-instance portfolio service.
 
 ```mermaid
 flowchart LR
-    PR[Pull request] --> CI[Existing test, integration, and security jobs]
+    PR[Pull request] --> CI[test, integration, security]
     Main[Push to main] --> CI
     CI --> Image[Build and scan ARM64 image]
-    Image --> Registry[Publish immutable commit image]
-    Registry --> Deploy[Protected deployment job]
+    Image --> Registry[Publish immutable commit-SHA image]
+    Registry --> Deploy[Approved deploy job]
     subgraph OCI[OCI Always Free VM]
-        DeployHost[Compose deployment host] --> Caddy
         Caddy[Caddy HTTPS :80/:443] --> API[Spring Boot API :8080]
         API --> DB[PostgreSQL]
         DB --> Volume[Persistent block volume]
     end
-    Deploy --> DeployHost
+    Deploy --> Caddy
 ```
 
-### MVP infrastructure decisions
+Design decisions and the reasons for them:
 
-- **Compute:** OCI's current Always Free documentation lists up to 2 OCPUs and 12 GB RAM for Ampere A1 in the tenancy's home region. The 200 GB Block Volume allowance includes boot volumes. Capacity can be unavailable, and Oracle may reclaim a Free Tier VM that stays below its documented CPU, network, and (for A1) memory utilization thresholds for seven days. Verify the account's current eligibility and quotas before provisioning; this is not an always-on service guarantee. See [OCI Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).
-- **Architecture:** Use one ARM64 A1 VM and the existing Compose/Caddy pattern. The current Dockerfile uses Temurin Alpine images, but CI currently builds on an x86 runner; add an explicit `linux/arm64` build and scan before deploying to A1. Expose only Caddy on ports 80/443 and restrict SSH to a trusted source IP. Keep application 8080, PostgreSQL 5432, and management 9091 inaccessible from the public network.
-- **Database:** Run PostgreSQL on the same VM for the demo, with its data on persistent block storage rather than the container's writable layer. Schedule encrypted database backups to Object Storage and prove a restore before the first public demo. Treat the single-VM database as a single point of failure; keep demo data synthetic. An Always Free-only tenancy currently has 20 GB of combined Object Storage, so use a short retention policy and monitor usage.
-- **TLS and ingress:** Use Caddy with a real DNS name and ports 80/443. Domain registration is a separate cost item outside the VM allowance. The existing app-level login/signup limits are process-local; keep the app reachable only through the trusted proxy and complete gateway throttling and abuse monitoring before public exposure, as listed in the [roadmap](../reference/ROADMAP.md).
-- **Image registry:** OCI Container Registry charges for stored images, so it is not automatically a zero-cost choice. For this public portfolio project, a public GitHub Container Registry image is a simpler MVP option: GitHub currently lists public packages as free and container image storage/bandwidth as free, with policy subject to change. Keep credentials and institutional data out of the image. See [OCI Registry pricing](https://docs.oracle.com/en-us/iaas/Content/Registry/Concepts/registryoverview.htm) and [GitHub Packages billing](https://docs.github.com/en/billing/concepts/product-billing/github-packages).
+- **Compute.** OCI documents up to 2 OCPUs and 12 GB RAM of Ampere A1 in the home region, and a 200 GB Block Volume allowance that includes boot volumes. Capacity can be unavailable, and Oracle may reclaim an idle Free Tier VM that stays below its utilization thresholds for seven days, so this is a demo target and not an uptime guarantee. See [OCI Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).
+- **Architecture.** The image must run on ARM64. The Dockerfile uses Temurin Alpine images, but CI builds on an x86 runner, so the deploy pipeline builds and scans a `linux/arm64` image before it is released.
+- **Network.** Only Caddy listens publicly (80/443). SSH is restricted to a trusted source IP. The app (8080), PostgreSQL (5432), and management (9091) ports are not reachable from the internet.
+- **Database.** PostgreSQL runs on the same VM with its data on persistent block storage, not the container's writable layer. It is a single point of failure, so only synthetic data is used and encrypted backups go to Object Storage (the Always Free allowance is 20 GB combined, so retention is short).
+- **TLS.** Caddy obtains certificates for a real DNS name; domain registration is outside the free allowance. The app's login/signup rate limits are per process, so the app port stays reachable only through the proxy.
+- **Image registry.** OCI Container Registry bills for storage, so the design uses a public GitHub Container Registry image. GitHub lists public packages as free, subject to policy changes. See [GitHub Packages billing](https://docs.github.com/en/billing/concepts/product-billing/github-packages).
 
-### MVP continuous delivery design
+## Pipeline stages
 
-1. Keep pull requests limited to the existing CI checks. Configure `main` branch protection to require `test`, `integration`, and `security` before merge.
-2. Add a deployment job that runs only for `main` after all three checks succeed. For the first release, make it manually approved or `workflow_dispatch`; automate deployment on each successful `main` push only after a successful restore and rollback rehearsal.
-3. Build an ARM64 image once, scan that exact image, and publish it with an immutable commit SHA tag or digest. Deploy that exact artifact; avoid deploying a mutable `latest` tag or rebuilding a different image on the server.
-4. Restrict deployment credentials to a `production` GitHub environment and to the deployment job. Keep the workflow's default permission at `contents: read`; grant `packages: write` only to the image-publication job and `id-token: write` only if OCI workload identity federation is used. For the initial VM update, a dedicated deploy key stored as an environment secret is simpler; OCI workload identity federation applies to OCI API access and avoids long-lived OCI API keys. Never put credentials in the repository. Approval-rule availability depends on repository visibility and plan. See [GitHub deployment environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments) and [OCI workload identity federation](https://docs.oracle.com/en-us/iaas/Content/Identity/api-getstarted/token_exchange_grant_type_workload_id-federation.htm).
-5. Deploy through a production Compose override under `deploy/` that pulls the immutable image. Wait for `/readyz`, record the deployed image digest, and restore the previous image if the application health check fails. Back up PostgreSQL before Flyway changes; schema migrations are forward-only, so application rollback does not automatically roll back database changes.
+### Continuous integration (implemented)
 
-For an existing database, verify the outstanding V3-to-V4 upgrade path before migrating its data; a new empty database follows the already-tested fresh migration path. Keep production secrets in the host's protected environment or secret store, including the required JWT key and administrator hash. Do not commit a production `.env` file.
+The workflow runs on GitHub-hosted Ubuntu runners for every pull request (any base branch) and every push to `main`. A newer run cancels a stale in-progress run for the same ref. The three jobs run in parallel and any failure fails the workflow.
 
-### Later, outside the MVP
+| Job | Timeout | What it checks |
+| --- | ---: | --- |
+| `test` | 15 min | `./mvnw -B -ntp verify`: unit and MVC suite plus the JaCoCo 80% line-coverage floor. |
+| `integration` | 25 min | `./mvnw -B -ntp -Pintegration verify`: the PostgreSQL 18 suite through Testcontainers, covering Flyway migrations, Hibernate schema validation, and concurrent-checkout races. |
+| `security` | 20 min | Trivy scans dependency manifests and the built Docker image; it fails on fixable HIGH or CRITICAL findings. Accepted exceptions live in [`.trivyignore`](../../.trivyignore) with expiry comments. |
 
-Multi-instance availability, blue/green deployment, a managed database, and Kubernetes add cost or operational load without improving a single-instance portfolio demo. Revisit them only when measured traffic, recovery goals, or an actual service commitment requires them.
+Controls: workflow permissions are `contents: read`, no deployment credentials exist in CI, third-party actions are pinned to commit SHAs, Trivy runs from a versioned official image, and test reports are kept for 14 days. Requiring all three checks before merging is a GitHub branch-protection setting, separate from the workflow file.
 
-The proposed OCI design is not deployed and does not close the existing public-exposure gates: real-domain TLS, alerts for login failures and rate-limit rejections, gateway-level throttling, and an independent security review. The [Development Roadmap](../reference/ROADMAP.md) tracks their status.
+### Continuous delivery (design)
+
+1. **Gate.** The deploy job runs only for `main` after `test`, `integration`, and `security` succeed.
+2. **Build once.** Build a `linux/arm64` image, scan that exact image, and publish it tagged with the commit SHA. The server pulls that artifact by digest and never rebuilds or uses a mutable `latest` tag.
+3. **Approve.** The first releases use a manually approved `production` environment (or `workflow_dispatch`). Automatic deployment on every `main` push waits until a backup restore and a rollback have been rehearsed.
+4. **Deploy.** Over SSH, back up PostgreSQL, record the previous image digest, run `docker compose pull && docker compose up -d` from a production override in [`infra/`](../../infra/), then wait for `/readyz`.
+5. **Verify.** A failing `/readyz` check triggers the rollback below. A passing check records the new digest as the deployed version.
+
+## Environments
+
+| Environment | Purpose | Runs on | Data |
+| --- | --- | --- | --- |
+| Local | Development and demos | Docker Compose on a developer machine; see [Local Setup](../guides/local-setup.md) | Disposable volume |
+| CI | Verify every change | Ephemeral GitHub runners with Testcontainers | Throwaway containers |
+| Production demo | Public portfolio instance | One OCI Always Free VM | Synthetic only |
+
+There is no separate staging environment: one low-traffic VM does not justify a second copy, and CI plus the migration tests cover pre-release verification.
+
+## Secrets handling
+
+- No secret is stored in the repository. [`.env.example`](../../.env.example) holds placeholders; real `.env` files and key files (`*.pem`, `*.key`) are git-ignored.
+- The application needs a PostgreSQL password, a Base64 JWT signing key of at least 32 bytes (`LIBRO_JWT_SECRET_BASE64`), and BCrypt hashes for the bootstrap accounts. Only hashes are accepted; plaintext account passwords never appear in configuration.
+- On the VM, the production `.env` is owned by the deploy user with `chmod 600`.
+- GitHub Actions holds only the deploy SSH key and host details, as `production` environment secrets scoped to the deploy job. The default workflow permission stays `contents: read`; `packages: write` goes only to the image-publishing job, and `id-token: write` only if OCI workload identity federation replaces long-lived OCI API keys. See [GitHub deployment environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments) and [OCI workload identity federation](https://docs.oracle.com/en-us/iaas/Content/Identity/api-getstarted/token_exchange_grant_type_workload_id-federation.htm).
+- Logs and API errors never contain password hashes, stack traces, or credentials.
+
+## Rollback
+
+- **Application.** Each release is an immutable, digest-addressed image. Rolling back means pointing Compose at the previous recorded digest and recreating the app container.
+- **Database.** Flyway migrations are forward-only, so an application rollback does not undo schema changes. A database backup is taken before every deploy that includes a new migration. Restoring it is the recovery path for a bad migration.
+- **Existing data.** Before migrating a database that already holds data, verify the V3-to-V4 upgrade path. A new empty database follows the fresh-migration path that CI already tests.
+- **Never** run `docker compose down -v` against production; it deletes the database volume.
+
+## Monitoring
+
+| Signal | Source | Status |
+| --- | --- | --- |
+| Liveness and readiness | Public `/livez` and `/readyz` on the app port, with details hidden; Docker and Compose health checks probe `/readyz` | Implemented |
+| Metrics | Prometheus endpoint on the private management port 9091, including `libro.auth.logins` and `libro.rate_limit.rejections` | Implemented; not scraped by any deployed service |
+| Request tracing | `X-Request-Id` on every response, log line, and error body | Implemented |
+| Restarts | `restart: unless-stopped` on every service | Implemented |
+| External uptime probe | A free hosted check against the public `/readyz` URL | Part of the deploy design |
+
+Alert rules for login failures and rate-limit rejections are not configured.
+
+## Public-exposure gates
+
+The OCI design does not by itself close the gates recorded in the [roadmap](../reference/ROADMAP.md): real-domain TLS in production, alerts on login-failure and rate-limit metrics, gateway-level throttling before running more than one instance, and an independent security review.
