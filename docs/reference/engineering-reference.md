@@ -499,7 +499,7 @@ The application requires the database variables, the bootstrap hash, and the JWT
 | `LIBRO_RATE_LIMIT_MAX_TRACKED_CLIENT_ROUTES` | No | Maximum in-memory route/address counters; at least `2`, defaults to `10000` | `${LIBRO_RATE_LIMIT_MAX_TRACKED_CLIENT_ROUTES:-10000}` |
 | `SERVER_FORWARD_HEADERS_STRATEGY` | No | `none` (default) or `native`; use `native` only behind a trusted proxy with direct app access blocked | `${SERVER_FORWARD_HEADERS_STRATEGY:-none}` |
 | `MANAGEMENT_SERVER_PORT` | No | Private Actuator/Prometheus port; defaults to `9091`. Do not publish it | application property default |
-| `LIBRO_API_DOCS_ENABLED` | No | Serves `/v3/api-docs` and Swagger UI without authentication; defaults to `false` (local `.env.example` sets `true`) | `${LIBRO_API_DOCS_ENABLED:-false}` |
+| `LIBRO_API_DOCS_ENABLED` | No | Serves `/v3/api-docs` and Swagger UI without authentication; defaults to `false` (the `.env.example` template also leaves it `false`; set `true` locally or on the synthetic-data demo) | `${LIBRO_API_DOCS_ENABLED:-false}` |
 | `LIBRO_DB_POOL_SIZE` | No | Hikari maximum pool size per instance; defaults to `10` | application property default |
 | `LOGGING_LEVEL_APP` | No | Log level for the `app` package; defaults to `INFO` | application property default |
 | `LIBRO_CORS_ALLOWED_ORIGINS` | No | Comma-separated exact UI origins; blank allows none and wildcards are rejected | `${LIBRO_CORS_ALLOWED_ORIGINS:-}` |

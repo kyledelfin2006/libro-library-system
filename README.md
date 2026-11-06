@@ -49,7 +49,7 @@ Requires Docker with Compose. The stack builds the API from source and starts Po
 
 3. Check readiness at `http://localhost:8080/readyz`, then log in with `POST /app/auth/login` and send the returned token as `Authorization: Bearer <token>`.
 
-Swagger UI and `/v3/api-docs` are off unless `LIBRO_API_DOCS_ENABLED=true`, which the `.env.example` template sets for local use. To run the app outside Docker, enable the TLS proxy profile, or provision the first librarian, see [Local Setup and Configuration](docs/guides/local-setup.md). Run the tests with `./mvnw verify`; add `-Pintegration` for the PostgreSQL suite, which needs Docker.
+Swagger UI and `/v3/api-docs` are off unless `LIBRO_API_DOCS_ENABLED=true`, which you can set in your local `.env` (the template leaves it `false`). To run the app outside Docker, enable the TLS proxy profile, or provision the first librarian, see [Local Setup and Configuration](docs/guides/local-setup.md). Run the tests with `./mvnw verify`; add `-Pintegration` for the PostgreSQL suite, which needs Docker.
 
 ## How it deploys
 
@@ -61,18 +61,20 @@ Every pull request and every push to `main` runs three parallel GitHub Actions c
 | `integration` | Flyway migrations, schema validation, and loan concurrency against PostgreSQL 18 |
 | `security` | Trivy finds no fixable HIGH or CRITICAL issues in dependencies or the container image |
 
-The production target is a single **OCI Always Free Ampere A1 VM** running the API, PostgreSQL, and a Caddy TLS proxy under Docker Compose. The planned delivery flow builds and scans one immutable ARM64 image, publishes it by commit SHA, and deploys it through an approved `production` environment. A failed `/readyz` check rolls back to the previous image digest. The pipeline stages, environments, secrets handling, rollback, and monitoring are in [CI/CD and DevOps](docs/devops/ci-cd.md).
+The production target is a single **OCI Always Free Ampere A1 VM** running the API, PostgreSQL, and a Caddy TLS proxy under Docker Compose. The planned delivery flow builds and scans one immutable ARM64 image, publishes it by commit SHA, and deploys it through an approved `production` environment. `scripts/deploy.sh` already does the deploy step by hand: it backs up the database, starts the new image, runs a smoke test (readiness, login, authenticated read, anonymous rejection), and restarts the previous image if anything fails. `backup.sh`, `restore.sh`, and `seed-demo.sh` cover recovery and demo data. The pipeline stages, environments, secrets handling, rollback, and monitoring are in [CI/CD and DevOps](docs/devops/ci-cd.md); provisioning steps are in the [Operations Runbook](docs/devops/runbook.md).
 
-**The service is not deployed yet:** no CD workflow or VM exists.
+**The service is not deployed yet:** the scripts were rehearsed against a local Docker stack, but no VM is provisioned and no CD workflow exists.
 
 ## Repo map
 
 ```text
 src/             Spring Boot application (controllers, services, repositories, Flyway migrations) and tests
-infra/caddy/     Caddy reverse-proxy configuration used by the Compose `proxy` profile
+infra/           Production Compose override and the Caddy reverse-proxy configuration
+scripts/         Deploy, rollback, smoke-test, backup, restore, and demo-seed scripts
+proposals/       Design proposals (0001: pre-OCI deployment improvements)
 docs/
   architecture.md  Design, request flows, API inventory, data model, troubleshooting, tests
-  devops/          CI/CD, environments, secrets, rollback, monitoring
+  devops/          CI/CD, environments, secrets, rollback, monitoring, operations runbook
   guides/          Domain decisions, loan guide, local setup, institutional context, API documentation standard
   reference/       Engineering reference, JWT design, role policy, roadmap
 .github/         CI workflow and Dependabot configuration
@@ -89,7 +91,8 @@ Start with [Architecture and Reference](docs/architecture.md) for how the system
 | Catalog, accounts, roles, JWT authentication, loans | Implemented and covered by unit, MVC, and PostgreSQL tests |
 | CI (`test`, `integration`, `security`) | Running on every pull request and push to `main` |
 | Container image and Compose stack | Implemented, with health checks |
-| OCI deployment and CD | Designed, not provisioned |
+| Deploy, rollback, backup, and smoke-test scripts; runbook | Implemented and rehearsed locally |
+| OCI VM and CD workflow | Not provisioned / not built; see the [proposal](proposals/0001-pre-oci-deployment-improvements.md) |
 | Open items | V3-to-V4 migration upgrade test on PostgreSQL; browser review of the OpenAPI/Swagger output; TLS with a real domain, login-failure and rate-limit alerts, and an independent security review before public exposure |
 
 The [Development Roadmap](docs/reference/ROADMAP.md) tracks the detail.
