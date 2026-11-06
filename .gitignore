@@ -1,5 +1,5 @@
 # ============================================
-# COMPILED FILES
+# BUILD OUTPUT
 # ============================================
 *.class
 *.jar
@@ -9,9 +9,10 @@ target/
 out/
 bin/
 build/
+/dist/
 
 # ============================================
-# MAVEN (if using Maven)
+# MAVEN
 # ============================================
 pom.xml.tag
 pom.xml.releaseBackup
@@ -25,33 +26,15 @@ buildNumber.properties
 .mvn/wrapper/maven-wrapper.jar
 
 # ============================================
-# INTELIJ IDEA
+# IDEs AND EDITORS
 # ============================================
+# IntelliJ IDEA
 .idea/
 *.iml
 *.iws
 *.ipr
-.idea/modules.xml
-.idea/jarRepositories.xml
-.idea/compiler.xml
-.idea/libraries/
-.idea/modules/
-.idea/workspace.xml
-.idea/tasks.xml
-.idea/gradle.xml
-.idea/uiDesigner.xml
-.idea/dictionaries
-.idea/httpRequests
-.idea/caches
-.idea/shelf
-.idea/dataSources.local.xml
-.idea/sqlDataSources.xml
-.idea/datasources.xml
-.idea/dataSources/
 
-# ============================================
-# ECLIPSE
-# ============================================
+# Eclipse / STS
 .apt_generated
 .classpath
 .factorypath
@@ -60,37 +43,43 @@ buildNumber.properties
 .springBeans
 .sts4-cache
 .metadata/
-*.tmp
-*.bak
-*.log
 
-# ============================================
-# NETBEANS
-# ============================================
+# NetBeans
 /nbproject/private/
 /nbbuild/
-/dist/
 /nbdist/
 /.nb-gradle/
 
-# ============================================
-# VS CODE
-# ============================================
+# VS Code
 .vscode/
 *.code-workspace
 .history/
 
 # ============================================
-# APPLICATION DATA (IMPORTANT!)
+# LOCAL DATA, LOGS AND SECRETS
 # ============================================
-# Don't commit user data or database files
 *.db
 *.sqlite
 *.h2.db
 *.lock
+*.tmp
+*.bak
+*.log
 data/
 logs/
+
+# Environment files: keep only the committed template
 .env
+.env.*
+!.env.example
+
+# Keys and infrastructure credentials (OCI API keys, deploy keys, Terraform vars)
+*.pem
+*.key
+*.tfvars
+
+# Local seeded-account credentials (private)
+SEED-ACCOUNTS.local.txt
 
 # ============================================
 # OS GENERATED FILES
@@ -107,16 +96,17 @@ Thumbs.db
 *~
 
 # ============================================
-# MISCELLANEOUS
+# LOCAL TOOLING
+# ============================================
+.run/
+.kilo/
+.claude/
+
+# ============================================
+# ARCHIVES AND PROCESS FILES
 # ============================================
 *.pid
 *.gz
 *.zip
 *.tar
 *.rar
-proposed.project.structured.txt
-.run/
-.kilo
-
-# Local seeded-account credentials (private)
-SEED-ACCOUNTS.local.txt
