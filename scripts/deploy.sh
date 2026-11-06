@@ -13,6 +13,7 @@
 # Environment (private .env on the host): see docs/devops/runbook.md.
 #   SMOKE_INSECURE=1  skip TLS verification in the smoke test (local rehearsals with Caddy's internal CA only)
 #   LIBRO_ALLOW_DIRTY=1  allow building from a working tree with uncommitted changes (rehearsals only)
+#   LIBRO_ALLOW_UNPINNED=1  allow --image without an @sha256 digest (rehearsals only; releases must be immutable)
 set -euo pipefail
 # shellcheck disable=SC1091
 . "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -24,6 +25,12 @@ while [ "$#" -gt 0 ]; do
     *) die "unknown option: $1" ;;
   esac
 done
+
+# A release image must be immutable: a tag can be re-pointed, a digest cannot.
+case "$image_arg" in
+  ""|*@sha256:*) ;;
+  *) [ "${LIBRO_ALLOW_UNPINNED:-0}" = "1" ] || die "--image must be pinned by digest (name@sha256:...); got: $image_arg" ;;
+esac
 
 load_env
 require_vars POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD LIBRO_JWT_SECRET_BASE64 LIBRO_DOMAIN LIBRO_DATA_DIR
