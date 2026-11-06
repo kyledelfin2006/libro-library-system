@@ -1,6 +1,6 @@
 # Current System Engineering Reference
 
-This is the detailed implementation reference for agents and contributors. The root [AGENTS.md](../AGENTS.md) is the short instruction and source-of-truth index. This document describes the current repository; code, migrations, and tests remain authoritative if any detail here becomes stale.
+This is the detailed implementation reference for agents and contributors. The root [AGENTS.md](../../AGENTS.md) is the short instruction and source-of-truth index. This document describes the current repository; code, migrations, and tests remain authoritative if any detail here becomes stale.
 
 ## Purpose
 
@@ -208,7 +208,7 @@ For the two public POST routes, the request order is `Spring Security → MVC ro
 - Delegates business rules to `BookService`.
 - Uses `BookMapper` to prevent entities from becoming the public API representation.
 - Chooses HTTP status codes and response envelopes.
-- Documents every operation sufficiently for Swagger UI to act as the interactive API reference, while Springdoc derives paths and schemas from controller signatures and DTOs wherever possible. Follow [API Documentation Guideline](../docs/api-documentation-guideline.md): document non-inferable behavior, keep constraints on DTOs, and avoid repeated annotation boilerplate.
+- Documents every operation sufficiently for Swagger UI to act as the interactive API reference, while Springdoc derives paths and schemas from controller signatures and DTOs wherever possible. Follow [API Documentation Guideline](../guides/api-documentation-guideline.md): document non-inferable behavior, keep constraints on DTOs, and avoid repeated annotation boilerplate.
 - Uses `@ErrorApiResponse` for expected errors with the shared `ErrorResponse` schema. Keep response status and endpoint-specific meaning beside the operation; the composed annotation centralizes only repeated schema metadata.
 
 Do not add repository access to the controller. New endpoint logic should remain thin and be independently testable in the service.
@@ -416,7 +416,7 @@ Loan routes:
 
 Only students and faculty can borrow or return. All roles can read their own history. Library assistants can view/resolve student and faculty loans; librarians can also view/resolve library-assistant loans. Check `SecurityConfig` and `LoanService` for the enforced policy.
 
-When adding an endpoint, update this file and `README.md`, document the operation and public DTO schemas following [API Documentation Guideline](../docs/api-documentation-guideline.md), provide request/response examples where useful, and add tests at the appropriate layer.
+When adding an endpoint, update this file and `README.md`, document the operation and public DTO schemas following [API Documentation Guideline](../guides/api-documentation-guideline.md), provide request/response examples where useful, and add tests at the appropriate layer.
 
 ## Dependency Guide
 
@@ -575,7 +575,7 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-The app is exposed on `127.0.0.1:8080` and PostgreSQL on `127.0.0.1:5432`. The optional `proxy` profile (`docker compose --profile proxy up`) adds a Caddy reverse proxy from [`deploy/Caddyfile`](../deploy/Caddyfile) that terminates TLS on ports 80/443 for `LIBRO_DOMAIN`, adds HSTS, and is the only publicly bound service; set `SERVER_FORWARD_HEADERS_STRATEGY=native` when using it. PostgreSQL has a `pg_isready` health check, and the app waits for the database before startup and reports healthy from `/readyz`.
+The app is exposed on `127.0.0.1:8080` and PostgreSQL on `127.0.0.1:5432`. The optional `proxy` profile (`docker compose --profile proxy up`) adds a Caddy reverse proxy from [`infra/caddy/Caddyfile`](../../infra/caddy/Caddyfile) that terminates TLS on ports 80/443 for `LIBRO_DOMAIN`, adds HSTS, and is the only publicly bound service; set `SERVER_FORWARD_HEADERS_STRATEGY=native` when using it. PostgreSQL has a `pg_isready` health check, and the app waits for the database before startup and reports healthy from `/readyz`.
 
 Persistent data lives in the `postgres_data` Docker volume. `docker compose down` retains it; `docker compose down -v` deletes it. Never run the latter on behalf of a user unless data destruction is explicitly requested and confirmed.
 

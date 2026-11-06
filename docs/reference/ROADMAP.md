@@ -14,7 +14,7 @@ This is the working implementation roadmap. It is not the public project overvie
 | Loans | Implemented in application and V4 migration; service/MVC rules, PostgreSQL invariants and concurrent checkout races covered |
 | LIBRARIAN role and target owner/directory rules | Implemented with JWT Bearer authentication |
 
-See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md). Administrator means library assistant, not system administrator. The paginated directory and profile/password operations follow role and target-account boundaries; students/faculty may delete their own accounts. Loan policy and build guidance are in [Loan Implementation Guide](../docs/loan.md).
+See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md). Administrator means library assistant, not system administrator. The paginated directory and profile/password operations follow role and target-account boundaries; students/faculty may delete their own accounts. Loan policy and build guidance are in [Loan Implementation Guide](../guides/loan.md).
 
 ## Recommended implementation order
 
@@ -81,6 +81,6 @@ Before changing a migration, establish whether that version has been applied to 
 - [Security Roles and JWT Guide](security-roles-and-jwt-guide.md): live role/loan policy and JWT summary.
 - [JWT Authentication Design](jwt-authentication-design.md): as-built boundaries, classes, flows, rules, exceptions, configuration, and validation matrix.
 - [Current System Engineering Reference](engineering-reference.md): current repository facts and technical conventions.
-- [API Documentation Guideline](../docs/api-documentation-guideline.md): OpenAPI/controller documentation rules.
-- [Domain Decisions](../docs/domain-decisions.md): physical-copy model and loan invariant.
-- [Loan Implementation Guide](../docs/loan.md): live loan behavior, endpoints, schema, and build flow.
+- [API Documentation Guideline](../guides/api-documentation-guideline.md): OpenAPI/controller documentation rules.
+- [Domain Decisions](../guides/domain-decisions.md): physical-copy model and loan invariant.
+- [Loan Implementation Guide](../guides/loan.md): live loan behavior, endpoints, schema, and build flow.

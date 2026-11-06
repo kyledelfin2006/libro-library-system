@@ -19,7 +19,8 @@ build/
 
 # Exclude project documentation and examples that are not part of the executable application.
 docs/
-guiding-docs/
+infra/
+proposals/
 assets/
 README.md
 AGENTS.md

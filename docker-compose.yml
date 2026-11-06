@@ -111,7 +111,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       # Persists issued certificates so restarts do not request new ones.
       - caddy_data:/data
     mem_limit: 128m

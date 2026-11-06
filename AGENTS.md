@@ -5,13 +5,13 @@ This file is the repository's internal entry point for AI agents and human contr
 ## Start here
 
 1. Read this file for contributor rules and the source-of-truth map.
-2. Read [Current System Engineering Reference](guiding-docs/engineering-reference.md) for the repository map, current layer contracts, API inventory, configuration, and test strategy.
+2. Read [Current System Engineering Reference](docs/reference/engineering-reference.md) for the repository map, current layer contracts, API inventory, configuration, and test strategy.
 3. Read the relevant focused document before editing:
-   - [Role and JWT guide](guiding-docs/security-roles-and-jwt-guide.md) for live role/loan behavior and JWT authentication rules.
-   - [Loan implementation guide](docs/loan.md) for the loan lifecycle, API, schema, and build flow.
-   - [Development roadmap](guiding-docs/TODO.md) for outstanding work.
-   - [API documentation guideline](docs/api-documentation-guideline.md) for controller/OpenAPI documentation.
-   - [Domain decisions](docs/domain-decisions.md) for the physical-copy model and loan constraints.
+   - [Role and JWT guide](docs/reference/security-roles-and-jwt-guide.md) for live role/loan behavior and JWT authentication rules.
+   - [Loan implementation guide](docs/guides/loan.md) for the loan lifecycle, API, schema, and build flow.
+   - [Development roadmap](docs/reference/ROADMAP.md) for outstanding work.
+   - [API documentation guideline](docs/guides/api-documentation-guideline.md) for controller/OpenAPI documentation.
+   - [Domain decisions](docs/guides/domain-decisions.md) for the physical-copy model and loan constraints.
 
 ## Sources of truth
 
@@ -22,10 +22,10 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 | What an endpoint currently does | Controller mappings, DTOs, service behavior, generated OpenAPI, and API tests |
 | What access is currently enforced | SecurityConfig, any method/service authorization checks, and security tests |
 | What roles and columns the database accepts | Latest applied Flyway migrations; JPA mappings must match |
-| Current entity and relationship model | JPA entities plus [Domain Decisions](docs/domain-decisions.md) |
-| API documentation conventions | [API Documentation Guideline](docs/api-documentation-guideline.md) |
-| JWT authentication and current role/loan policy | [Role and JWT guide](guiding-docs/security-roles-and-jwt-guide.md) and [JWT Authentication Design](guiding-docs/jwt-authentication-design.md); verify live behavior against code and tests |
-| Remaining work | [Development roadmap](guiding-docs/TODO.md) |
+| Current entity and relationship model | JPA entities plus [Domain Decisions](docs/guides/domain-decisions.md) |
+| API documentation conventions | [API Documentation Guideline](docs/guides/api-documentation-guideline.md) |
+| JWT authentication and current role/loan policy | [Role and JWT guide](docs/reference/security-roles-and-jwt-guide.md) and [JWT Authentication Design](docs/reference/jwt-authentication-design.md); verify live behavior against code and tests |
+| Remaining work | [Development roadmap](docs/reference/ROADMAP.md) |
 | Recruiter-facing project description | [README](README.md) and the public-facing documents it links to |
 
 ## Current implementation facts
@@ -35,7 +35,7 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 - POST /app/users/signup, POST /app/auth/login, and GET /livez, GET /readyz are public. Other routes require authentication. The filter chain is stateless and CSRF is disabled for this Authorization-header-only API.
 - Login and signup requests pass through a configurable per-IP fixed-window MVC interceptor after Spring Security and before body binding/controller invocation; over-limit requests return 429 without reaching the controller/service. Counters are per process and reset on restart. `SERVER_FORWARD_HEADERS_STRATEGY` defaults to `none`; use `native` only when the app port is reachable solely from the trusted OCI proxy. Use gateway throttling and private app ingress before scaling or public exposure.
 - CORS is disabled by default. `LIBRO_CORS_ALLOWED_ORIGINS` accepts comma-separated exact UI origins; wildcard origins are rejected, cookies are disabled, and `Retry-After` is exposed to browser clients.
-- JWT issuer/audience default to `libro-api`; `LIBRO_JWT_SECRET_BASE64` is required and must decode to at least 32 bytes. Tokens validate signature, issuer, single audience, time claims, subject, and exactly one known role. See [JWT Authentication Design](guiding-docs/jwt-authentication-design.md).
+- JWT issuer/audience default to `libro-api`; `LIBRO_JWT_SECRET_BASE64` is required and must decode to at least 32 bytes. Tokens validate signature, issuer, single audience, time claims, subject, and exactly one known role. See [JWT Authentication Design](docs/reference/jwt-authentication-design.md).
 - Passwords must satisfy the 8–72 character complexity policy and remain within BCrypt's 72 UTF-8 byte input limit. Signup, password changes, and login enforce the byte boundary.
 - The live UserRole values are STUDENT, FACULTY, ADMINISTRATOR, and LIBRARIAN.
 - STUDENT means a student patron; FACULTY means school faculty using the library as patrons; ADMINISTRATOR means a library assistant (such as fellow faculty, student assistants, or volunteers), not a system administrator; LIBRARIAN means the library's librarian.
@@ -47,10 +47,10 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 - Spring Boot Actuator runs on a private management port (`MANAGEMENT_SERVER_PORT`, default 9091, never published) exposing `health` and `prometheus`. Public liveness and readiness probes are also served on the application port as `/livez` and `/readyz` with hidden details; Docker and Compose probe `/readyz`.
 - Every successful response uses the `ApiResponse<T>` envelope (`success`, `message`, `data`, `timestamp`), including login and pages (`ApiResponse<Page<T>>`); errors use `ErrorResponse`, which also carries `requestId`. Filter-chain 401/403 and 429 responses use the same JSON error body.
 - `RequestIdFilter` assigns an `X-Request-Id` (a safe inbound value or a UUID) to every request, the log pattern and error bodies. All book list endpoints are paginated (default size 12, maximum 100).
-- `docker compose --profile proxy up` adds a Caddy TLS reverse proxy (`deploy/Caddyfile`); metrics `libro.rate_limit.rejections` and `libro.auth.logins` are exported on the private management port. JWT revocation is deliberately not implemented (accepted 15-minute window).
+- `docker compose --profile proxy up` adds a Caddy TLS reverse proxy (`infra/caddy/Caddyfile`); metrics `libro.rate_limit.rejections` and `libro.auth.logins` are exported on the private management port. JWT revocation is deliberately not implemented (accepted 15-minute window).
 - Stored `LocalDateTime` values use Asia/Manila through `LibraryTime` and the loan `Clock`. Swagger UI and `/v3/api-docs` are off unless `LIBRO_API_DOCS_ENABLED=true`.
 - The environment template is `.env.example`. CI (`.github/workflows/ci.yml`) runs `test`, `integration` and `security` (Trivy) jobs; the build enforces JDK 25 and an 80% line-coverage floor.
-- Loans are implemented under JWT Bearer authentication. Each Book row represents one physical copy; V4 adds loan history and copy status. V5 adds optional book descriptions and renames the stored monetary value to `replacement_cost` without changing existing values. See [Loan Implementation Guide](docs/loan.md).
+- Loans are implemented under JWT Bearer authentication. Each Book row represents one physical copy; V4 adds loan history and copy status. V5 adds optional book descriptions and renames the stored monetary value to `replacement_cost` without changing existing values. See [Loan Implementation Guide](docs/guides/loan.md).
 - Flyway owns schema changes; Hibernate uses ddl-auto=validate. V5 is the current latest migration.
 
 These are a snapshot, not a substitute for checking the code when a task changes the relevant area.
@@ -88,7 +88,7 @@ These are a snapshot, not a substitute for checking the code when a task changes
 1. Trace the existing request path and read the relevant source-of-truth docs.
 2. Make the smallest cohesive change at the correct layer.
 3. Update contract documentation and tests for behavior that changed.
-4. Run the appropriate Maven checks described in [Current System Engineering Reference](guiding-docs/engineering-reference.md), and report exactly which checks ran.
+4. Run the appropriate Maven checks described in [Current System Engineering Reference](docs/reference/engineering-reference.md), and report exactly which checks ran.
 
 ## Definition of done
 
