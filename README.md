@@ -11,15 +11,17 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
 
-> **Try Libro:** [Demo patron accounts](#demo-accounts) are documented below. The public OCI instance is not deployed yet; seed them locally to use the API now. Staff credentials stay private.
+## Project Overview
+
+Libro is a Spring Boot REST API for the library of Aklan State University – College of Computer Studies (ASU-CCS). It manages physical book copies, user accounts, and loan history. Each catalog record is one physical copy, which keeps loan history accurate per copy (see [Domain Decisions](docs/guides/domain-decisions.md)).
 
 ## Table of Contents
 
 - [Project Overview](#project-overview)
-  - [Features](#features)
-  - [Architecture](#architecture)
-  - [Notable code changes](#notable-code-changes)
-  - [Engineering problems solved](#engineering-problems-solved)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Notable code changes](#notable-code-changes)
+- [Engineering problems solved](#engineering-problems-solved)
 - [Demo Accounts](#demo-accounts)
 - [Quick Start](#quick-start)
   - [Prerequisites](#prerequisites)
@@ -47,11 +49,7 @@
 - [Project Status](#project-status)
 - [License](#license)
 
-## Project Overview
-
-Libro is a Spring Boot REST API for the library of Aklan State University – College of Computer Studies (ASU-CCS). It manages physical book copies, user accounts, and loan history. Each catalog record is one physical copy, which keeps loan history accurate per copy (see [Domain Decisions](docs/guides/domain-decisions.md)).
-
-### Features
+## Features
 
 - **Catalog:** search, filter, sort, and paginate copies by title, author, genre, or replacement cost; collection and genre statistics.
 - **Loans:** students and faculty borrow for 14 days, up to three active loans each; overdue loans block new checkouts. See the [Loan Implementation Guide](docs/guides/loan.md).
@@ -66,7 +64,7 @@ Libro is a Spring Boot REST API for the library of Aklan State University – Co
 | Build and test | Maven, JUnit 5, Mockito, Testcontainers, JaCoCo |
 | Delivery | Docker, Docker Compose, Caddy, GitHub Actions, Trivy |
 
-### Architecture
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -80,7 +78,7 @@ flowchart LR
 
 The single-module codebase groups `auth`, `book`, `loan`, and `user` by feature, then by layer. Controllers accept and return DTOs; services own business rules, transactions, and entity-to-DTO mapping; repositories own persistence. Shared responses, errors, request IDs, time handling, and OpenAPI configuration live in `global`. Flyway owns the schema, and Hibernate validates it at startup. [Architecture Overview](docs/architecture.md) shows the request and data flows; [ADR 0002](docs/adr/0002-layered-feature-packages.md) records the package decision.
 
-### Notable code changes
+## Notable code changes
 
 | Change | Result |
 | --- | --- |
@@ -89,7 +87,7 @@ The single-module codebase groups `auth`, `book`, `loan`, and `user` by feature,
 | Introduced shared not-found and invalid-request exception types | Expected client errors have consistent status codes; unexpected faults get a generic 500 response. |
 | Layered the test profile over runtime configuration | Tests exercise the real application defaults with only test-specific overrides. |
 
-### Engineering problems solved
+## Engineering problems solved
 
 | Problem | Project change |
 | --- | --- |
@@ -102,6 +100,8 @@ The single-module codebase groups `auth`, `book`, `loan`, and `user` by feature,
 The [Development Problems Solved](docs/guides/development-problems-solved.md) guide traces more issues from symptom to fix and verification. The [Engineering Reference](docs/reference/engineering-reference.md) documents current code contracts and test boundaries.
 
 ## Demo Accounts
+
+> **Try Libro:** [Demo patron accounts](#demo-accounts) are documented below. The public OCI instance is not deployed yet; seed them locally to use the API now. Staff credentials stay private.
 
 These **public patron-only accounts** use synthetic data. They can browse and borrow under the normal loan rules, but cannot manage books or other accounts. Their shared password is published on purpose; do not reuse it elsewhere.
 
