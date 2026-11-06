@@ -1,6 +1,6 @@
 # Loan Implementation Guide
 
-This guide describes the implemented loan feature. For exact live behavior, the Java code, Flyway migrations, and generated OpenAPI are authoritative. Loan routes require the stateless JWT Bearer authentication described in [JWT Authentication Design](../guiding-docs/jwt-authentication-design.md); unsafe requests do not require CSRF tokens.
+This guide describes the implemented loan feature. For exact live behavior, the Java code, Flyway migrations, and generated OpenAPI are authoritative. Loan routes require the stateless JWT Bearer authentication described in [JWT Authentication Design](../reference/jwt-authentication-design.md); unsafe requests do not require CSRF tokens.
 
 ## What a loan means
 

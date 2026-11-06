@@ -21,11 +21,11 @@ The project also includes a GitHub Actions CI pipeline for pull requests and pus
 - **Accounts:** Public signup creates student accounts; librarians create faculty and library-assistant accounts. Role-based permissions protect account and staff workflows.
 - **Insights and operations:** View collection and genre statistics; run the API with PostgreSQL, Flyway, and Docker Compose. Public liveness/readiness probes support load balancers and container health checks.
 
-Each catalog record is one physical copy. Replacement cost records its value for replacement; it is not a borrower charge. See the [Loan Implementation Guide](docs/loan.md) and [Domain Decisions](docs/domain-decisions.md) for details.
+Each catalog record is one physical copy. Replacement cost records its value for replacement; it is not a borrower charge. See the [Loan Implementation Guide](docs/guides/loan.md) and [Domain Decisions](docs/guides/domain-decisions.md) for details.
 
 ### API access
 
-The API contract is generated at [Swagger UI](http://localhost:8080/swagger-ui.html) and [`/v3/api-docs`](http://localhost:8080/v3/api-docs). Both documentation routes are **disabled by default**; set `LIBRO_API_DOCS_ENABLED=true` (the local `.env.example` does) to serve them publicly without a token. Every other route except `POST /app/users/signup`, `POST /app/auth/login` and the health probes requires a Bearer token. The API is stateless and does not require a CSRF token for header-authenticated requests. See [JWT Authentication Design](guiding-docs/jwt-authentication-design.md), [Institutional Context](docs/institutional-context.md), and the [API Documentation Guideline](docs/api-documentation-guideline.md).
+The API contract is generated at [Swagger UI](http://localhost:8080/swagger-ui.html) and [`/v3/api-docs`](http://localhost:8080/v3/api-docs). Both documentation routes are **disabled by default**; set `LIBRO_API_DOCS_ENABLED=true` (the local `.env.example` does) to serve them publicly without a token. Every other route except `POST /app/users/signup`, `POST /app/auth/login` and the health probes requires a Bearer token. The API is stateless and does not require a CSRF token for header-authenticated requests. See [JWT Authentication Design](docs/reference/jwt-authentication-design.md), [Institutional Context](docs/guides/institutional-context.md), and the [API Documentation Guideline](docs/guides/api-documentation-guideline.md).
 
 ## CI/CD and DevOps
 
@@ -37,7 +37,9 @@ Every pull request into any target branch and every push to `main` runs three pa
 | `integration` | 25 minutes | PostgreSQL 18 integration tests against Testcontainers; the Maven lifecycle also runs the unit/MVC suite. |
 | `security` | 20 minutes | Trivy scans dependency manifests and the built Docker image, failing on fixable HIGH or CRITICAL vulnerabilities. |
 
-The workflow runs on Java 25, uses read-only repository permissions, and retains test reports for 14 days. It validates changes but does not publish the image or deploy the service. Configure GitHub branch protection separately to require all three checks before merging. Read the [CI/CD and DevOps portfolio overview](docs/devops/ci-cd.md) for implementation details, container operations, and remaining deployment readiness work.
+The workflow runs on Java 25, uses read-only repository permissions, and retains test reports for 14 days. It validates changes but does not publish the image or deploy the service. Configure GitHub branch protection separately to require all three checks before merging.
+
+The proposed OCI Always Free MVP uses one ARM64 Ampere A1 VM running Docker Compose, Caddy, and PostgreSQL. Its planned CD flow builds and scans an immutable image, deploys only after the CI checks pass, and verifies `/readyz`. This is a design proposal, not a live deployment. The [CI/CD and DevOps portfolio overview](docs/devops/ci-cd.md) covers this architecture, free-tier constraints, deployment security, and remaining readiness work.
 
 Main Developer: **Aldrin Kyle Delfin**
 
@@ -93,11 +95,11 @@ This README remains the project's main portfolio entry point. Supporting documen
 **For technical and peer review**
 
 1. The Architecture Overview and Request Lifecycle sections below explain the current system with component, security, persistence, and startup diagrams.
-2. [Development Problems Solved](docs/development-problems-solved.md) explains major engineering challenges, decisions, and verification.
-3. [Institutional Context](docs/institutional-context.md) describes the ASU-CCS academic model and existing MIS assumptions behind the user domain.
-4. [Domain Decisions](docs/domain-decisions.md) explains why a Book represents one physical copy and how loans preserve copy history.
-5. [Loan Implementation Guide](docs/loan.md) explains the loan lifecycle, permissions, API, database design, and local build flow.
-6. [JWT Authentication Design](guiding-docs/jwt-authentication-design.md) documents the live token rules, security boundaries, request flows, errors, configuration, and known limits.
+2. [Development Problems Solved](docs/guides/development-problems-solved.md) explains major engineering challenges, decisions, and verification.
+3. [Institutional Context](docs/guides/institutional-context.md) describes the ASU-CCS academic model and existing MIS assumptions behind the user domain.
+4. [Domain Decisions](docs/guides/domain-decisions.md) explains why a Book represents one physical copy and how loans preserve copy history.
+5. [Loan Implementation Guide](docs/guides/loan.md) explains the loan lifecycle, permissions, API, database design, and local build flow.
+6. [JWT Authentication Design](docs/reference/jwt-authentication-design.md) documents the live token rules, security boundaries, request flows, errors, configuration, and known limits.
 
 ### For DevOps
 
@@ -106,10 +108,10 @@ This README remains the project's main portfolio entry point. Supporting documen
 ### For agents, AI, and contributors
 
 1. [Agent and Contributor Guide](AGENTS.md) records current facts, source-of-truth rules, do's and don'ts, and the contribution workflow.
-2. [Current System Engineering Reference](guiding-docs/engineering-reference.md) contains the detailed repository map, layer contracts, endpoint inventory, configuration, and test strategy.
-3. [Development Roadmap](guiding-docs/TODO.md) tracks current implementation status and remaining work.
-4. [Security Roles and JWT Guide](guiding-docs/security-roles-and-jwt-guide.md) defines the live role policy, loan permissions, and JWT authentication rules.
-5. [API Documentation Guideline](docs/api-documentation-guideline.md) sets the standard for accurate OpenAPI and Swagger documentation without unnecessary annotation boilerplate.
+2. [Current System Engineering Reference](docs/reference/engineering-reference.md) contains the detailed repository map, layer contracts, endpoint inventory, configuration, and test strategy.
+3. [Development Roadmap](docs/reference/ROADMAP.md) tracks current implementation status and remaining work.
+4. [Security Roles and JWT Guide](docs/reference/security-roles-and-jwt-guide.md) defines the live role policy, loan permissions, and JWT authentication rules.
+5. [API Documentation Guideline](docs/guides/api-documentation-guideline.md) sets the standard for accurate OpenAPI and Swagger documentation without unnecessary annotation boilerplate.
 
 ## Architecture Overview
 
@@ -254,7 +256,7 @@ Account operations and login use `UserRepository`: `UserService` uses it for sig
 
 ### Current Persistence Model
 
-The current schema stores books, users, and loans. A Book row is one physical copy. Loan rows identify the borrower from the authenticated principal and preserve checkout, return, or loss history. The database permits only one active loan per copy. See [Domain Decisions](docs/domain-decisions.md) for the reasoning.
+The current schema stores books, users, and loans. A Book row is one physical copy. Loan rows identify the borrower from the authenticated principal and preserve checkout, return, or loss history. The database permits only one active loan per copy. See [Domain Decisions](docs/guides/domain-decisions.md) for the reasoning.
 
 ```mermaid
 erDiagram
@@ -298,7 +300,7 @@ Each checkout creates a new `LOAN` row for one physical copy and one borrower; `
 
 ## File Structure
 
-This is a selected map of the main application and test files. See the [engineering reference](guiding-docs/engineering-reference.md) for the fuller repository map.
+This is a selected map of the main application and test files. See the [engineering reference](docs/reference/engineering-reference.md) for the fuller repository map.
 
 ```text
 AGENTS.md
@@ -664,7 +666,7 @@ Unauthenticated operational probes are `GET /livez` and `GET /readyz`. Readiness
 
 ### Authentication API
 
-`POST /app/auth/login` accepts a university ID and password and returns an HS256 access token valid for at most 15 minutes. The response is marked `no-store`; send the token only in `Authorization: Bearer <token>`. Wrong passwords and unknown university IDs receive the same generic 401. `LIBRO_JWT_SECRET_BASE64` must be supplied outside source control and decode to at least 32 bytes. See the [JWT Authentication Design](guiding-docs/jwt-authentication-design.md) for claim, exception, and validation boundaries.
+`POST /app/auth/login` accepts a university ID and password and returns an HS256 access token valid for at most 15 minutes. The response is marked `no-store`; send the token only in `Authorization: Bearer <token>`. Wrong passwords and unknown university IDs receive the same generic 401. `LIBRO_JWT_SECRET_BASE64` must be supplied outside source control and decode to at least 32 bytes. See the [JWT Authentication Design](docs/reference/jwt-authentication-design.md) for claim, exception, and validation boundaries.
 
 | Method | Path | Description | Request | Response |
 | --- | --- | --- | --- | --- |
@@ -672,7 +674,7 @@ Unauthenticated operational probes are `GET /livez` and `GET /readyz`. Readiness
 
 ### User API
 
-Signup is public and always creates a student. Only librarians can create faculty and library assistant accounts. Administrators can manage student and faculty accounts; librarians can also manage library assistant accounts. Students and faculty can manage their own profiles and passwords and delete their own accounts. Staff cannot manage another librarian account or delete their own account. Other application routes require a valid JWT Bearer token. See the [role permissions table](guiding-docs/security-roles-and-jwt-guide.md#role-policy) for the full policy.
+Signup is public and always creates a student. Only librarians can create faculty and library assistant accounts. Administrators can manage student and faculty accounts; librarians can also manage library assistant accounts. Students and faculty can manage their own profiles and passwords and delete their own accounts. Staff cannot manage another librarian account or delete their own account. Other application routes require a valid JWT Bearer token. See the [role permissions table](docs/reference/security-roles-and-jwt-guide.md#role-policy) for the full policy.
 
 | Method | Path | Description | Example Request | Example Response |
 | --- | --- | --- | --- | --- |
@@ -719,7 +721,7 @@ Docker is the preferred way to run the project because it brings up both Postgre
     ```bash
     docker compose up --build
     ```
-    To terminate TLS in front of the API, add the optional Caddy proxy profile, set `LIBRO_DOMAIN` and `SERVER_FORWARD_HEADERS_STRATEGY=native` in `.env`, and start with `docker compose --profile proxy up --build`. The proxy listens on ports 80 and 443 and is the only public entry point; the app and database stay on `127.0.0.1`. See [`deploy/Caddyfile`](deploy/Caddyfile).
+    To terminate TLS in front of the API, add the optional Caddy proxy profile, set `LIBRO_DOMAIN` and `SERVER_FORWARD_HEADERS_STRATEGY=native` in `.env`, and start with `docker compose --profile proxy up --build`. The proxy listens on ports 80 and 443 and is the only public entry point; the app and database stay on `127.0.0.1`. See [`infra/caddy/Caddyfile`](infra/caddy/Caddyfile).
 3. Check `http://localhost:8080/readyz` without a token. Log in through `POST /app/auth/login`, then send the returned token as a Bearer credential on protected API requests. Swagger UI and `/v3/api-docs` are served only when `LIBRO_API_DOCS_ENABLED=true` (set in the local `.env`).
 
 Set `LIBRO_CORS_ALLOWED_ORIGINS` to a comma-separated list of exact UI origins to enable browser access; it defaults to blank and wildcards are rejected. Set `SERVER_FORWARD_HEADERS_STRATEGY=native` only when the app port is reachable exclusively from the trusted OCI load balancer or proxy. The default is `none`.
@@ -757,13 +759,13 @@ If you prefer to run the application directly on the host machine, start only Po
 | `Invalid Number Format` | Non-numeric values were sent to a numeric endpoint | Use numeric values for `replacement cost`, `minReplacementCost`, `maxReplacementCost`, and similar fields |
 | `Method not allowed` | Wrong HTTP verb was used | Match the method listed in the endpoint table |
 | `401 Unauthorized` on a protected API or documentation route | Bearer token is missing, expired, malformed, or invalid | Log in at `POST /app/auth/login` and send the returned token in `Authorization: Bearer <token>` |
-| `403 Forbidden` with a valid token | The token's role does not satisfy the route or service ownership rule | Check the [role policy](guiding-docs/security-roles-and-jwt-guide.md#role-policy) and the target account/loan scope |
+| `403 Forbidden` with a valid token | The token's role does not satisfy the route or service ownership rule | Check the [role policy](docs/reference/security-roles-and-jwt-guide.md#role-policy) and the target account/loan scope |
 | App fails during startup mentioning `LIBRO_JWT_SECRET_BASE64` | The required key is absent, invalid Base64, or decodes to fewer than 32 bytes | Generate a random key with `openssl rand -base64 32` and provide it through the environment |
 | Docker app container fails to start | Docker build, configuration, or health probe failed | Inspect `docker compose logs app` and `docker compose ps`; the image builds the JAR from source |
 | `library-app` keeps restarting with a schema validation error | Inspect `docker compose logs app`; an old development volume may have `books.id` as `INTEGER` while Hibernate expects `BIGINT` | If the volume contains only disposable development data, back up anything needed and intentionally remove it with `docker compose down -v`; otherwise preserve the volume and resolve the schema through a forward migration. Then rebuild with `docker compose up -d --build` |
 | No Flyway messages or `flyway_schema_history` table | The Boot 4 Flyway starter is absent, or the container is running an old image | Keep `spring-boot-starter-flyway` and rebuild the image |
 
-The complete diagnosis, pre-release reset procedure, clean-install behavior, and production-data warning are in [Development Problems Solved](docs/development-problems-solved.md).
+The complete diagnosis, pre-release reset procedure, clean-install behavior, and production-data warning are in [Development Problems Solved](docs/guides/development-problems-solved.md).
 
 ## Quick Start
 
@@ -894,12 +896,12 @@ I worked through problems at several boundaries of the system and fixed them whe
 - **Unbounded filtered results:** added a paginated query that combines text and replacement cost filters while validating sort fields.
 - **Account and credential safety:** normalized institutional IDs and emails, enforced account rules, stored BCrypt hashes, and kept password data out of response DTOs.
 
-The [Development Problems Solved](docs/development-problems-solved.md) write-up gives the symptoms, reasoning, fixes, and verification details for these problems. It also distinguishes unit/MVC evidence from PostgreSQL integration checks that still require Docker.
+The [Development Problems Solved](docs/guides/development-problems-solved.md) write-up gives the symptoms, reasoning, fixes, and verification details for these problems. It also distinguishes unit/MVC evidence from PostgreSQL integration checks that still require Docker.
 
 ## Upcoming Improvements
 
 - Review the generated OpenAPI document and Swagger UI in a browser; verify parameter defaults, request/response schemas, statuses, errors, and examples against the implementation.
-- Deploy behind TLS (the `proxy` profile or an OCI load balancer) and alert on `libro.auth.logins{result="failure"}` and `libro.rate_limit.rejections` before public internet exposure; see the [JWT Authentication Design](guiding-docs/jwt-authentication-design.md) for the abuse-control and revocation policy.
+- Deploy behind TLS (the `proxy` profile or an OCI load balancer) and alert on `libro.auth.logins{result="failure"}` and `libro.rate_limit.rejections` before public internet exposure; see the [JWT Authentication Design](docs/reference/jwt-authentication-design.md) for the abuse-control and revocation policy.
 - Add a V3-to-V4 migration upgrade test against PostgreSQL.
 - Benchmark case-insensitive substring searches as the catalog grows; add database search indexes only if measurements justify them.
 
