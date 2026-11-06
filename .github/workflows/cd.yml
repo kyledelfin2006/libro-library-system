@@ -1,41 +1,44 @@
 # CD for the Libro Library API (GitHub Actions). Extends CI; it does not replace it.
 #
-# After CI passes on main this workflow builds ONE linux/arm64 image on a GitHub-hosted ARM runner, scans that exact
-# image, publishes it to GitHub Container Registry tagged with the commit SHA, and then (when enabled and approved)
-# deploys that image by digest to the OCI VM with scripts/deploy.sh. The server never rebuilds the release.
+#   image   after CI passes on main: build ONE linux/arm64 image, scan it, publish it to GitHub Container Registry
+#           tagged with the commit SHA, and output its immutable digest
+#   deploy  (only when enabled and approved) SSH to the OCI VM and run scripts/deploy.sh with that digest.
+#           The server never rebuilds the release, so what was scanned is exactly what runs.
 #
-# Pull requests that change this workflow or the Dockerfile run the build and scan only (no push, no deploy), so edits
-# to the release path are exercised before they reach main.
+# Pull requests that change this workflow, the Dockerfile, or the scan script run `image` without publishing, so
+# edits to the release path are exercised before they reach main.
 #
-# One-time setup is in docs/devops/runbook.md: the `production` environment, its secrets, and OCI_DEPLOY_ENABLED.
+# One-time setup (the `production` environment, its secrets, OCI_DEPLOY_ENABLED): docs/devops/runbook.md.
 name: CD
 
 on:
-  # Release path: run after the CI workflow finishes for a push to main.
+  # Release path: fires when the CI workflow finishes on main (success is checked in the job's `if`).
   workflow_run:
     workflows: [CI]
     types: [completed]
     branches: [main]
-  # Manual release of the current main (still gated by the `production` environment).
+  # Manual release of the current main; still gated by the `production` environment.
   workflow_dispatch:
-  # Dry run: build and scan without publishing when the release path itself changes.
+  # Dry run of the release path itself.
   pull_request:
     paths:
       - .github/workflows/cd.yml
       - Dockerfile
+      - scripts/ci/trivy-scan.sh
 
-# Default to read-only; the jobs below request anything more they need.
+# Read-only by default; each job asks for exactly what it needs.
 permissions:
   contents: read
 
 jobs:
-  # Build, scan, and publish the ARM64 image. Skipped when CI did not succeed.
   image:
     name: image
+    # workflow_run fires for failed CI runs too, and for CI runs started by events other than a push to main.
+    # Release only after a successful CI run on a push.
     if: >-
       github.event_name != 'workflow_run'
       || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
-    # GitHub-hosted native ARM64 runner (free for public repositories); avoids slow QEMU emulation.
+    # Native ARM64 runner (free for public repositories): no slow QEMU emulation.
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     permissions:
@@ -45,7 +48,8 @@ jobs:
       image: ${{ steps.publish.outputs.image }}
       sha: ${{ steps.revision.outputs.sha }}
     steps:
-      # Resolve the exact commit that CI validated (the workflow_run head, otherwise the triggering commit).
+      # The commit CI validated: workflow_run's head SHA, or the triggering commit for manual and PR runs.
+      # Building `main` instead could pick up a newer, not-yet-validated commit.
       - name: Resolve revision
         id: revision
         run: echo "sha=${{ github.event.workflow_run.head_sha || github.sha }}" >> "$GITHUB_OUTPUT"
@@ -53,41 +57,40 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.revision.outputs.sha }}
-          persist-credentials: false
-      # Build natively for ARM64. The label links the package to this repository on GitHub.
+          persist-credentials: false # The job never pushes to git, so do not leave a token in .git/config.
+      # OCI labels: `source` links the GHCR package to this repository; `revision` records the exact commit.
       - name: Build image
         run: |
           docker build --platform linux/arm64 \
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
             --label "org.opencontainers.image.revision=${{ steps.revision.outputs.sha }}" \
             -t libro-api:release .
-      # Scan the exact image that would be published; fixable HIGH/CRITICAL findings fail the release.
+      # Same policy as CI's security-scan job, applied to the exact image that would be published.
       - name: Scan image
-        run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1 \
-            image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 libro-api:release
-      # Publish by commit SHA and report the immutable digest. Skipped for pull request dry runs.
+        run: scripts/ci/trivy-scan.sh image libro-api:release
       - name: Publish image
         id: publish
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' # PR dry runs stop after the scan.
         env:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHA: ${{ steps.revision.outputs.sha }}
         run: |
-          # GitHub Container Registry requires lowercase repository names.
+          # GHCR requires lowercase names; ${VAR,,} is bash's lowercase expansion.
           repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/libro-api"
+          # --password-stdin keeps the token out of the process list and the shell history.
           echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker tag libro-api:release "$repo:$SHA"
           docker push "$repo:$SHA"
+          # After a push, RepoDigests holds "name@sha256:...": the immutable reference deploy.sh requires.
           digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$repo:$SHA")"
           echo "Published $digest"
           echo "image=$digest" >> "$GITHUB_OUTPUT"
 
-  # Deploy the published digest to the OCI VM. Off until OCI_DEPLOY_ENABLED is set, and held for approval by the
-  # `production` environment's required reviewers.
   deploy:
     name: deploy
     needs: image
+    # Off until the repository variable OCI_DEPLOY_ENABLED is 'true'. The `production` environment's required
+    # reviewers then hold the job until someone approves it.
     if: >-
       github.event_name != 'pull_request'
       && vars.OCI_DEPLOY_ENABLED == 'true'
@@ -95,7 +98,7 @@ jobs:
     timeout-minutes: 20
     environment: production
     permissions:
-      contents: read # No registry or token permissions are needed to deploy.
+      contents: read # Deploying needs no registry or token permissions.
     # Never run two deployments at once, and never cancel one that is already changing the server.
     concurrency:
       group: production-deploy
@@ -110,15 +113,24 @@ jobs:
           SHA: ${{ needs.image.outputs.sha }}
           IMAGE: ${{ needs.image.outputs.image }}
         run: |
-          # Refuse anything that is not a full commit SHA and a digest-pinned GHCR reference.
+          # 1. Validate inputs before they reach a remote shell: a full 40-character commit SHA and a
+          #    digest-pinned GHCR reference. Anything else stops the job.
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "unexpected revision"; exit 1; }
           [[ "$IMAGE" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]] || { echo "unexpected image reference"; exit 1; }
+
+          # 2. Write the deploy key with owner-only permissions (ssh refuses keys that others can read).
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # The host key is pinned from a secret; the connection fails if the server presents a different key.
+          # 3. Pin the server's host key from a secret. StrictHostKeyChecking=yes below makes the connection
+          #    fail if the server presents any other key, which blocks a man-in-the-middle.
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          # Update the checkout on the VM to the validated commit (scripts and Compose files), then deploy the digest.
+
+          # 4. Run a short script on the VM. `bash -s -- "$SHA" "$IMAGE"` reads the script from stdin (the
+          #    heredoc) and passes the two values as $1 and $2. The quoted 'REMOTE' delimiter stops the runner
+          #    expanding anything inside, so the values arrive only as arguments, never as code.
+          #    The VM checkout moves to the validated commit (so scripts and Compose files match the image),
+          #    then deploy.sh backs up, starts the image, smoke-tests it, and rolls back on failure.
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             "$DEPLOY_USER@$HOST" 'bash -s' -- "$SHA" "$IMAGE" <<'REMOTE'
           set -euo pipefail

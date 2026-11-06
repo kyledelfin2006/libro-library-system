@@ -15,6 +15,9 @@
 # scanner binary cannot change underneath us. To upgrade: docker buildx imagetools inspect aquasec/trivy:<version>
 set -euo pipefail
 
+# Git Bash on Windows rewrites arguments like `-w /src` into Windows paths; this turns that off. No effect on Linux.
+export MSYS_NO_PATHCONV=1
+
 TRIVY_IMAGE="aquasec/trivy:0.58.1@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 POLICY=(--severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile /src/.trivyignore)
