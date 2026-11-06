@@ -77,7 +77,7 @@ An overdue loan is not automatically marked lost. The borrower can still return 
 sequenceDiagram
     participant Client
     participant Security as Spring Security
-    participant API as LoanAPI
+    participant API as LoanController
     participant Service as LoanService
     participant Repos as Repositories
     participant DB as PostgreSQL
@@ -127,37 +127,7 @@ The timestamps intentionally have no UTC offset because the contract is Manila `
 
 ## Files and responsibilities
 
-```text
-src/main/java/app/
-├── auth/
-│   ├── SecurityConfig.java                   # HTTP route role gates; stateless JWT Bearer security
-│   ├── config/JwtConfiguration.java          # HS256 signing and strict Bearer-token validation
-│   ├── controller/AuthAPI.java               # Public login endpoint
-│   └── service/AuthService.java              # Credential authentication and token issuance
-├── book/
-│   ├── entity/Book.java                     # Physical copy, including IN_COLLECTION or LOST
-│   ├── entity/BookCopyStatus.java
-│   └── repository/BookRepository.java        # Copy lock shared by checkout, edits, and loss resolution
-├── loan/
-│   ├── config/LoanTimeConfig.java            # Asia/Manila Clock
-│   ├── controller/LoanAPI.java               # HTTP endpoints and OpenAPI descriptions
-│   ├── dto/LoanResponseDTO.java              # Client response, never the entity
-│   ├── entity/Loan.java                      # One checkout event and state transitions
-│   ├── entity/LoanStatus.java                # ACTIVE, RETURNED, LOST
-│   ├── exception/                            # Safe loan conflict/not-found exceptions
-│   ├── mapper/LoanMapper.java                # Entity to response DTO
-│   ├── repository/LoanRepository.java        # History, counts, checks, and loan lock
-│   └── service/LoanService.java              # Rules, transactions, role scope
-├── user/repository/UserRepository.java       # Pessimistic borrower lock
-└── global/exceptions/GlobalExceptionHandler.java
-
-src/main/resources/db/migration/
-├── V1__create_books_table.sql
-├── V2__create_users_table.sql
-├── V3__add_librarian_role.sql
-├── V4__add_loans_and_copy_status.sql
-└── V5__describe_books_and_rename_price_to_replacement_cost.sql
-```
+`loan/controller/LoanController` owns HTTP routes; `loan/service/LoanService` owns state transitions, borrower and staff rules, and transactions; `loan/repository/LoanRepository` owns history and state queries. `loan/mapper/LoanMapper` creates response DTOs inside the service transaction. Checkout also uses `book/repository/BookRepository` and `user/repository/UserRepository` to lock the copy and borrower. `auth/config/SecurityConfig` supplies route gates, and `global/time/LibraryClockConfig` supplies the Asia/Manila clock. The [Engineering Reference](../reference/engineering-reference.md) has the complete repository map.
 
 ### Important persistence constraints
 
@@ -165,16 +135,10 @@ V4 adds `books.copy_status` and `loans`. Loan foreign keys use `ON DELETE RESTRI
 
 ## Build and run locally
 
-Prerequisites are Java 25, Maven 3.x, and Docker Desktop if you want PostgreSQL through Compose. There is no Maven wrapper in this repository.
+Prerequisites are Java 25 and Docker with Compose. The committed Maven Wrapper supplies the pinned Maven version for local builds and tests.
 
 1. Copy `.env.example` to `.env`, set `LIBRO_ADMIN_PASSWORD_HASH` to a BCrypt hash, and set `LIBRO_JWT_SECRET_BASE64` to a random Base64 key generated with `openssl rand -base64 32`. Do not put a plaintext password or real secret in source control.
-2. Build the JAR that the Docker image copies:
-
-   ```powershell
-   mvn clean package
-   ```
-
-3. Start the local application and PostgreSQL:
+2. Start the local application and PostgreSQL; the Dockerfile builds the JAR from source:
 
    ```powershell
    docker compose up --build
@@ -182,16 +146,16 @@ Prerequisites are Java 25, Maven 3.x, and Docker Desktop if you want PostgreSQL 
 
    Flyway applies V1 through V5 at startup. Do not use `docker compose down -v` unless you intentionally want to destroy the database volume.
 
-4. Run the default unit/MVC verification suite:
+3. Run the default unit/MVC verification suite:
 
    ```powershell
-   mvn clean verify
+   ./mvnw clean verify
    ```
 
-To include PostgreSQL integration tests, run `mvn -Pintegration clean verify` with Docker available and `LIBRO_ADMIN_PASSWORD_HASH` set in the shell environment inherited by Maven to a test-only BCrypt hash. Maven does not load the Docker Compose `.env` file; Flyway V2 needs the variable to seed its bootstrap account in the disposable test database. The test profile supplies a deterministic test-only JWT key; production still requires `LIBRO_JWT_SECRET_BASE64`.
+To include PostgreSQL integration tests, run `./mvnw -Pintegration clean verify` with Docker available and `LIBRO_ADMIN_PASSWORD_HASH` set in the shell environment inherited by Maven to a test-only BCrypt hash. Maven does not load the Docker Compose `.env` file; Flyway V2 needs the variable to seed its bootstrap account in the disposable test database. The test profile supplies a deterministic test-only JWT key; production still requires `LIBRO_JWT_SECRET_BASE64`.
 
-For a loan smoke test, have a library assistant or librarian create a book copy, log in as a student or faculty borrower through `POST /app/auth/login`, then send the returned Bearer token with `POST /app/loans/{bookId}`, `GET /app/loans/me`, and `PUT /app/loans/{loanId}/return`. Swagger UI is at `http://localhost:8080/swagger-ui.html`, but it currently inherits the authenticated default route policy; browser access has not been verified. API requests use the Authorization header and do not require a CSRF token.
+For a loan smoke test, have a library assistant or librarian create a book copy, log in as a student or faculty borrower through `POST /app/auth/login`, then send the returned Bearer token with `POST /app/loans/{bookId}`, `GET /app/loans/me`, and `PUT /app/loans/{loanId}/return`. Swagger UI is available at `http://localhost:8080/swagger-ui.html` only when `LIBRO_API_DOCS_ENABLED=true`; browser review is still pending. API requests use the Authorization header and do not require a CSRF token.
 
 ## Before extending the feature
 
-`LoanServiceTest` covers the main checkout, return, lost-resolution, role-scope, ownership, and history rules. `LoanSecurityMvcTest` checks route roles, principal-derived identity, and header-only stateless requests. `BookPersistenceIT` covers fresh V1-to-V5 schema validation, the V4-to-V5 value-preserving upgrade, and the concurrent catalog-edit/lost-resolution race; `LoanPersistenceIT` covers return persistence, the one-active-loan index, and deletion restrictions. A concurrent borrower-limit checkout test and the V3-to-V4 upgrade test remain open. Do not edit an applied migration; add a new forward-only migration. Keep the README relationship diagram and this guide synchronized with the entity and database model.
+`LoanServiceTest` covers the main checkout, return, lost-resolution, role-scope, ownership, and history rules. `LoanSecurityMvcTest` checks route roles, principal-derived identity, and header-only stateless requests. `BookPersistenceIT` covers fresh V1-to-V5 schema validation, the V4-to-V5 value-preserving upgrade, and the concurrent catalog-edit/lost-resolution race; `LoanPersistenceIT` covers return persistence, the one-active-loan index, and deletion restrictions. `LoanConcurrencyIT` covers concurrent checkouts; a concurrent borrower-limit test and the V3-to-V4 upgrade test remain open. Do not edit an applied migration; add a new forward-only migration. Keep the README architecture summary and this guide synchronized with the entity and database model.

@@ -17,6 +17,9 @@
 
 - [Project Overview](#project-overview)
   - [Features](#features)
+  - [Architecture](#architecture)
+  - [Notable code changes](#notable-code-changes)
+  - [Engineering problems solved](#engineering-problems-solved)
 - [Demo Accounts](#demo-accounts)
 - [Quick Start](#quick-start)
   - [Prerequisites](#prerequisites)
@@ -62,6 +65,41 @@ Libro is a Spring Boot REST API for the library of Aklan State University – Co
 | Data | PostgreSQL 18, Flyway 13.3.0, Hibernate with schema validation |
 | Build and test | Maven, JUnit 5, Mockito, Testcontainers, JaCoCo |
 | Delivery | Docker, Docker Compose, Caddy, GitHub Actions, Trivy |
+
+### Architecture
+
+```mermaid
+flowchart LR
+    Client[API client] --> Security[Spring Security<br/>JWT Bearer and role gates]
+    Security --> Controller[Feature controllers<br/>HTTP and DTO validation]
+    Controller --> Service[Feature services<br/>rules, ownership, transactions, mapping]
+    Service --> Repository[Spring Data JPA repositories]
+    Repository --> Database[(PostgreSQL 18)]
+    Flyway[Flyway migrations] --> Database
+```
+
+The single-module codebase groups `auth`, `book`, `loan`, and `user` by feature, then by layer. Controllers accept and return DTOs; services own business rules, transactions, and entity-to-DTO mapping; repositories own persistence. Shared responses, errors, request IDs, time handling, and OpenAPI configuration live in `global`. Flyway owns the schema, and Hibernate validates it at startup. [Architecture Overview](docs/architecture.md) shows the request and data flows; [ADR 0002](docs/adr/0002-layered-feature-packages.md) records the package decision.
+
+### Notable code changes
+
+| Change | Result |
+| --- | --- |
+| Standardized feature packages and moved DTO mapping into services | Controllers stay focused on HTTP, and JPA entities do not cross the API boundary. |
+| Moved account ownership and target-role rules into `UserAccessPolicy` | One policy handles student, faculty, assistant, and librarian account operations. |
+| Introduced shared not-found and invalid-request exception types | Expected client errors have consistent status codes; unexpected faults get a generic 500 response. |
+| Layered the test profile over runtime configuration | Tests exercise the real application defaults with only test-specific overrides. |
+
+### Engineering problems solved
+
+| Problem | Project change |
+| --- | --- |
+| Entity types and database columns disagreed at startup | Made Flyway the sole schema authority, aligned migrations with JPA, and kept Hibernate schema validation enabled. |
+| Container startup could race PostgreSQL readiness | Added a database health check and made the app wait for a healthy database. |
+| Concurrent checkout could assign one copy twice | Added row locking, a database unique index for active loans, and PostgreSQL concurrency tests. |
+| HTTP-only or mocked tests could miss real persistence errors | Split fast unit/MVC tests from Testcontainers integration tests that exercise migrations, JPA, constraints, and loan races. |
+| Scattered account rules and error handling were hard to audit | Centralized target-role/ownership checks in `UserAccessPolicy` and mapped client failures through shared exception types. |
+
+The [Development Problems Solved](docs/guides/development-problems-solved.md) guide traces more issues from symptom to fix and verification. The [Engineering Reference](docs/reference/engineering-reference.md) documents current code contracts and test boundaries.
 
 ## Demo Accounts
 
@@ -241,7 +279,7 @@ On a provisioned VM, use `scripts/deploy.sh` for a manual release or [the runboo
 
 ## Testing
 
-Run `./mvnw verify` for unit/MVC tests and the 80% line-coverage gate. Run `./mvnw -Pintegration verify` for the PostgreSQL suite; it needs Docker. On Windows, use `mvnw.cmd`. The [Engineering Reference](docs/reference/engineering-reference.md#testing-strategy) explains test scope and where to add coverage.
+Run `./mvnw verify` for unit/MVC tests and the 80% line-coverage gate. Run `./mvnw -Pintegration -DskipUTs -Djacoco.haltOnFailure=false verify` for the PostgreSQL suite (unit tests run once, in the first command); it needs Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH` in the shell environment, because Maven does not load Compose's `.env`. On Windows, use `mvnw.cmd`. The [Engineering Reference](docs/reference/engineering-reference.md#testing-strategy) explains test scope and where to add coverage.
 
 ## Documentation
 
@@ -264,7 +302,7 @@ Run `./mvnw verify` for unit/MVC tests and the 80% line-coverage gate. Run `./mv
 src/             Spring Boot application (controllers, services, repositories, Flyway migrations) and tests
 infra/           Production Compose override and the Caddy reverse-proxy configuration
 scripts/         Deploy, rollback, smoke-test, backup, restore, and demo-seed scripts
-proposals/       Design proposals (0001: pre-OCI deployment improvements)
+docs/adr/        Architecture decision records (0001: pre-OCI deployment, 0002: layered packages)
 docs/
   architecture.md  Design, request flows, API inventory, data model, troubleshooting, tests
   devops/          CI/CD, environments, secrets, rollback, monitoring, operations runbook
@@ -290,7 +328,7 @@ Read the [Agent and Contributor Guide](AGENTS.md) before changing code or docume
 | Container image and Compose stack | Implemented, with health checks |
 | Deploy, rollback, backup, and smoke-test scripts; runbook | Implemented and rehearsed locally |
 | CD workflow (ARM64 build, scan, publish, gated deploy) | Implemented; deploy job off until the VM exists |
-| OCI VM | Not provisioned; see the [proposal](proposals/0001-pre-oci-deployment-improvements.md) |
+| OCI VM | Not provisioned; see [ADR 0001](docs/adr/0001-pre-oci-deployment-improvements.md) |
 | Open items | V3-to-V4 migration upgrade test on PostgreSQL; browser review of the OpenAPI/Swagger output; TLS with a real domain, login-failure and rate-limit alerts, and an independent security review before public exposure |
 
 The [Development Roadmap](docs/reference/ROADMAP.md) tracks the detail.

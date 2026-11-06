@@ -76,6 +76,17 @@ Before changing a migration, establish whether that version has been applied to 
 - [ ] Deploy behind TLS with a real domain, alert on the login-failure and rate-limit metrics, and add gateway throttling before scaling beyond one instance.
 - [ ] Complete an independent security review before public internet exposure.
 
+## Structure and delivery cleanup
+
+- [x] Apply the same sub-packages in every feature, mirror them in tests, and record the layering choice in [ADR 0002](../adr/0002-layered-feature-packages.md).
+- [x] Map entities to DTOs inside services only; default services to read-only transactions.
+- [x] Replace per-feature exception handlers with `ResourceNotFoundException` and `InvalidRequestException`; stop treating library `IllegalArgumentException`s as client errors.
+- [x] Move account owner/role checks into `UserAccessPolicy` with a matrix test.
+- [x] Layer a `test` profile over the real configuration instead of shadowing it.
+- [x] Keep configuration defaults in one place; simplify the Compose environment and `.env.example`.
+- [x] Layered Docker image with a single health check; one shared Trivy script for CI and CD; CI jobs `unit-test`, `integration-test`, `security-scan`, with unit tests running once.
+- [ ] Update the branch-protection required checks to the new job names (a GitHub setting, not a file).
+
 ## Source documents
 
 - [Security Roles and JWT Guide](security-roles-and-jwt-guide.md): live role/loan policy and JWT summary.

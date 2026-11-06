@@ -1,8 +1,9 @@
 package app.loan.service;
 
+import app.global.exception.InvalidRequestException;
 import app.book.entity.Book;
 import app.book.entity.BookCopyStatus;
-import app.book.exceptions.BookNotFoundException;
+import app.book.exception.BookNotFoundException;
 import app.book.repository.BookRepository;
 import app.loan.dto.LoanResponseDTO;
 import app.loan.entity.Loan;
@@ -248,7 +249,7 @@ public class LoanService {
     private Pageable normalizePageable(Pageable pageable) {
         // Reject fields that do not map to safe and supported Loan properties.
         if (pageable.getSort().stream().anyMatch(order -> !SORTABLE_FIELDS.contains(order.getProperty()))) {
-            throw new IllegalArgumentException("Unsupported loan sort field");
+            throw new InvalidRequestException("Unsupported loan sort field");
         }
 
         // Use the documented order when the client does not request sorting.

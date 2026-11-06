@@ -1,10 +1,10 @@
 # Libro Development Problems Solved
 
-## Why I built Libro
+## Scope
 
-Libro is a library management system prototype. I built it as a practical backend system for managing a book collection while exploring the design decisions that matter in a real institutional application: data integrity, validation, persistence, error handling, container startup, and maintainable API boundaries. The ASU-CCS and existing MIS assumptions behind the user domain are documented separately in [Institutional Context](institutional-context.md).
+Libro is a library management API for managing a physical book collection, user accounts, and loans. This guide records the engineering problems encountered in its data integrity, validation, persistence, error handling, container startup, and API boundaries. The ASU-CCS and existing MIS assumptions behind the user domain are documented in [Institutional Context](institutional-context.md).
 
-This document is my development reflection. Each section records what went wrong or became unsafe, the effect it had, the reasoning behind the fix, and how I verified the result. I kept the narrative in first person because the important point is not only that the code changed; it is that I was able to trace symptoms to causes, choose a boundary-appropriate fix, and validate the behavior.
+Each section records the failure, its effect, the fix, and the verification available at that stage. The current implementation and tests remain authoritative where this history describes an earlier state.
 
 ## 1. The application could not start because the database schema and entity model disagreed
 
@@ -151,7 +151,7 @@ I then added a transactional partial-update path for user profile fields. It pre
 
 ### Verification
 
-`UserServiceTest` covers update normalization, validation, unchanged-email behavior, duplicate-email rejection, and dirty-checking expectations. At the time of this milestone, the controller and authentication integration remained outside scope. `UserAPI` and its MVC tests were added afterward, and the earlier HTTP Basic flow has since been replaced with local JWT login and Bearer validation. The [Role and JWT Guide](../reference/security-roles-and-jwt-guide.md) and [JWT Authentication Design](../reference/jwt-authentication-design.md) are the current sources for live authentication and role behavior; this section remains a record of the earlier user-domain work.
+`UserServiceTest` covers update normalization, validation, unchanged-email behavior, duplicate-email rejection, and dirty-checking expectations. At the time of this milestone, the controller and authentication integration remained outside scope. `UserController` and its MVC tests were added afterward, and the earlier HTTP Basic flow has since been replaced with local JWT login and Bearer validation. The [Role and JWT Guide](../reference/security-roles-and-jwt-guide.md) and [JWT Authentication Design](../reference/jwt-authentication-design.md) are the current sources for live authentication and role behavior; this section remains a record of the earlier user-domain work.
 
 ## 8. The test feedback loop was too easy to misunderstand
 
@@ -169,7 +169,7 @@ I kept the suite focused and explicit: shared the stateless Jakarta Validator wh
 
 ### Verification
 
-At that historical milestone, the Docker-free suite passed. Security integration and a successful Docker-backed PostgreSQL run were still open verification areas at that time; the later PostgreSQL run is recorded in section 9. The repository README and contributor guide describe coverage by responsibility; use Surefire reports from a current run for its test count. `mvn test` is the normal fast check; `mvn clean verify` additionally produces the JaCoCo report.
+At that historical milestone, the Docker-free suite passed. Security integration and a successful Docker-backed PostgreSQL run were still open verification areas at that time; the later PostgreSQL run is recorded in section 9. The README and engineering reference describe coverage by responsibility; use Surefire and Failsafe reports from a current run for results. `./mvnw test` is the fast check; `./mvnw clean verify` also produces the JaCoCo report.
 
 ## 9. Persistence behavior needed a real PostgreSQL test boundary
 
@@ -183,23 +183,23 @@ I added an opt-in Maven `integration` profile with Testcontainers 2.x and Spring
 
 ### Verification and remaining limit
 
-On 2026-09-30, the Docker-free `mvn clean test -q` suite passed. The attempted `mvn -Pintegration verify -q` reached Failsafe but Testcontainers could not find a valid Docker environment, so those persistence assertions were unverified at that time. On 2026-10-19, the PostgreSQL integration profile later passed, covering the fresh V1-to-V4 schema and the book, loan, and user persistence checks. The concurrent borrower-limit checkout test and upgrade from a database already at V3 remain open; see the current [roadmap](../reference/ROADMAP.md).
+The PostgreSQL integration profile subsequently passed with Docker, covering fresh V1-to-V5 migrations, the V4-to-V5 upgrade, book/loan/user persistence, and concurrent checkout of the same copy. The concurrent borrower-limit checkout test and upgrade from a database already at V3 remain open; see the current [roadmap](../reference/ROADMAP.md).
 
 ## 10. User routes were missing HTTP-contract coverage
 
 ### What was missing
 
-`UserAPI` exposed account creation, pagination, lookup, profile updates, password changes, and deletion, but only `UserService` had focused tests. That left Spring MVC behavior—JSON binding, Jakarta validation, pagination defaults, response serialization, and global error conversion—without a test boundary. The generated OpenAPI document also had no regression check against the live controller methods and DTO schemas.
+`UserController` exposed account creation, pagination, lookup, profile updates, password changes, and deletion, but only `UserService` had focused tests. That left Spring MVC behavior—JSON binding, Jakarta validation, pagination defaults, response serialization, and global error conversion—without a test boundary. The generated OpenAPI document also had no regression check against the live controller methods and DTO schemas.
 
 ### How I addressed it
 
-I added `UserApiMvcTest` under `src/test/java/unit/user`. It follows the existing book MVC-slice pattern: load `UserAPI` and the real `GlobalExceptionHandler`, mock `UserService`, and send HTTP requests through `MockMvc`. Tests cover all user routes, successful response shapes, invalid request bodies, missing users, database-conflict responses, pagination binding, and the exclusion of password data from public responses.
+I added `UserControllerMvcTest` under `src/test/java/app/user/controller`. It follows the existing book MVC-slice pattern: load `UserController` and the real `GlobalExceptionHandler`, mock `UserService`, and send HTTP requests through `MockMvc`. Tests cover all user routes, successful response shapes, invalid request bodies, missing users, database-conflict responses, pagination binding, and the exclusion of password data from public responses.
 
 I added `OpenApiMvcTest` to the Docker-free suite. It generates `/v3/api-docs` through Springdoc and checks representative book/user routes, expected user response codes, write-only password inputs, and absence of password fields in public response schemas. The focused assertions avoid coupling the API contract to a PostgreSQL container or exact documentation prose.
 
 ### Verification and remaining limit
 
-`mvn -Dtest=UserApiMvcTest test` passed the user MVC tests. On 2026-09-30, `mvn clean test -q` passed with the generated OpenAPI assertion included. Failsafe could not start PostgreSQL because Docker was unavailable, and manual Swagger UI review remains pending in `docs/reference/ROADMAP.md`.
+`UserControllerMvcTest` and `OpenApiMvcTest` run in the Docker-free suite. PostgreSQL persistence has separate integration coverage. Manual Swagger UI review remains pending in the [roadmap](../reference/ROADMAP.md).
 
 ## 11. Filtered book results could grow without a page boundary
 
@@ -209,9 +209,9 @@ At the time of this change, the existing `/search`, `/budget`, `/sorted`, and `/
 
 ### How I addressed it
 
-I added `GET /app/books/query` as one paginated path. It accepts optional title, author, and genre substrings plus optional inclusive minimum and maximum replacement costs. Supplied filters combine with AND; omitting all filters returns the collection as a page. The controller binds typed parameters and `Pageable`, then maps the returned page from entities to public `BookResponseDTO` values without losing the page metadata.
+I added `GET /app/books/query` as one paginated path. It accepts optional title, author, and genre substrings plus optional inclusive minimum and maximum replacement costs. Supplied filters combine with AND; omitting all filters returns the collection as a page. The controller binds typed parameters and `Pageable`; the service maps the page to public `BookResponseDTO` values without losing page metadata.
 
-`BookService` checks that the replacement-cost range is ordered and that every sort property is in the existing allowlist. It appends `id` when needed so records sharing a title or replacement cost have a stable order across pages. The read runs in a read-only service transaction. `BookRepository` applies the predicates and pagination in PostgreSQL; it does not load every match for the service to slice in memory. The old list routes retain their existing response shapes for clients that use them.
+`BookService` checks that the replacement-cost range is ordered and that every sort property is in the existing allowlist. It appends `id` when needed so records sharing a title or replacement cost have a stable order across pages. The read runs in a read-only service transaction. `BookRepository` applies the predicates and pagination in PostgreSQL; it does not load every match for the service to slice in memory. All book list routes now return pages.
 
 ### Effect and verification
 
@@ -219,21 +219,7 @@ Before this change, a filtered request returned an unbounded list. Now a client 
 
 On 2026-10-03, the Docker-free Maven test suite passed. I also started the application against a newly created, isolated PostgreSQL 18 database and exercised the HTTP route through Flyway, Spring MVC, the service, Hibernate, and PostgreSQL. The checks covered combined filters, inclusive bounds, one-sided price filtering, page totals and ordering, the page-size cap, and HTTP 400 responses for invalid sort and price range. The temporary database was removed afterward. At that point, the local PostgreSQL smoke check did not replace the still-unrun Testcontainers profile; that profile passed later on 2026-10-19, as recorded in section 9.
 
-## 12. Test totals in prose became stale
-
-### What was wrong
-
-The portfolio reflection carried a hard-coded test total, and the README carried exact build timings from earlier runs. Those numbers describe a past state but can look like current evidence after new tests are added. Repeating counts across the README, contributor guide, and reflection would require every future test change to update several documents.
-
-### How I addressed it
-
-I removed the historical total and timing examples. The README now explains which checks run in the default Maven suite and which require the opt-in PostgreSQL profile. The engineering reference describes each test class's responsibility and points to the reports generated by the current run. Surefire reports under `target/surefire-reports/` provide default-suite results; Failsafe reports under `target/failsafe-reports/` provide integration-profile results. At the time of this documentation change, the roadmap retained the Docker-backed run and manual Swagger review as separate tasks; the current verification queue is in `docs/reference/ROADMAP.md`.
-
-### Effect and verification
-
-Readers can see what a passing unit or MVC test establishes without mistaking it for proof of Flyway, JPA, PostgreSQL constraints, repository-backed authentication against PostgreSQL, or a manual Swagger UI review. Test totals come from the run being reported, not from prose that may have been written weeks earlier. I searched the README, contributor guide, docs, and TODO for exact totals and per-class counts after editing; no document now presents a stored test total as current. This was a documentation change, so I did not change production code or add tests.
-
-## 13. Repeated OpenAPI error schemas obscured endpoint documentation
+## 12. Repeated OpenAPI error schemas obscured endpoint documentation
 
 ### What was wrong
 
@@ -241,7 +227,7 @@ Book and user controller methods repeated the same nested `@Content` and `@Schem
 
 ### How I addressed it
 
-I added the narrowly scoped `@ErrorApiResponse` composed annotation under `app.global.config`. It supplies only the shared `ErrorResponse` schema; each controller method still declares its own HTTP status and human-readable reason. Because the annotation is repeatable, methods with multiple error statuses can list them directly beside their operation without an `@ApiResponses` container. Normal success responses remain documented with Springdoc's standard `@ApiResponse` annotation.
+I added the narrowly scoped `@ErrorApiResponse` composed annotation under `app.global.openapi`. It supplies only the shared `ErrorResponse` schema; each controller method still declares its own HTTP status and human-readable reason. Because the annotation is repeatable, methods with multiple error statuses can list them directly beside their operation without an `@ApiResponses` container. Normal success responses remain documented with Springdoc's standard `@ApiResponse` annotation.
 
 I extended `OpenApiMvcTest` to assert that the paginated query's 400 response retains its endpoint-specific description and references the shared `ErrorResponse` schema. The API documentation guideline and contributor instructions now describe the reusable annotation and its intended boundary.
 
@@ -249,17 +235,6 @@ I extended `OpenApiMvcTest` to assert that the paginated query's 400 response re
 
 Before, controllers mixed endpoint meaning with repeated schema wiring. After, endpoint-specific HTTP behavior remains at the controller while the repeated payload detail has one source of truth. This is documentation metadata only; request handling and runtime error bodies did not change. On 2026-10-03, `mvn -Dtest=OpenApiMvcTest test` passed, including generation of `/v3/api-docs` and assertions for the response description and schema reference.
 
-## What these problems taught me
+## Engineering approach
 
-The recurring pattern was that the visible failure was usually one layer away from the real cause. A restart loop was a schema contract problem. A validation failure was a difference between full replacement and partial update. A fragile aggregate was a repository type-contract problem. A user model was an integration-boundary problem, not only an entity-design problem.
-
-My approach became consistent:
-
-1. Reproduce the symptom and identify which layer owns the failing contract.
-2. Read the entity, DTO, service, repository, migration, configuration, and tests together.
-3. Fix the ownership boundary instead of adding a local workaround.
-4. Preserve public behavior where it was already useful and intentional.
-5. Add a test or operational check that would have caught the original failure.
-6. Document the remaining limits honestly so a prototype is not presented as production-ready infrastructure.
-
-That process is the most reusable result of this project. The code solves concrete problems, but the development record shows how I identified them, assessed their effect, and turned each one into a more reliable system.
+These fixes follow the same process: reproduce the failure, identify the layer that owns the contract, correct it there, and add a test or operational check that would catch the regression. The current [roadmap](../reference/ROADMAP.md) records remaining verification and deployment work.
