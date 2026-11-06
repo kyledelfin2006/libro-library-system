@@ -4,7 +4,7 @@ Status: accepted (Stages 0–2 implemented; Stage 3 open)
 
 ## Context
 
-Libro's API, schema, tests, and CI are in place, but nothing is deployed. The target is one OCI Always Free Ampere A1 VM running Docker Compose with Caddy and PostgreSQL ([CI/CD and DevOps](../docs/devops/ci-cd.md)). A review of the pipeline, Dockerfile, and Compose stack found no deploy path, no backups, no smoke test, and several settings that were safe locally but unsafe on a public host.
+Libro's API, schema, tests, and CI are in place, but nothing is deployed. The target is one OCI Always Free Ampere A1 VM running Docker Compose with Caddy and PostgreSQL ([CI/CD and DevOps](../devops/ci-cd.md)). A review of the pipeline, Dockerfile, and Compose stack found no deploy path, no backups, no smoke test, and several settings that were safe locally but unsafe on a public host.
 
 ## Goals
 

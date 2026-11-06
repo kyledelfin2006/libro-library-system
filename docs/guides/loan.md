@@ -77,7 +77,7 @@ An overdue loan is not automatically marked lost. The borrower can still return 
 sequenceDiagram
     participant Client
     participant Security as Spring Security
-    participant API as LoanAPI
+    participant API as LoanController
     participant Service as LoanService
     participant Repos as Repositories
     participant DB as PostgreSQL
@@ -132,15 +132,15 @@ src/main/java/app/
 ├── auth/
 │   ├── SecurityConfig.java                   # HTTP route role gates; stateless JWT Bearer security
 │   ├── config/JwtConfiguration.java          # HS256 signing and strict Bearer-token validation
-│   ├── controller/AuthAPI.java               # Public login endpoint
+│   ├── controller/AuthController.java               # Public login endpoint
 │   └── service/AuthService.java              # Credential authentication and token issuance
 ├── book/
 │   ├── entity/Book.java                     # Physical copy, including IN_COLLECTION or LOST
 │   ├── entity/BookCopyStatus.java
 │   └── repository/BookRepository.java        # Copy lock shared by checkout, edits, and loss resolution
 ├── loan/
-│   ├── config/LoanTimeConfig.java            # Asia/Manila Clock
-│   ├── controller/LoanAPI.java               # HTTP endpoints and OpenAPI descriptions
+│   ├── config/LibraryClockConfig.java            # Asia/Manila Clock
+│   ├── controller/LoanController.java               # HTTP endpoints and OpenAPI descriptions
 │   ├── dto/LoanResponseDTO.java              # Client response, never the entity
 │   ├── entity/Loan.java                      # One checkout event and state transitions
 │   ├── entity/LoanStatus.java                # ACTIVE, RETURNED, LOST
@@ -149,7 +149,7 @@ src/main/java/app/
 │   ├── repository/LoanRepository.java        # History, counts, checks, and loan lock
 │   └── service/LoanService.java              # Rules, transactions, role scope
 ├── user/repository/UserRepository.java       # Pessimistic borrower lock
-└── global/exceptions/GlobalExceptionHandler.java
+└── global/exception/GlobalExceptionHandler.java
 
 src/main/resources/db/migration/
 ├── V1__create_books_table.sql

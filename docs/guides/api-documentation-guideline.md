@@ -44,7 +44,7 @@ Do not copy the same prose into controller comments, annotations, README tables,
 - Every successful response uses the `ApiResponse<T>` envelope (`success`, `message`, `data`, `timestamp`); pages are returned as `ApiResponse<Page<T>>`. Errors use `ErrorResponse`. Document the `data` type for each operation.
 - Prefer inferred schemas and short response descriptions. Add explicit examples only where they make a non-obvious shape or workflow materially easier to use.
 - Avoid repeating large `@ApiResponses` blocks on every method. Start with concise endpoint-specific response annotations. If the same response definition is genuinely repeated across several operations, introduce one small reusable composed annotation or shared OpenAPI component and use it consistently. Do not build a custom annotation framework or globalizer preemptively.
-- For expected error responses that use the shared `ErrorResponse` body, use `@ErrorApiResponse` from `app.global.config`. Keep its status code and endpoint-specific description at the controller method; the composed annotation supplies only the shared schema metadata.
+- For expected error responses that use the shared `ErrorResponse` body, use `@ErrorApiResponse` from `app.global.openapi`. Keep its status code and endpoint-specific description at the controller method; the composed annotation supplies only the shared schema metadata.
 
 ## Parameters and examples
 

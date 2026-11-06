@@ -99,7 +99,7 @@ The restore asks you to type the database name, takes a safety backup, replaces 
 3. **Pin the host key.** Run `ssh-keyscan -t ed25519 <host>` and compare the fingerprint with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` run on the VM before trusting it.
 4. **Create the environment.** In the repository settings add a `production` environment with **required reviewers** (yourself), and add the environment secrets `OCI_HOST`, `OCI_USER`, `OCI_SSH_KEY` (the private key), and `OCI_SSH_KNOWN_HOSTS` (the verified line from step 3). Delete the local key files afterwards.
 5. **Turn it on.** Add the repository variable `OCI_DEPLOY_ENABLED` with the value `true`. Each successful `main` build then waits for your approval before deploying.
-6. **Protect `main`.** Add a branch ruleset that requires the `test`, `integration`, and `security` checks, so only validated commits can be released.
+6. **Protect `main`.** Add a branch ruleset that requires the `unit-test`, `integration-test`, and `security-scan` checks, so only validated commits can be released.
 
 Keep manual approval until you have rehearsed a restore and a rollback on the VM. To pause deployments, set `OCI_DEPLOY_ENABLED` to anything other than `true`; image publishing continues.
 

@@ -13,10 +13,10 @@ Docker is the preferred way to run the project because it brings up both Postgre
     POSTGRES_DB=librarydb
     POSTGRES_USER=admin
     POSTGRES_PASSWORD=change_me
-    LIBRO_ADMIN_PASSWORD_HASH=<BCrypt hash for a password you choose>
+    LIBRO_ADMIN_PASSWORD_HASH='<BCrypt hash for a password you choose>'
     LIBRO_JWT_SECRET_BASE64=<output of openssl rand -base64 32>
     ```
-    Replace both placeholders before starting the app. Flyway V2 seeds the historical `ADMINISTRATOR` account (library-assistant role) as university ID `0000-0001`; no librarian is seeded by migration. For the first librarian, optionally set all five `LIBRO_BOOTSTRAP_LIBRARIAN_*` values in `.env.example`, including a BCrypt hash, before startup. The application creates that account once and ignores the bootstrap values after any librarian exists. Keep `.env` private.
+    Replace both placeholders before starting the app; Compose refuses to start without `LIBRO_JWT_SECRET_BASE64`. Optional settings in the template are commented out and show their defaults; uncomment a line only to change it (an uncommented but empty value overrides the default with an empty string). Flyway V2 seeds the historical `ADMINISTRATOR` account (library-assistant role) as university ID `0000-0001`; no librarian is seeded by migration. For the first librarian, optionally uncomment and set all five `LIBRO_BOOTSTRAP_LIBRARIAN_*` values in `.env`, including a BCrypt hash, before startup. The application creates that account once and ignores the bootstrap values after any librarian exists. Keep `.env` private.
 2. Start the full stack; Docker builds the JAR from a clean checkout:
     ```bash
     docker compose up --build

@@ -151,7 +151,7 @@ I then added a transactional partial-update path for user profile fields. It pre
 
 ### Verification
 
-`UserServiceTest` covers update normalization, validation, unchanged-email behavior, duplicate-email rejection, and dirty-checking expectations. At the time of this milestone, the controller and authentication integration remained outside scope. `UserAPI` and its MVC tests were added afterward, and the earlier HTTP Basic flow has since been replaced with local JWT login and Bearer validation. The [Role and JWT Guide](../reference/security-roles-and-jwt-guide.md) and [JWT Authentication Design](../reference/jwt-authentication-design.md) are the current sources for live authentication and role behavior; this section remains a record of the earlier user-domain work.
+`UserServiceTest` covers update normalization, validation, unchanged-email behavior, duplicate-email rejection, and dirty-checking expectations. At the time of this milestone, the controller and authentication integration remained outside scope. `UserController` and its MVC tests were added afterward, and the earlier HTTP Basic flow has since been replaced with local JWT login and Bearer validation. The [Role and JWT Guide](../reference/security-roles-and-jwt-guide.md) and [JWT Authentication Design](../reference/jwt-authentication-design.md) are the current sources for live authentication and role behavior; this section remains a record of the earlier user-domain work.
 
 ## 8. The test feedback loop was too easy to misunderstand
 
@@ -189,17 +189,17 @@ On 2026-09-30, the Docker-free `mvn clean test -q` suite passed. The attempted `
 
 ### What was missing
 
-`UserAPI` exposed account creation, pagination, lookup, profile updates, password changes, and deletion, but only `UserService` had focused tests. That left Spring MVC behavior—JSON binding, Jakarta validation, pagination defaults, response serialization, and global error conversion—without a test boundary. The generated OpenAPI document also had no regression check against the live controller methods and DTO schemas.
+`UserController` exposed account creation, pagination, lookup, profile updates, password changes, and deletion, but only `UserService` had focused tests. That left Spring MVC behavior—JSON binding, Jakarta validation, pagination defaults, response serialization, and global error conversion—without a test boundary. The generated OpenAPI document also had no regression check against the live controller methods and DTO schemas.
 
 ### How I addressed it
 
-I added `UserApiMvcTest` under `src/test/java/unit/user`. It follows the existing book MVC-slice pattern: load `UserAPI` and the real `GlobalExceptionHandler`, mock `UserService`, and send HTTP requests through `MockMvc`. Tests cover all user routes, successful response shapes, invalid request bodies, missing users, database-conflict responses, pagination binding, and the exclusion of password data from public responses.
+I added `UserControllerMvcTest` under `src/test/java/app/user/controller`. It follows the existing book MVC-slice pattern: load `UserController` and the real `GlobalExceptionHandler`, mock `UserService`, and send HTTP requests through `MockMvc`. Tests cover all user routes, successful response shapes, invalid request bodies, missing users, database-conflict responses, pagination binding, and the exclusion of password data from public responses.
 
 I added `OpenApiMvcTest` to the Docker-free suite. It generates `/v3/api-docs` through Springdoc and checks representative book/user routes, expected user response codes, write-only password inputs, and absence of password fields in public response schemas. The focused assertions avoid coupling the API contract to a PostgreSQL container or exact documentation prose.
 
 ### Verification and remaining limit
 
-`mvn -Dtest=UserApiMvcTest test` passed the user MVC tests. On 2026-09-30, `mvn clean test -q` passed with the generated OpenAPI assertion included. Failsafe could not start PostgreSQL because Docker was unavailable, and manual Swagger UI review remains pending in `docs/reference/ROADMAP.md`.
+`mvn -Dtest=UserControllerMvcTest test` passed the user MVC tests. On 2026-09-30, `mvn clean test -q` passed with the generated OpenAPI assertion included. Failsafe could not start PostgreSQL because Docker was unavailable, and manual Swagger UI review remains pending in `docs/reference/ROADMAP.md`.
 
 ## 11. Filtered book results could grow without a page boundary
 
@@ -241,7 +241,7 @@ Book and user controller methods repeated the same nested `@Content` and `@Schem
 
 ### How I addressed it
 
-I added the narrowly scoped `@ErrorApiResponse` composed annotation under `app.global.config`. It supplies only the shared `ErrorResponse` schema; each controller method still declares its own HTTP status and human-readable reason. Because the annotation is repeatable, methods with multiple error statuses can list them directly beside their operation without an `@ApiResponses` container. Normal success responses remain documented with Springdoc's standard `@ApiResponse` annotation.
+I added the narrowly scoped `@ErrorApiResponse` composed annotation under `app.global.openapi`. It supplies only the shared `ErrorResponse` schema; each controller method still declares its own HTTP status and human-readable reason. Because the annotation is repeatable, methods with multiple error statuses can list them directly beside their operation without an `@ApiResponses` container. Normal success responses remain documented with Springdoc's standard `@ApiResponse` annotation.
 
 I extended `OpenApiMvcTest` to assert that the paginated query's 400 response retains its endpoint-specific description and references the shared `ErrorResponse` schema. The API documentation guideline and contributor instructions now describe the reusable annotation and its intended boundary.
 
