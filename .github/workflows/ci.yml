@@ -1,42 +1,48 @@
 # CI for the Libro Library API (GitHub Actions).
-# Runs the fast suite and the Docker-backed PostgreSQL suite as separate checks.
+#
+# Three independent jobs run in parallel; any failure fails the workflow:
+#   unit-test         unit + MVC tests and the 80% JaCoCo line-coverage gate (fast, no Docker)
+#   integration-test  only the PostgreSQL *IT suite, via Testcontainers (unit tests are skipped here; see below)
+#   security-scan     Trivy: dependency manifests, then the built container image
+#
+# Branch protection should require exactly these three check names before merging to main.
 name: CI
 
 on:
   pull_request: # Validate every proposed change before merge.
   push:
-    branches: [main] # Recheck the protected main branch after each push.
+    branches: [main] # Recheck main after each merge; CD (cd.yml) starts only when this succeeds.
 
-# Workflows only need to read repository contents; no deployment credentials are used.
+# Least privilege: jobs only read the repository. No deployment credentials exist in CI.
 permissions:
   contents: read
 
-# Cancel obsolete runs for the same branch or pull request.
+# A newer push to the same branch or pull request cancels the obsolete run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Fast unit and MVC checks run independently from the Docker-based integration suite.
-  test:
-    name: test
+  unit-test:
+    name: unit-test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # Check out the exact proposed revision.
+      # Third-party actions are pinned to a full commit SHA (the comment shows the version); Dependabot bumps both.
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Install the repository's Java version and cache Maven artifacts.
+      # Install JDK 25 and cache ~/.m2 keyed on pom.xml, so dependencies are downloaded once per POM change.
       - name: Set up Java 25
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
-      # Run unit/MVC tests and the default verification lifecycle.
-      - name: Verify unit and MVC tests
+      # -B batch mode (no interactive prompts), -ntp no download-progress noise in the log.
+      # `verify` runs Surefire (unit/MVC tests) and then the JaCoCo coverage check.
+      - name: Run unit and MVC tests with the coverage gate
         run: ./mvnw -B -ntp verify
-      # Preserve useful reports even when Maven fails.
+      # Keep the reports even when the build fails, so a failure can be diagnosed from the run page.
       - name: Upload unit test reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -48,58 +54,49 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # Testcontainers needs Docker, which is available on GitHub-hosted Ubuntu runners.
-  integration:
-    name: integration
-    runs-on: ubuntu-latest
+  integration-test:
+    name: integration-test
+    runs-on: ubuntu-latest # GitHub-hosted Ubuntu runners include the Docker daemon Testcontainers needs.
     timeout-minutes: 25
     steps:
-      # Check out the exact proposed revision.
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Install the repository's Java version and cache Maven artifacts.
       - name: Set up Java 25
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
-      # Activate Failsafe explicitly so the PostgreSQL *IT suite runs.
-      - name: Verify PostgreSQL integration tests
-        run: ./mvnw -B -ntp -Pintegration verify
-      # Preserve useful reports even when Maven fails.
+      # -Pintegration           adds Failsafe, which runs the *IT classes against a real PostgreSQL container.
+      # -DskipUTs               turns off Surefire only; unit-test already ran those tests on this commit.
+      # -Djacoco.haltOnFailure=false  still writes the coverage report, but does not apply the 80% gate, which is
+      #                         meant for the unit suite (the *IT suite alone does not exercise controllers).
+      - name: Run PostgreSQL integration tests
+        run: ./mvnw -B -ntp -Pintegration -DskipUTs -Djacoco.haltOnFailure=false verify
       - name: Upload integration test reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: integration-test-reports
           path: |
-            target/surefire-reports
             target/failsafe-reports
             target/site/jacoco
           if-no-files-found: ignore
           retention-days: 14
 
-  # Fails the build on known HIGH/CRITICAL vulnerabilities in Maven dependencies and in the built container image.
-  # Trivy runs from its official image (pinned tag) so no third-party action needs trusting.
-  # Accepted findings go in .trivyignore, one CVE ID per line with an expiry comment.
-  security:
-    name: security
+  # Fails on fixable HIGH/CRITICAL vulnerabilities. The policy lives in scripts/ci/trivy-scan.sh, which CD reuses.
+  security-scan:
+    name: security-scan
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      # Check out the exact proposed revision.
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Scan pom.xml and other manifests; --ignore-unfixed skips findings that have no available fix.
+      # Cheap check first: known-vulnerable libraries declared in pom.xml.
       - name: Scan dependencies
-        run: |
-          docker run --rm -v "$PWD:/src" -w /src aquasec/trivy:0.58.1 \
-            fs --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 .
-      # Build the production image exactly as the compose file does, then scan its OS packages and JAR.
+        run: scripts/ci/trivy-scan.sh fs
+      # Build the same image Compose and CD build, then scan its OS packages and the packaged JAR.
       - name: Build image
         run: docker build -t libro-api:ci .
       - name: Scan image
-        run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1 \
-            image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 libro-api:ci
+        run: scripts/ci/trivy-scan.sh image libro-api:ci

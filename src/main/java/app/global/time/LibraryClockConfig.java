@@ -1,0 +1,25 @@
+package app.global.time;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.time.Clock;
+import java.time.ZoneId;
+
+/**
+ * Supplies the library's agreed local time source for loan deadlines and events.
+ */
+@Configuration
+public class LibraryClockConfig {
+
+    /**
+     * Creates the clock used to read Asia/Manila local time.
+     *
+     * @return a system clock configured for the library's timezone
+     */
+    @Bean
+    public Clock libraryClock() {
+        // The Manila clock supplies local wall time; LocalDateTime itself carries no zone or offset.
+        return Clock.system(app.global.time.LibraryTime.ZONE);
+    }
+}

@@ -8,7 +8,7 @@
 
 | Concern | Owning implementation | Boundary |
 | --- | --- | --- |
-| Login HTTP contract | `AuthAPI`, `LoginRequestDTO`, `TokenResponseDTO` | Accept university ID and password only; no caller-selected role or claims |
+| Login HTTP contract | `AuthController`, `LoginRequestDTO`, `TokenResponseDTO` | Accept university ID and password only; no caller-selected role or claims |
 | Credential verification | `AuthService`, `AuthenticationManager`, `LibroUserDetailsService`, `PasswordConfig` | Spring Security loads the stored account and verifies the BCrypt hash |
 | Token issuance | `AuthService`, `JwtConfiguration` | Nimbus encoder signs one HS256 access token from the authenticated name and one `ROLE_...` authority |
 | Token validation | Spring Security Resource Server and `JwtConfiguration` | Decoder validates signature, issuer, audience, time claims, required subject, and one known role before route authorization |
@@ -105,7 +105,7 @@ Generate the key from cryptographically secure randomness and provide it through
 
 | Flow stage | Component | Rule and result |
 | --- | --- | --- |
-| 1. Bind login | `AuthAPI` → `LoginRequestDTO` | Validates `####-####` university ID and non-blank password, capped at 72 characters; password is write-only and DTO has no role field |
+| 1. Bind login | `AuthController` → `LoginRequestDTO` | Validates `####-####` university ID and non-blank password, capped at 72 characters; password is write-only and DTO has no role field |
 | 2. Check BCrypt input boundary | `AuthService` and `PasswordPolicy` | Passwords must satisfy the 8–72 character complexity policy and stay at or below 72 UTF-8 bytes; signup, password change, and login apply the byte rule before BCrypt work |
 | 3. Authenticate | `AuthenticationManager` → `DaoAuthenticationProvider` → `LibroUserDetailsService` → `UserRepository` | Looks up the account by university ID and verifies its stored hash using the existing BCrypt `PasswordEncoder` |
 | 4. Build trusted claims | `AuthService` | Takes subject and one role from the successful `Authentication`; sets configured issuer/audience and UTC `iat`/`exp` |

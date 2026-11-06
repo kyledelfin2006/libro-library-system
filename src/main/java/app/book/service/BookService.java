@@ -1,9 +1,10 @@
 package app.book.service;
 
+import app.global.exception.InvalidRequestException;
 import app.book.dto.BookResponseDTO;
 import app.book.dto.LibraryStatisticsDTO;
-import app.book.exceptions.BookNotFoundException;
-import app.book.exceptions.BookValidationException;
+import app.book.exception.BookNotFoundException;
+import app.book.exception.BookValidationException;
 import app.book.entity.Book;
 import app.book.dto.BookRequestDTO;
 import app.book.dto.BookPatchRequestDTO;
@@ -24,19 +25,22 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.Locale;
-import java.util.*;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Service layer for managing {@link Book} entities.
+ * Application service for the book catalog: retrieval, search, statistics, creation, update, and deletion.
  * <p>
- * This class orchestrates business logic for book operations, including
- * retrieval, creation, update, deletion, and search. It acts as a facade
- * between the controller layer and the repository, translating DTOs to entities
- * and vice versa using {@link BookMapper}.
+ * The service is the transaction boundary and the only place that touches {@link Book} entities. Every public method
+ * accepts request DTOs and returns response DTOs, so an entity never leaves the transaction (open-in-view is off, so
+ * mapping after the method returns could hit a closed persistence context).
  * </p>
- * <p>All write operations are annotated with {@code @Transactional} to ensure
- * data consistency and enable automatic dirty checking.</p>
+ * <p>
+ * The class is {@code @Transactional(readOnly = true)} by default, which lets Hibernate skip dirty checking for reads.
+ * Write methods override it with a plain {@code @Transactional}.
+ * </p>
  *
  * @author Kyle Delfin
  * @see BookRepository
@@ -45,15 +49,14 @@ import java.util.stream.Collectors;
 @Slf4j
 @AllArgsConstructor
 @Service
+@Transactional(readOnly = true)
 public class BookService {
 
     private static final Set<String> SORTABLE_BOOK_FIELDS = Set.of("id", "title", "author", "genre", "replacementCost");
 
-    /**
-     *  repository the data access object for book entities
-     *  mapper the component for converting between DTOs and entities
-     */
+    /** Data access for book rows. */
     private final BookRepository repository;
+    /** Explicit entity/DTO conversion. */
     private final BookMapper mapper;
     private final Validator validator;
 
@@ -63,17 +66,13 @@ public class BookService {
      *
      * @param pageable the pagination and sorting information
      * @return a page of books matching the given pageable parameters
+     * @throws InvalidRequestException if the sort names a field outside the allowlist
      */
-    public Page<Book> getBooks(Pageable pageable) {
+    public Page<BookResponseDTO> getBooks(Pageable pageable) {
         validateBookSort(pageable);
-        return repository.findAll(pageable);
+        return repository.findAll(pageable).map(mapper::toResponseDTO);
     }
 
-    /**
-     * Validates optional filters and delegates a stable, database-paged read.
-     * A final {@code id} order keeps page boundaries deterministic when books
-     * share the requested sort value.
-     */
     /**
      * Filters books by text and optional inclusive replacement-cost bounds before applying a stable page sort.
      *
@@ -84,15 +83,30 @@ public class BookService {
      * @param maxReplacementCost optional inclusive upper bound
      * @param pageable requested page and allowlisted sort order
      * @return the matching page of physical copies
-     * @throws IllegalArgumentException if the replacement-cost range or sort order is invalid
+     * @throws InvalidRequestException if the replacement-cost range or sort order is invalid
      */
-    @Transactional(readOnly = true)
-    public Page<Book> queryBooks(String title, String author, String genre,
-                                 BigDecimal minReplacementCost, BigDecimal maxReplacementCost, Pageable pageable) {
+    public Page<BookResponseDTO> queryBooks(String title, String author, String genre,
+                                            BigDecimal minReplacementCost, BigDecimal maxReplacementCost,
+                                            Pageable pageable) {
+        return queryBookPage(title, author, genre, minReplacementCost, maxReplacementCost, pageable)
+                .map(mapper::toResponseDTO);
+    }
+
+    /**
+     * Runs the shared filtered query behind every list and search endpoint.
+     * <p>
+     * Validates the sort against the allowlist and rejects a reversed range. A final {@code id} order keeps page
+     * boundaries deterministic when several books share the requested sort value.
+     * </p>
+     *
+     * @return the matching entity page; public callers map it to DTOs before returning
+     */
+    private Page<Book> queryBookPage(String title, String author, String genre,
+                                     BigDecimal minReplacementCost, BigDecimal maxReplacementCost, Pageable pageable) {
         validateBookSort(pageable);
         if (minReplacementCost != null && maxReplacementCost != null
                 && minReplacementCost.compareTo(maxReplacementCost) > 0) {
-            throw new IllegalArgumentException("minReplacementCost must be less than or equal to maxReplacementCost");
+            throw new InvalidRequestException("minReplacementCost must be less than or equal to maxReplacementCost");
         }
         Sort sort = pageable.getSort();
         if (sort.getOrderFor("id") == null) {
@@ -107,7 +121,7 @@ public class BookService {
 
     private void validateBookSort(Pageable pageable) {
         if (pageable.getSort().stream().anyMatch(order -> !SORTABLE_BOOK_FIELDS.contains(order.getProperty()))) {
-            throw new IllegalArgumentException("Unsupported book sort field. Allowed fields: id, title, author, genre, replacementCost");
+            throw new InvalidRequestException("Unsupported book sort field. Allowed fields: id, title, author, genre, replacementCost");
         }
     }
 
@@ -118,12 +132,12 @@ public class BookService {
      * distinguish separate copies or editions.
      *
      * @param input the request DTO containing book data (must be valid)
-     * @return the persisted {@link Book} entity (with generated ID)
-     * @throws IllegalArgumentException if the DTO contains invalid data
+     * @return the persisted copy, including its generated ID
+     * @throws InvalidRequestException if the DTO contains invalid data
      *                                  (validated at controller level)
      */
     @Transactional
-    public Book addBook(BookRequestDTO input) {
+    public BookResponseDTO addBook(BookRequestDTO input) {
         if (input == null) {
             throw new BookValidationException("Book data must not be null");
         }
@@ -137,18 +151,19 @@ public class BookService {
         repository.save(newBook);
 
         log.info("Successfully added book '{}' to catalogue with ID: {}", newBook.getTitle(), newBook.getId());
-        return newBook;
+        return mapper.toResponseDTO(newBook);
     }
 
     /**
      * Retrieves a book by its unique identifier.
      *
      * @param id the book's ID
-     * @return the found {@link Book} entity
+     * @return the found copy
      * @throws BookNotFoundException if no book exists with the given ID
      */
-    public Book findBookById(Long id) {
+    public BookResponseDTO findBookById(Long id) {
         return repository.findById(id)
+                .map(mapper::toResponseDTO)
                 .orElseThrow(() -> new BookNotFoundException("Couldn't find book of ID: " + id));
     }
 
@@ -199,13 +214,12 @@ public class BookService {
      *
      * @param id      the ID of the book to update
      * @param updates the DTO containing the fields to update (others remain unchanged)
-     * @return the updated {@link Book} entity (managed, persisted by dirty checking)
+     * @return the updated copy (the managed entity is flushed by dirty checking at commit)
      * @throws BookNotFoundException      if the book does not exist
      * @throws BookValidationException if the supplied replacement cost is ≤ 0
      */
-    // Partial updates
     @Transactional
-    public Book patchBook(Long id, BookPatchRequestDTO updates) {
+    public BookResponseDTO patchBook(Long id, BookPatchRequestDTO updates) {
 
         if (updates == null) {
             throw new BookValidationException("Book update data must not be null");
@@ -240,10 +254,11 @@ public class BookService {
         }
 
         validateEntity(existingBook);
-        return existingBook; // no repository.save() needed for Transactional methods.
+        // No repository.save(): the entity is managed, so Hibernate writes the changes when the transaction commits.
+        return mapper.toResponseDTO(existingBook);
     }
 
-    // Checks whether a string has text and is not null
+    /** Returns whether a string is non-null and contains a non-whitespace character. */
     private boolean hasText(String s) {
         return s != null && !s.trim().isEmpty();
     }
@@ -257,13 +272,13 @@ public class BookService {
      *
      * @param id      the ID of the book to replace
      * @param updates the DTO containing the complete new data (must be valid)
-     * @return the updated {@link Book} entity (managed)
+     * @return the updated copy
      * @throws BookNotFoundException    if the book does not exist
      * @throws BookValidationException if the DTO is {@code null} or contains invalid data
      *                                 (e.g., blank title, negative replacement cost)
      */
     @Transactional
-    public Book replaceBook(Long id, BookRequestDTO updates) {
+    public BookResponseDTO replaceBook(Long id, BookRequestDTO updates) {
         // 1. Validate the incoming DTO (replace requires a complete, valid payload)
         if (updates == null) {
             throw new BookValidationException("Book data must not be null");
@@ -290,8 +305,8 @@ public class BookService {
         // 4. Validate entity using existing validator method
         validateEntity(existingBook);
 
-        // 5. Persist and return managed book entity through dirty checking
-        return existingBook;
+        // 5. Dirty checking persists the managed entity at commit; return its API view.
+        return mapper.toResponseDTO(existingBook);
     }
 
     /**
@@ -316,11 +331,11 @@ public class BookService {
      * @param maxReplacementCost the maximum replacement amount (inclusive)
      * @param pageable requested page (size is capped by Spring's max-page-size) and allowlisted sort
      * @return a page of copies at or below the specified replacement amount
-     * @throws IllegalArgumentException if the maximum is missing or the sort is unsupported
+     * @throws InvalidRequestException if the maximum is missing or the sort is unsupported
      */
-    public Page<Book> getBooksAtOrBelowReplacementCost(BigDecimal maxReplacementCost, Pageable pageable) {
+    public Page<BookResponseDTO> getBooksAtOrBelowReplacementCost(BigDecimal maxReplacementCost, Pageable pageable) {
         if (maxReplacementCost == null) {
-            throw new IllegalArgumentException("maxReplacementCost is required");
+            throw new InvalidRequestException("maxReplacementCost is required");
         }
         return queryBooks(null, null, null, null, maxReplacementCost, pageable);
     }
@@ -332,12 +347,12 @@ public class BookService {
      * @param maxReplacementCost the maximum amount (must be ≥ min)
      * @param pageable requested page and allowlisted sort
      * @return a page of books in the replacement-cost range
-     * @throws IllegalArgumentException if a bound is missing or min > max
+     * @throws InvalidRequestException if a bound is missing or min > max
      */
-    public Page<Book> getBooksInReplacementCostRange(BigDecimal minReplacementCost, BigDecimal maxReplacementCost,
-                                                     Pageable pageable) {
+    public Page<BookResponseDTO> getBooksInReplacementCostRange(BigDecimal minReplacementCost,
+                                                                BigDecimal maxReplacementCost, Pageable pageable) {
         if (minReplacementCost == null || maxReplacementCost == null) {
-            throw new IllegalArgumentException("minReplacementCost and maxReplacementCost are required");
+            throw new InvalidRequestException("minReplacementCost and maxReplacementCost are required");
         }
         // queryBooks rejects a reversed range, so the bounds are not compared twice here.
         return queryBooks(null, null, null, minReplacementCost, maxReplacementCost, pageable);
@@ -354,15 +369,15 @@ public class BookService {
      * @param value the search term
      * @param pageable requested page and allowlisted sort
      * @return a page of matching books
-     * @throws IllegalArgumentException if the search type is unsupported or
+     * @throws InvalidRequestException if the search type is unsupported or
      *                                  the replacement-cost value is not a valid number
      */
-    public Page<Book> searchBooks(String type, String value, Pageable pageable) {
+    public Page<BookResponseDTO> searchBooks(String type, String value, Pageable pageable) {
         if (type == null || type.isBlank()) {
-            throw new IllegalArgumentException("Search type is required");
+            throw new InvalidRequestException("Search type is required");
         }
         if (value == null) {
-            throw new IllegalArgumentException("Search value is required");
+            throw new InvalidRequestException("Search value is required");
         }
 
         String formattedType = type.trim().toLowerCase(Locale.ROOT);
@@ -376,12 +391,12 @@ public class BookService {
                 try {
                     replacementCost = new BigDecimal(value);
                 } catch (NumberFormatException e) {
-                    throw new IllegalArgumentException("Invalid replacement-cost format value: " + value);
+                    throw new InvalidRequestException("Invalid replacement-cost format value: " + value);
                 }
                 // An exact match is an inclusive range whose bounds are equal.
                 yield queryBooks(null, null, null, replacementCost, replacementCost, pageable);
             }
-            default -> throw new IllegalArgumentException(
+            default -> throw new InvalidRequestException(
                     "Invalid search type: " + type + ". Valid types: author, title, genre, replacementCost");
         };
     }
@@ -411,9 +426,9 @@ public class BookService {
      * @param field the name of the field to sort by (case-insensitive, trimmed)
      * @param pageable supplies the page number and size only
      * @return a page of books sorted accordingly
-     * @throws IllegalArgumentException if the field is not one of the allowed values
+     * @throws InvalidRequestException if the field is not one of the allowed values
      */
-    public Page<Book> getBooksSortedBy(String field, Pageable pageable) {
+    public Page<BookResponseDTO> getBooksSortedBy(String field, Pageable pageable) {
         String fieldName = "id";
         if (field != null && !field.trim().isEmpty()) {
             // Normalize ordinary fields to lowercase, but keep the JPA camel-case property spelling.
@@ -423,7 +438,7 @@ public class BookService {
 
         // Validate against the allowlist so a client can never name an arbitrary entity property.
         if (!SORTABLE_BOOK_FIELDS.contains(fieldName)) {
-            throw new IllegalArgumentException("Invalid sort field: " + field);
+            throw new InvalidRequestException("Invalid sort field: " + field);
         }
 
         Pageable sortedPage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
@@ -463,46 +478,17 @@ public class BookService {
      * @return the average replacement cost as a {@link BigDecimal}, or {@link BigDecimal#ZERO}
      *         if no books exist
      */
-    public BigDecimal getAverageReplacementCost(){
+    public BigDecimal getAverageReplacementCost() {
         Optional<BigDecimal> averageReplacementCost = repository.getAverageReplacementCost();
         return averageReplacementCost.orElse(BigDecimal.ZERO);
     }
 
-    // ---------------------- Individual statistics (used elsewhere) ----------------------
-
     /**
-     * Computes the sum of recorded replacement costs for all copies.
-     * <p>
-     * This method is primarily used for unit testing.
-     * </p>
+     * Counts the physical copies in the collection.
      *
-     * @return the sum of all replacement costs, or {@link BigDecimal#ZERO} if the library is empty
+     * @return the number of copies; zero when the library is empty
      */
-    // Mainly used by Unit Testing
-    public BigDecimal getTotalReplacementCost() {
-        return repository.sumTotalReplacementCost().orElse(BigDecimal.ZERO);
-    }
-
-    /**
-     * Finds the copy with the highest replacement cost in the library.
-     * <p>
-     * This method is primarily used for unit testing.
-     * </p>
-     *
-     * @return the copy with the highest replacement cost, or {@code null} if the library is empty
-     */
-    // Mainly used by Unit Testing
-    public Book findHighestReplacementCostBook() {
-        return repository.findTopByOrderByReplacementCostDesc();
-    }
-
-    /**
-     * Sends the count of books in the collection.
-     *
-     *
-     * @return the amount of books in collection, or {@code null} if the library is empty
-     */
-    public Long getBookCount(){
+    public Long getBookCount() {
         return repository.count();
     }
 

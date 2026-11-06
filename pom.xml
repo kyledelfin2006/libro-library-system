@@ -1,39 +1,66 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Libro Library API: one Spring Boot module, built with the committed Maven wrapper (./mvnw).
+
+  Everyday commands (see docs/reference/engineering-reference.md for the full list):
+    ./mvnw verify                          unit + MVC tests, JaCoCo 80% line-coverage gate
+    ./mvnw -Pintegration verify            also runs the PostgreSQL *IT suite (needs Docker for Testcontainers)
+    ./mvnw -Pintegration -DskipUTs verify  ONLY the *IT suite; CI uses this so unit tests do not run twice
+-->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>kyle.com</groupId>
-    <artifactId>library-api-system</artifactId>
-    <version>1.0-SNAPSHOT</version>
-
+    <!-- The Boot parent supplies dependency versions (its BOM), plugin versions, and sensible plugin defaults. -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>4.1.2</version>
+        <relativePath/>
     </parent>
+
+    <groupId>io.github.kyledelfin2006</groupId>
+    <artifactId>library-api-system</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <name>Libro Library API</name>
+    <description>Spring Boot REST API for a school library: catalog, accounts, and loans.</description>
 
     <properties>
         <!-- Boot's parent maps this to maven.compiler.release, so the JDK level is declared exactly once. -->
         <java.version>25</java.version>
-        <!-- Pin the patched Jackson 3.1 line for CVE-2026-91777. -->
+
+        <!--
+          Test switch. Surefire (unit tests) reads it; Failsafe (*IT tests) does not.
+          `-DskipTests` would skip both plugins, so it cannot run "integration tests only".
+        -->
+        <skipUTs>false</skipUTs>
+
+        <!--
+          Security overrides of versions managed by the Spring Boot BOM. Each one fixes a finding from the Trivy
+          scan in CI. Remove an override once the Boot parent ships the same or a newer version.
+        -->
+        <!-- Jackson 3.1 line patched for CVE-2026-91777. -->
         <jackson-bom.version>3.1.7</jackson-bom.version>
-        <!-- Springdoc also brings Jackson 2; align that stack on its patched 2.21 line. -->
+        <!-- springdoc still pulls in Jackson 2; keep that stack on its patched 2.21 line. -->
         <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
-        <!-- Patched releases for the Spring MVC and Tomcat findings in the image scan. -->
+        <!-- Patched Spring MVC and Tomcat releases for image-scan findings. -->
         <spring-framework.version>7.0.9</spring-framework.version>
         <tomcat.version>11.0.25</tomcat.version>
-        <!-- Overrides the Boot BOM so the Flyway engine and PostgreSQL module stay on one tested version. -->
+        <!-- Flyway engine and its PostgreSQL module must stay on the same tested version. -->
         <flyway.version>13.3.0</flyway.version>
-        <!-- Overrides the Boot BOM: pgjdbc 42.7.4-42.7.11 is affected by CVE-2026-54291 (SCRAM-SHA-256-PLUS downgrade); fixed in 42.7.12. Drop once the BOM ships >= 42.7.12. -->
+        <!-- pgjdbc 42.7.4-42.7.11: CVE-2026-54291 (SCRAM-SHA-256-PLUS downgrade); fixed in 42.7.12. -->
         <postgresql.version>42.7.12</postgresql.version>
-        <!-- Not managed by the Boot BOM; imported through testcontainers-bom below. -->
+
+        <!-- Versions the Boot BOM does not manage. -->
         <testcontainers.version>2.0.5</testcontainers.version>
+        <springdoc.version>3.2.0</springdoc.version>
+        <jacoco.version>0.8.16</jacoco.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- Aligns every Testcontainers module on one version. -->
             <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
@@ -45,58 +72,77 @@
     </dependencyManagement>
 
     <dependencies>
-
-        <!-- Web (REST APIs) -->
+        <!-- ===== Web layer ===== -->
+        <!-- Spring MVC on embedded Tomcat, with Jackson JSON. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-
-        <!-- Health probes for load balancers/containers, plus Micrometer metrics on a private management port. -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-
-        <!-- Validation (JSR-303 / Jakarta Validation) – REQUIRED for @Valid annotations -->
+        <!-- Jakarta Bean Validation behind @Valid on request DTOs. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
-
-        <!-- Spring Data JPA -->
+        <!-- OpenAPI document and Swagger UI; both are off unless LIBRO_API_DOCS_ENABLED=true. -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
         </dependency>
 
-        <!-- Spring Security -->
+        <!-- ===== Security ===== -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
-
-        <!-- JWT Bearer validation and Nimbus-backed token encoding. -->
+        <!-- Bearer JWT validation, plus the Nimbus encoder used to issue tokens at login. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
 
-        <!-- PostgreSQL – for production -->
+        <!-- ===== Persistence ===== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <!-- Spring Boot 4 needs its Flyway starter to auto-configure migrations at startup. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Prometheus registry; /actuator/prometheus is served only on the private management port. -->
+        <!-- ===== Operations ===== -->
+        <!-- Health probes (/livez, /readyz) and metrics; Actuator itself runs on a private management port. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- Prometheus format for /actuator/prometheus on the management port. -->
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Spring Boot DevTools: local restarts only; optional keeps it out of dependent artifacts. -->
+        <!-- ===== Developer tooling ===== -->
+        <!-- Lombok runs at compile time only (see the compiler plugin's annotationProcessorPaths). -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <!-- Automatic restarts in local development; optional + runtime keeps it out of the packaged JAR. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
@@ -104,27 +150,24 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Testing -->
+        <!-- ===== Tests ===== -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- Spring Boot 4 MVC slice-test support. -->
+        <!-- Spring Boot 4 moved the MockMvc slice (@WebMvcTest) into its own starter. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
-
-        <!-- PostgreSQL-backed integration tests; activated with -Pintegration. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Real PostgreSQL for the *IT suite; @ServiceConnection wires the container into Spring. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-testcontainers</artifactId>
@@ -140,71 +183,11 @@
             <artifactId>testcontainers-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
-
-        <!-- Lombok: version managed by the Spring Boot BOM (single source of truth). -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- Spring Boot 4 requires its Flyway starter to activate migration auto-configuration. -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-flyway</artifactId>
-        </dependency>
-
-        <!-- PostgreSQL-specific Flyway support. -->
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-database-postgresql</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-            <!-- Not managed by the Spring Boot BOM. -->
-            <version>3.2.0</version>
-        </dependency>
-
     </dependencies>
 
     <build>
         <plugins>
-
-            <!--
-            It turns normal JAR into an executable "fat JAR" that includes all your dependencies and a main class,
-             so you can run it with java -jar.
-            -->
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId> <!-- Maven for Spring -->
-            </plugin>
-
-            <!--
-            Maven Compiler Plugin with Lombok annotation processor
-            This tells the compiler to run Lombok BEFORE compiling,
-            so it generates all getters, setters, constructors, and the 'log' field.
-          -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.16.0</version>
-                <configuration>
-                    <!-- Language level comes from maven.compiler.release (set by the Boot parent from java.version). -->
-                    <annotationProcessorPaths>
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                            <version>${lombok.version}</version>
-                        </path>
-                    </annotationProcessorPaths>
-                </configuration>
-            </plugin>
-
-            <!-- JaCoco for unit test coverage and branch coverage  -->
-            <!-- Fails fast on the wrong JDK or Maven instead of producing confusing compiler errors. -->
+            <!-- Fails fast with a clear message on the wrong JDK or Maven, instead of odd compiler errors. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
@@ -230,19 +213,55 @@
                 </executions>
             </plugin>
 
+            <!-- Runs Lombok as an annotation processor before compiling. Java 23+ no longer discovers processors
+                 on the classpath automatically, so the path is declared explicitly. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <!-- Newer than the version the Boot parent manages; Dependabot keeps it current. -->
+                <version>3.16.0</version>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!-- Unit and MVC tests (*Test) in the `test` phase. Surefire excludes *IT classes by default. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- -DskipUTs turns off only this plugin. It is bound to `skip`, not `skipTests`, so the standard
+                         -DskipTests flag keeps working for both Surefire and Failsafe (the Dockerfile relies on it). -->
+                    <skip>${skipUTs}</skip>
+                </configuration>
+            </plugin>
+
+            <!-- Repackages the JAR into an executable Spring Boot JAR (dependencies + launcher): java -jar. -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- Line-coverage measurement and the 80% gate. -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.16</version>
+                <version>${jacoco.version}</version>
                 <executions>
-                    <!-- Prepares the agent to record coverage during tests -->
+                    <!-- Attaches the coverage agent to the Surefire and Failsafe test JVMs. -->
                     <execution>
                         <id>prepare-agent</id>
                         <goals>
                             <goal>prepare-agent</goal>
                         </goals>
                     </execution>
-                    <!-- Generates the report after tests are run -->
+                    <!-- HTML/XML report in target/site/jacoco after the tests. -->
                     <execution>
                         <id>report</id>
                         <phase>verify</phase>
@@ -250,7 +269,11 @@
                             <goal>report</goal>
                         </goals>
                     </execution>
-                    <!-- Coverage floor: fails `verify` if line coverage drops below 80% (measured: ~85% unit-only, ~90% with integration). -->
+                    <!--
+                      Fails `verify` below 80% line coverage. Unit tests alone measure about 85%.
+                      An integration-only run (-DskipUTs) passes -Djacoco.haltOnFailure=false, because the *IT
+                      suite alone is not meant to cover controllers and mappers.
+                    -->
                     <execution>
                         <id>check</id>
                         <phase>verify</phase>
@@ -274,11 +297,15 @@
                     </execution>
                 </executions>
             </plugin>
-
         </plugins>
     </build>
 
     <profiles>
+        <!--
+          PostgreSQL integration tests: ./mvnw -Pintegration verify
+          Failsafe runs *IT classes in `integration-test`, then fails the build in `verify` if any failed. Splitting
+          the two goals lets Testcontainers shut down cleanly before the build stops. Needs a Docker daemon.
+        -->
         <profile>
             <id>integration</id>
             <build>
@@ -299,5 +326,4 @@
             </build>
         </profile>
     </profiles>
-
 </project>

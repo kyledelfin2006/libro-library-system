@@ -1,8 +1,8 @@
-# Architecture and Reference
+# Architecture Overview
 
-Design, request flow, API inventory, data model, troubleshooting, and test notes for Libro. The [README](../README.md) is the short overview; the [engineering reference](reference/engineering-reference.md) and the code, migrations, and tests are authoritative if this page lags.
+How Libro is put together: the components, how a request flows through them, the layer rules, and the data model. It is the short tour; the [Engineering Reference](reference/engineering-reference.md) holds the detailed contracts, and the code, migrations, and tests are authoritative if this page lags.
 
-## Architecture Overview
+## Components
 
 The system runs as a Spring Boot API alongside PostgreSQL. Book, user, and loan requests pass through their HTTP and business layers to persistence; Flyway prepares the schema at startup. Shared validation, mapping, security configuration, and error handling support the API. Login uses `LibroUserDetailsService` for account lookup; protected Bearer requests validate locally without a database lookup.
 
@@ -11,30 +11,30 @@ flowchart LR
     Client["API client"]
     subgraph App["Spring Boot application"]
         Security["Spring Security<br/>signup/login public; other routes require Bearer"]
-        API["BookAPI<br/>Spring MVC"] --> Service["BookService<br/>business rules · transactions"]
+        API["BookController<br/>Spring MVC"] --> Service["BookService<br/>business rules · transactions"]
         Service --> BookRepo["BookRepository<br/>Spring Data JPA"]
-        LoanAPI["LoanAPI<br/>checkout · return · history"] --> LoanService["LoanService<br/>loan rules · transactions"]
+        LoanController["LoanController<br/>checkout · return · history"] --> LoanService["LoanService<br/>loan rules · transactions"]
         LoanService --> LoanRepo["LoanRepository<br/>loan history · state checks"]
         LoanService --> BookRepo
         LoanService --> UserRepo
         LoanRepo --> ORM
         BookRepo --> ORM["Hibernate / JPA"]
-        UserAPI["UserAPI<br/>account and profile routes"] --> User["UserService<br/>profile and password rules"]
+        UserController["UserController<br/>account and profile routes"] --> User["UserService<br/>profile and password rules"]
         User --> UserRepo["UserRepository"]
-        AuthAPI["AuthAPI<br/>POST /app/auth/login"] --> AuthService["AuthService<br/>authenticate · issue JWT"]
+        AuthController["AuthController<br/>POST /app/auth/login"] --> AuthService["AuthService<br/>authenticate · issue JWT"]
         AuthService -->|AuthenticationManager| UserDetails["LibroUserDetailsService<br/>lookup by university ID · map role"]
         UserDetails -->|findByUniversityId| UserRepo
         UserRepo --> ORM
         Flyway["Flyway migrations<br/>V1 books · V2 users · V3 librarian role · V4 loans · V5 catalog fields"]
         Shared["Shared concerns<br/>DTOs · mappers · validation<br/>GlobalExceptionHandler · OpenAPI"]
         Security -->|authorized request| API
-        Security -->|authorized request| UserAPI
-        Security -->|authorized request| LoanAPI
+        Security -->|authorized request| UserController
+        Security -->|authorized request| LoanController
         API -.-> Shared
-        LoanAPI -.-> Shared
+        LoanController -.-> Shared
         LoanService -.-> Shared
         Service -.-> Shared
-        UserAPI -.-> Shared
+        UserController -.-> Shared
         User -.-> Shared
         Security -.-> Shared
     end
@@ -46,7 +46,7 @@ flowchart LR
 
     classDef service fill:#e8f1fb,stroke:#5078a0,color:#172b3d
     classDef data fill:#edf5ed,stroke:#62836a,color:#203528
-    class API,Service,BookRepo,LoanAPI,LoanService,LoanRepo,ORM,UserAPI,User,UserRepo,UserDetails,Shared,Security service
+    class API,Service,BookRepo,LoanController,LoanService,LoanRepo,ORM,UserController,User,UserRepo,UserDetails,Shared,Security service
     class DB,Flyway data
 ```
 
@@ -59,7 +59,7 @@ The client submits credentials once to receive a short-lived token, then sends t
 ```mermaid
 sequenceDiagram
     participant Client
-    participant Auth as AuthAPI / AuthService
+    participant Auth as AuthController / AuthService
     participant Manager as AuthenticationManager
     participant UserLookup as LibroUserDetailsService
     participant Users as UserRepository
@@ -117,7 +117,7 @@ Account and loan access is checked against the authenticated user's university I
 
 ```mermaid
 flowchart TD
-    C["Controller layer<br/>BookAPI, UserAPI, LoanAPI<br/>HTTP routing and request validation"]
+    C["Controller layer<br/>BookController, UserController, LoanController<br/>HTTP routing and request validation"]
     S["Service layer<br/>Business rules and transactions"]
     BR["BookRepository<br/>Book queries and persistence"]
     UR["UserRepository<br/>Account queries and persistence"]
@@ -141,7 +141,7 @@ flowchart TD
     X -.-> A
 ```
 
-Account operations and login use `UserRepository`: `UserService` uses it for signup, profile, and password operations; `LoanService` uses it to identify and lock borrowers; `LibroUserDetailsService` loads the account Spring Security authenticates at login. Bearer-token validation does not query the account again and does not route through `UserAPI` or `UserService`.
+Account operations and login use `UserRepository`: `UserService` uses it for signup, profile, and password operations, and asks `UserAccessPolicy` whether the caller may act on the loaded account; `LoanService` uses it to identify and lock borrowers; `LibroUserDetailsService` loads the account Spring Security authenticates at login. Bearer-token validation does not query the account again and does not route through `UserController` or `UserService`.
 
 ### Current Persistence Model
 
@@ -187,205 +187,19 @@ erDiagram
 
 Each checkout creates a new `LOAN` row for one physical copy and one borrower; `lost_by_user_id` is optional because only a lost loan has a staff resolver. Its lifecycle status is `ACTIVE`, `RETURNED`, or `LOST`; overdue is calculated at request time and is not stored. Returned and lost events remain in history. Students and faculty may have up to three active loans each, and a borrower with an overdue loan cannot start another loan. Library assistants and librarians can mark authorized active loans lost, which also marks the physical copy lost. A copy with any loan history is retained and cannot be deleted; deletion returns `409 Conflict`. Penalties and repeat-offender rules are future scope.
 
-## File Structure
+## Design Rules
 
-This is a selected map of the main application and test files. See the [engineering reference](reference/engineering-reference.md) for the fuller repository map.
+These rules are applied the same way in every feature package; [ADR 0002](adr/0002-layered-feature-packages.md) explains why the project uses layered feature packages rather than hexagonal ports and adapters.
 
-```text
-AGENTS.md
-README.md
-Dockerfile
-docker-compose.yml
-.env.example
-pom.xml
-docs/
-  architecture.md
-  devops/ci-cd.md
-  guides/
-    api-documentation-guideline.md
-    demo-accounts.md
-    development-problems-solved.md
-    domain-decisions.md
-    institutional-context.md
-    loan.md
-    local-setup.md
-  reference/
-    engineering-reference.md
-    jwt-authentication-design.md
-    security-roles-and-jwt-guide.md
-    ROADMAP.md
-infra/caddy/Caddyfile
-
-src/main/java/app/
-  LibraryApplication.java
-  auth/
-    config/JwtConfiguration.java and JwtProperties.java
-    controller/AuthAPI.java
-    dto/LoginRequestDTO.java and TokenResponseDTO.java
-    service/AuthService.java
-    JsonSecurityErrorHandler.java
-    SecurityConfig.java
-    LibroUserDetailsService.java
-  loan/
-    config/LoanTimeConfig.java
-    controller/LoanAPI.java
-    dto/LoanResponseDTO.java
-    entity/Loan.java
-    entity/LoanStatus.java
-    mapper/LoanMapper.java
-    repository/LoanRepository.java
-    service/LoanService.java
-  book/
-    controller/
-      BookAPI.java
-    service/
-      BookService.java
-    repository/
-      BookRepository.java
-      projection/
-        GenreCount.java
-        LibraryAggregate.java
-    entity/
-      Book.java
-      BookCopyStatus.java
-    dto/
-      BookRequestDTO.java
-      BookPatchRequestDTO.java
-      BookResponseDTO.java
-      LibraryStatisticsDTO.java
-    mapper/
-      BookMapper.java
-    exceptions/
-      BookNotFoundException.java
-      BookValidationException.java
-  global/
-    config/
-      OpenApiConfig.java
-      ErrorApiResponse.java and ErrorApiResponses.java
-    exceptions/
-      GlobalExceptionHandler.java
-    logging/
-      RequestIdFilter.java
-    time/
-      LibraryTime.java
-    responses/
-      ApiResponse.java
-      ErrorResponse.java
-  user/
-    config/PasswordConfig.java
-    controller/UserAPI.java
-    dto/
-      ChangePasswordDTO.java
-      UserCreateRequestDTO.java
-      UserCreateUpdateDTO.java
-      UserReplaceRequest.java
-      UserResponseDTO.java
-    entity/
-      User.java
-      enums/
-        UserCourse.java
-        UserITMajor.java
-        UserRole.java
-    mapper/UserMapper.java
-    repository/UserRepository.java
-    exception/UserNotFoundException.java
-    service/UserService.java
-    validation/PasswordPolicy.java
-
-src/main/resources/
-  application.properties
-  db/
-    migration/
-      V1__create_books_table.sql
-      V2__create_users_table.sql
-      V3__add_librarian_role.sql
-      V4__add_loans_and_copy_status.sql
-      V5__describe_books_and_rename_price_to_replacement_cost.sql
-
-src/test/java/
-  unit/
-    auth/
-      SecurityFlowMvcTest.java
-      JwtConfigurationTest.java
-    book/
-      BookApiMvcTest.java
-      BookMapperTest.java
-      BookTest.java
-      BookServiceTest.java
-    user/
-      UserApiMvcTest.java
-      UserServiceTest.java
-    loan/
-      LoanSecurityMvcTest.java
-      LoanServiceTest.java
-    global/
-      GlobalExceptionHandlerTest.java
-      OpenApiMvcTest.java
-  integration/
-    PostgresTestConfig.java
-    book/
-      BookPersistenceIT.java
-    user/
-      UserPersistenceIT.java
-    loan/
-      LoanPersistenceIT.java
-
-src/test/resources/
-  application.properties
-  junit-platform.properties
-  logback-test.xml
-```
-
-## Core Design Patterns
-
-- **Layered Architecture** keeps HTTP, business, and persistence concerns separate and testable.
-- **DTO-based request handling** protects the entity model and keeps validation at the boundary.
-- **Transactional service methods** rely on Hibernate dirty checking, so updates are flushed automatically when the managed entity changes.
-- **Centralized exception handling** ensures consistent JSON failures across validation, not-found, database, and parsing errors.
-- **Repository abstraction** through Spring Data JPA keeps persistence code small and expressive.
-- **Typed repository projections** give aggregate queries named fields instead of positional `Object[]` values. `LibraryAggregate` and `GenreCount` are internal immutable projections; public endpoints retain their existing DTO/map response shapes.
-- **Mapper pattern** centralizes entity-DTO conversion to avoid duplication across controllers and services.
-- **Flyway migrations** version the database schema alongside application code.
-
-## DTO-Wrapped Entity Models
-
-The application never exposes `Book` (or future entity) objects directly to clients. All inbound data is wrapped in request DTOs, and all outbound data is wrapped in response DTOs.
-
-### Rules
-
-- **Never** instantiate an entity directly from client input.
-- **Never** return an entity directly in a controller response.
-- Controllers accept request DTOs (`BookRequestDTO` for create/PUT and `BookPatchRequestDTO` for PATCH) and return response DTOs.
-- For book operations, `BookMapper` is the conversion point between `Book` entities and book DTOs; user and loan features use their own mappers.
-
-### Why This Matters
-
-1. **Decouples the entity model from the client-facing API**
-   The database schema can evolve independently of the API contract. If a column is renamed or removed in the database, only the mapper and entity need to change; the JSON contract stays stable.
-
-2. **Ties the entity model only to the database**
-   Entities represent persistence state, not API state. This keeps JPA/Hibernate concerns isolated and prevents accidental leakage of database-only fields (e.g., audit timestamps, soft-delete flags) into API responses.
-
-3. **Prevents accidental data leaks**
-   Response DTOs explicitly choose which fields are exposed. Sensitive or internal fields never appear in JSON unless intentionally added to the response DTO.
-
-4. **Enforces request validation at the boundary**
-   `BookRequestDTO` validates required title, author, genre, and positive replacement cost; description is optional and limited to 2,000 characters. `@Valid` triggers request checks for create and PUT. PATCH uses a separate optional `BookPatchRequestDTO`; service logic validates supplied values without marking omitted fields as required in OpenAPI.
-
-5. **Allows response customization**
-   Response DTOs can reshape, rename, compute, or omit fields without changing the entity. For example, `LibraryStatisticsDTO` aggregates data from multiple repository calls into a single read-only snapshot.
-
-### Example
-
-```java
-// Controller accepts only the request DTO
-@PostMapping("/add")
-public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody BookRequestDTO input) {
-    Book newBook = service.addBook(input);           // DTO -> Entity inside service/mapper
-    return ResponseEntity.status(HttpStatus.CREATED)
-            .body(new ApiResponse<>(true, "Book Added Successfully", mapper.toResponseDTO(newBook)));
-}
-```
+| Rule | Where it shows up |
+| --- | --- |
+| Package by feature, then by layer | `app.book`, `app.loan`, `app.user`, `app.auth`, each with `controller`, `service`, `repository`, `entity`, `dto`, `mapper`, `exception`; shared code in `app.global` |
+| Controllers handle HTTP only | Bind and validate input, choose the status code, wrap the result in `ApiResponse`; no repository access, no mapping |
+| Services own rules, transactions, and mapping | Accept request DTOs, return response DTOs; `@Transactional(readOnly = true)` by default, `@Transactional` on writes |
+| Entities never leave a transaction | Mapping runs inside the service (open-in-view is off), so no `Book`, `User`, or `Loan` reaches a controller |
+| Authorization in two layers | `SecurityConfig` gates routes by role; services check ownership and target role after loading the record (`UserAccessPolicy`, `LoanService`) |
+| One error shape, few handlers | `ResourceNotFoundException` subclasses become 404, `InvalidRequestException` subclasses become 400, anything unexpected becomes a generic 500; all use `ErrorResponse` with the request ID |
+| Schema owned by Flyway | Forward-only migrations; Hibernate only validates (`ddl-auto=validate`) |
 
 ## Feature Details
 
@@ -429,11 +243,11 @@ Collection statistics include the number of copies, total and average replacemen
 ### Create flow (`POST /app/books/add`)
 
 1. Client sends a JSON payload to `/app/books/add`.
-2. `BookAPI` receives the request and binds it to `BookRequestDTO`.
+2. `BookController` receives the request and binds it to `BookRequestDTO`.
 3. `@Valid` triggers Jakarta Validation on the DTO.
-4. On success, `BookService.addBook()` converts the DTO to an entity via `BookMapper`.
-5. `BookRepository.save()` persists the entity and returns the generated ID.
-6. The controller maps the saved entity to `BookResponseDTO` and returns `201 Created`.
+4. On success, `BookService.addBook()` converts the DTO to an entity via `BookMapper` and validates it.
+5. `BookRepository.save()` persists the entity and assigns the generated ID.
+6. Still inside the transaction, the service maps the entity to `BookResponseDTO`; the controller wraps it in `ApiResponse` and returns `201 Created`.
 
 ### Update flow (`PATCH /app/books/{id}`)
 
@@ -441,7 +255,7 @@ Collection statistics include the number of copies, total and average replacemen
 2. The service loads the managed `Book` entity with `findBookByIdForUpdate()`, taking a row lock shared with checkout and lost-copy resolution.
 3. Field changes are applied conditionally to the locked, managed entity.
 4. Hibernate dirty checking detects the modifications.
-5. The transaction commits and flushes the update without an explicit `save()` call.
+5. The service maps the entity to `BookResponseDTO`; the transaction then commits and flushes the update without an explicit `save()` call.
 
 ### Startup flow
 
@@ -465,132 +279,6 @@ sequenceDiagram
 
 Flyway owns schema creation and updates; Hibernate validates the resulting schema instead of changing it. The filter chain exposes signup, login, and Actuator health probes; protected API routes accept only Bearer tokens and enforce the current route rules.
 
-## Code Highlights
-
-### DTO validation on create
-
-```java
-@PostMapping("/add")
-public ResponseEntity<ApiResponse<BookResponseDTO>> addBook(@Valid @RequestBody BookRequestDTO input) {
-    Book newBook = service.addBook(input);
-    return ResponseEntity.status(HttpStatus.CREATED)
-            .body(new ApiResponse<>(true, "Book Added Successfully", mapper.toResponseDTO(newBook)));
-}
-```
-
-### Partial Updates: PUT vs PATCH
-
-Separate request types make the OpenAPI schema match each contract:
-
-| PUT (replacement) | PATCH (partial update) |
-| --- | --- |
-| `BookRequestDTO`; title, author, genre, and replacement cost are required. Description is optional. | `BookPatchRequestDTO`; every field is optional. Omitted/null fields and blank text values are ignored. |
-| Replaces all mutable fields; optional description may be set to null. | Changes only supplied fields; a supplied replacement cost must be positive. Null or blank description values are ignored. |
-
-Both service operations update a managed entity inside a transaction; Hibernate dirty checking persists the change.
-### Centralized API errors
-
-Request validation and business-rule validation converge on the shared exception handler. This keeps error responses consistent while preserving endpoint-specific status codes.
-
-```mermaid
-flowchart LR
-    JSON["JSON request"] --> DTO["Request DTO"]
-    DTO --> DTOCheck{"DTO constraints pass?"}
-    DTOCheck -->|no| Advice["GlobalExceptionHandler"]
-    DTOCheck -->|yes| Service["Service business rules"]
-    Service --> EntityCheck{"Resulting entity valid?"}
-    EntityCheck -->|no| Advice
-    EntityCheck -->|yes| Repository["Repository"]
-    Repository --> Response["Response DTO"]
-    Advice --> Error["ErrorResponse with fieldErrors"]
-```
-
-```java
-@ExceptionHandler(BookNotFoundException.class)
-public ResponseEntity<ErrorResponse> handleBookNotFound(BookNotFoundException ex) {
-    ErrorResponse error = new ErrorResponse("Book not found", ex.getMessage(), 404);
-    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
-}
-```
-
-### Statistics aggregation
-
-```java
-public LibraryStatisticsDTO getLibraryStatistics() {
-    LibraryAggregate aggregate = repository.getCountAndTotalReplacementCost();
-    Book highestReplacementCostBook = repository.findTopByOrderByReplacementCostDesc();
-    BookResponseDTO highestReplacementCostDTO = (highestReplacementCostBook != null)
-            ? mapper.toResponseDTO(highestReplacementCostBook) : null;
-    return new LibraryStatisticsDTO(
-            aggregate.totalBooks(),
-            aggregate.totalReplacementCost(),
-            highestReplacementCostDTO
-    );
-}
-```
-
-`LibraryAggregate` and `GenreCount` are internal immutable repository projections. They keep book counts, total replacement cost, and genre-distribution queries type-safe while `LibraryStatisticsDTO` and the genre endpoint's `Map<String, Long>` remain the public API response models.
-
-## API Endpoints
-
-### Book API
-
-| Method | Path | Description | Example Request | Example Response |
-| --- | --- | --- | --- | --- |
-| `GET` | `/app/books/all` | Returns a paginated list of books | `GET /app/books/all?page=0&size=12&sort=id,asc` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}],"pageable":{...}}}` |
-| `GET` | `/app/books/query` | Paginates books with optional title, author, genre, and inclusive replacement cost filters | `GET /app/books/query?author=orwell&minReplacementCost=10&sort=replacementCost,desc&page=0&size=12` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}],"totalElements":1,"totalPages":1,...}}` |
-| `GET` | `/app/books/{id}` | Fetches a single book by ID | `GET /app/books/1` | `{"success":true,"message":"Success","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}}` |
-| `POST` | `/app/books/add` | Creates a new book using `BookRequestDTO` validation | `POST /app/books/add` with `{"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99}` | `{"success":true,"message":"Book Added Successfully","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","description":"A novel about surveillance.","replacementCost":19.99},"timestamp":172...}` |
-| `PATCH` | `/app/books/{id}` | Partially updates a book | `PATCH /app/books/1` with `{"replacementCost":15.99}` | `{"success":true,"message":"Book updated successfully","data":{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":15.99},"timestamp":172...}` |
-| `PUT` | `/app/books/{id}` | Replaces a book completely | `PUT /app/books/1` with full DTO payload | `{"success":true,"message":"Book updated successfully","data":{"id":1,"title":"Animal Farm","author":"George Orwell","genre":"Political Satire","description":"A farmyard allegory.","replacementCost":12.99},"timestamp":172...}` |
-| `DELETE` | `/app/books/{id}` | Deletes a book by ID | `DELETE /app/books/1` | `{"success":true,"message":"Book deleted successfully","timestamp":172...}` |
-| `GET` | `/app/books/search?type=title&value=orwell` | Searches by title, author, genre, or replacement cost (paginated) | `GET /app/books/search?type=author&value=orwell&page=0&size=12` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}}` |
-| `GET` | `/app/books/budget?maxReplacementCost=20` | Returns a page of copies with a replacement cost at or below the given value | `GET /app/books/budget?maxReplacementCost=20` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}}` |
-| `GET` | `/app/books/sorted?category=title` | Returns a page sorted ascending by title, author, genre, replacement cost, or id | `GET /app/books/sorted?category=replacementCost&page=0&size=12` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}}` |
-| `GET` | `/app/books/genre` | Returns genre distribution counts | `GET /app/books/genre` | `{"success":true,"message":"Success","data":{"Fiction":3,"Fantasy":2,"Dystopian":1}}` |
-| `GET` | `/app/books/replacement-cost?minReplacementCost=10&maxReplacementCost=25` | Returns a page of books within a replacement cost range | `GET /app/books/replacement-cost?minReplacementCost=10&maxReplacementCost=25` | `{"success":true,"message":"Success","data":{"content":[{"id":1,"title":"1984","author":"George Orwell","genre":"Dystopian","replacementCost":19.99}],"number":0,"size":12,"totalElements":1,"totalPages":1}}` |
-| `GET` | `/app/books/stats` | Returns total books, total replacement cost, and the copy with the highest replacement cost | `GET /app/books/stats` | `{"success":true,"message":"Success","data":{"totalBooks":6,"totalReplacementCost":123.45,"highestReplacementCostBook":{"id":4,"title":"...","author":"...","genre":"...","replacementCost":49.99}}}` |
-| `GET` | `/app/books/stats/average-replacement-cost` | Returns the average replacement cost of all books | `GET /app/books/stats/average-replacement-cost` | `{"success":true,"message":"Average replacement cost of collection","data":20.50,"timestamp":172...}` |
-| `GET` | `/app/books/stats/count` | Returns the total number of books | `GET /app/books/stats/count` | `{"success":true,"message":"Book Collection Count","data":6,"timestamp":172...}` |
-
-Unauthenticated operational probes are `GET /livez` and `GET /readyz`. Readiness includes the database health indicator; details are hidden. Actuator `health` and the Prometheus scrape endpoint (`/actuator/prometheus`) are served only on a private management port (`MANAGEMENT_SERVER_PORT`, default 9091), which Compose does not publish. Every response carries an `X-Request-Id` header that also appears in logs and in the `requestId` field of error bodies.
-
-`/app/books/query` combines supplied filters with AND. Text matching is case-insensitive literal substring matching; `minReplacementCost` and `maxReplacementCost` are inclusive and either may be used alone. Without filters, it returns all books as a page. Pages start at 0, default to size 12 and `id` ascending, and are capped at size 100. Sort with `sort=property,direction` using `id`, `title`, `author`, `genre`, or `replacementCost`; invalid ranges, decimals, or sort fields return HTTP 400. The `replacementCost` JSON field is the recorded amount used to replace one physical copy; it does not trigger a charge. `description` is optional and limited to 2,000 characters. Existing list routes retain their response shapes apart from the renamed and added book fields. `BookResponseDTO` also includes `copyStatus` (`IN_COLLECTION` or `LOST`); the compact book examples above omit it for readability.
-
-### Authentication API
-
-`POST /app/auth/login` accepts a university ID and password and returns an HS256 access token valid for at most 15 minutes. The response is marked `no-store`; send the token only in `Authorization: Bearer <token>`. Wrong passwords and unknown university IDs receive the same generic 401. `LIBRO_JWT_SECRET_BASE64` must be supplied outside source control and decode to at least 32 bytes. See the [JWT Authentication Design](reference/jwt-authentication-design.md) for claim, exception, and validation boundaries.
-
-| Method | Path | Description | Request | Response |
-| --- | --- | --- | --- | --- |
-| `POST` | `/app/auth/login` | Public login; authenticates through Spring Security and BCrypt | `{"universityId":"2025-4321","password":"<password>"}` | `{"success":true,"message":"Success","data":{"accessToken":"<signed-token>","tokenType":"Bearer","expiresIn":900}}` |
-
-### User API
-
-Signup is public and always creates a student. Only librarians can create faculty and library assistant accounts. Administrators can manage student and faculty accounts; librarians can also manage library assistant accounts. Students and faculty can manage their own profiles and passwords and delete their own accounts. Staff cannot manage another librarian account or delete their own account. Other application routes require a valid JWT Bearer token. See the [role permissions table](reference/security-roles-and-jwt-guide.md#role-policy) for the full policy.
-
-| Method | Path | Description | Example Request | Example Response |
-| --- | --- | --- | --- | --- |
-| `GET` | `/app/users` | Lists student/faculty accounts for administrators; librarians also see library assistants | `GET /app/users?page=0&size=12` | `ApiResponse<Page<UserResponseDTO>>` |
-| `GET` | `/app/users/{universityId}` | Gets own profile or a profile visible to the caller's staff role | `GET /app/users/2025-4321` | `ApiResponse<UserResponseDTO>` |
-| `POST` | `/app/users/signup` | Creates a user account | `POST /app/users/signup` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
-| `POST` | `/app/users/faculty` | Librarian creates a faculty account | `POST /app/users/faculty` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
-| `PATCH` | `/app/users/{universityId}` | Updates supplied profile fields | `PATCH /app/users/2025-4321` with `UserCreateUpdateDTO` | `ApiResponse<UserResponseDTO>` |
-| `PUT` | `/app/users/{universityId}` | Replaces profile fields | `PUT /app/users/2025-4321` with `UserReplaceRequest` | `ApiResponse<UserResponseDTO>` |
-| `PUT` | `/app/users/{universityId}/password` | Changes own password or resets a permitted account's password as staff | `PUT /app/users/2025-4321/password` with `ChangePasswordDTO` | `ApiResponse<Void>` |
-| `DELETE` | `/app/users/{universityId}` | Owner deletes a student/faculty account; administrator deletes student/faculty; librarian also deletes library assistants | `DELETE /app/users/2025-4321` | `ApiResponse<Void>` |
-| `POST` | `/app/users/administrators` | Librarian creates a library assistant account | `POST /app/users/administrators` with `UserCreateRequestDTO` | `ApiResponse<UserResponseDTO>`, HTTP 201 |
-
-### Loan API
-
-| Method | Path | Description | Access |
-| --- | --- | --- | --- |
-| `POST` | `/app/loans/{bookId}` | Borrows one physical copy; 14-day due time | Students and faculty |
-| `PUT` | `/app/loans/{loanId}/return` | Returns caller's own active loan | Students and faculty |
-| `PUT` | `/app/loans/{loanId}/lost` | Closes a loan as lost and marks copy unavailable | Library assistants/librarians within target-role scope |
-| `GET` | `/app/loans/me` | Reads caller's paged history | All roles |
-| `GET` | `/app/loans/users/{universityId}` | Reads another user's paged loan history | Library assistants/librarians within target-role scope |
-
 ## Troubleshooting
 
 | Symptom | Likely Cause | Fix |
@@ -610,126 +298,10 @@ Signup is public and always creates a student. Only librarians can create facult
 
 The complete diagnosis, pre-release reset procedure, clean-install behavior, and production-data warning are in [Development Problems Solved](guides/development-problems-solved.md).
 
-## Data Management
+## Where to Go Next
 
-- PostgreSQL 18 stores physical book copies, user accounts, and loan history.
-- Flyway manages schema changes via versioned SQL migrations in `src/main/resources/db/migration/`.
-  - `V1__create_books_table.sql` creates the `books` table with the `created_at` column and indexes.
-  - `V2__create_users_table.sql` creates the users table with role, course, major, identity-format, uniqueness, and relationship constraints, then seeds the historical `ADMINISTRATOR` account (library-assistant role) from `LIBRO_ADMIN_PASSWORD_HASH`.
-  - `V3__add_librarian_role.sql` adds `LIBRARIAN` to the accepted database roles and applies the staff academic-field rules.
-  - `V4__add_loans_and_copy_status.sql` adds physical-copy status, loan history, state constraints, deletion restrictions, and the one-active-loan-per-copy index.
-  - `V5__describe_books_and_rename_price_to_replacement_cost.sql` adds optional descriptions and renames stored values to replacement costs without changing the amounts.
-- Compose no longer mounts SQL into PostgreSQL's init directory; Flyway is the only schema owner.
-- V1 uses `BIGSERIAL`, matching the entity's Java `Long`/SQL `BIGINT` mapping from the first migration.
-- The app uses JPA and Hibernate for entity persistence with `ddl-auto=validate`.
-- `Book.createdAt` maps to `books.created_at` and is set automatically on insert. It is intentionally omitted from `BookResponseDTO`, so clients do not receive it and cannot provide it through create, patch, or replace requests.
-- Updates rely on Hibernate dirty checking inside transactional service methods.
-- `BookRequestDTO` validates create and replacement requests; `BookPatchRequestDTO` describes optional PATCH fields. `BookResponseDTO` and `LibraryStatisticsDTO` shape book responses.
-- `BookMapper` centralizes conversion between entities and DTOs.
-- `UserService` normalizes identity values, checks duplicates, enforces academic rules, validates create requests with Jakarta Validator, enforces the 8–72 character password policy and BCrypt's 72 UTF-8 byte input limit, and persists only BCrypt-hashed passwords. Login applies the same byte limit before password verification.
-- `UserMapper` keeps password fields out of `UserResponseDTO`.
-- `UserAPI` delegates user operations to `UserService` and returns DTOs rather than entities. Its routing and serialization have MVC-slice coverage.
-
-## Testing
-
-The project uses JUnit 5, Mockito, AssertJ, Jakarta Validator, Testcontainers, and JaCoCo. The Docker-free suite covers authentication, book, user, and loan service/MVC contracts, generated OpenAPI security-sensitive schemas, DTOs, mappings, and exception handling. The opt-in PostgreSQL profile checks Flyway startup, Hibernate schema validation, repository queries/projections, transaction dirty checking, database constraints, loan lifecycle persistence, and the race between catalog edits and lost-loan resolution. `LoanConcurrencyIT` races simultaneous checkouts to prove the three-active-loan limit and one-borrower-per-copy rules under real PostgreSQL locking. The V3-to-V4 migration upgrade test remains outstanding. PostgreSQL integration execution requires Docker and a valid test-only `LIBRO_ADMIN_PASSWORD_HASH` for Flyway V2. Set the variable in the environment inherited by Maven; Maven does not load Docker Compose's `.env` file.
-
-Tests are grouped by test scope and domain: `src/test/java/unit/auth`, `src/test/java/unit/loan`, `src/test/java/unit/book`, `src/test/java/unit/user`, and `src/test/java/unit/global`; PostgreSQL integration tests live under `src/test/java/integration/book`, `src/test/java/integration/loan`, and `src/test/java/integration/user`. Keep new tests with the domain they exercise. Shared PostgreSQL test configuration lives directly under `integration` so all integration classes use one Spring context and container.
-
-- `BookTest` verifies book construction and request DTO constraints.
-- `BookApiMvcTest` verifies routes, status codes, JSON response shapes, invalid request payloads, pagination/query binding, and global exception responses without starting JPA or PostgreSQL.
-- `BookMapperTest` verifies field mapping, null handling, list mapping, empty-list handling, and that `createdAt` is omitted from response JSON.
-- `BookServiceTest` verifies service rules, repository interaction, search, sorting, replacement-cost behavior, typed statistics projections, genre-distribution mapping, and dirty-checking expectations.
-- `UserApiMvcTest` verifies all user routes, request binding and validation, paging defaults, envelope response shapes, 404/409 error responses, and that public responses do not expose password fields. It mocks `UserService` and does not start JPA or PostgreSQL.
-- `SecurityFlowMvcTest` exercises the real filter chain, CORS preflight allow/deny rules, BCrypt login, JWT issue/validation, claim/signature/algorithm/transport edge cases, role denials, and Basic rejection with a mocked user repository.
-- `HealthEndpointMvcTest` checks public readiness output and protects unexposed Actuator paths.
-- `PublicRouteRateLimitInterceptorTest` checks per-client quotas, Spring forwarded-header address handling, and rejection of spoofed forwarding headers when proxy handling is off.
-- `JwtConfigurationTest` verifies that malformed or undersized JWT signing keys fail startup and that the minimum accepted key decodes correctly.
-- `LoanServiceTest` covers checkout rules, active-loan/overdue rejection, return ownership, staff loss scope, history permissions, and pagination restrictions.
-- `LoanSecurityMvcTest` exercises loan route role rules, principal-derived identity, authenticated history, and stateless requests without CSRF through the real filter chain.
-- `OpenApiMvcTest` generates `/v3/api-docs` in an MVC slice and checks the Bearer scheme, public signup/login, login responses, representative routes, write-only password inputs, absence of password fields in public responses, and loan-history pagination/sort documentation without Docker.
-- `GlobalExceptionHandlerTest` directly invokes the exception handlers and verifies HTTP status, public error fields, validation-message aggregation, and protection against leaking parser, database, constraint, or fallback exception details.
-- `UserServiceTest` verifies partial-update normalization, DTO and business validation, password verification and encoding, the 72 UTF-8 byte BCrypt boundary, unchanged-email handling, duplicate-email rejection, and dirty-checking expectations. Academic combinations still need focused coverage; `UserPersistenceIT` covers selected real-database paths.
-- `BookPersistenceIT` runs only with the `integration` profile and Docker. It checks fresh V1-to-V5 migration/schema validation, the V4-to-V5 value-preserving upgrade, PostgreSQL book queries and projections, committed PATCH/PUT updates, and that an edit waiting for a concurrent lost-loan resolution preserves the copy's `LOST` status.
-- `LoanPersistenceIT` checks returned history persistence, the one-active-loan-per-copy database index, and deletion restrictions for borrowers and copies with history.
-- `UserPersistenceIT` checks normalized user creation, stored password hashes, committed profile/password changes, and PostgreSQL uniqueness and ID-format constraints.
-- `LibrarianBootstrapIT` checks one-time first-librarian creation, repeated-start idempotence, unset configuration, and invalid bootstrap inputs. Integration classes share a PostgreSQL 18 container and serialize access to it; running them requires Docker.
-
-### Unit-test performance
-
-The suite is configured for fast, deterministic feedback:
-
-- Test classes run concurrently through `junit-platform.properties`, while methods inside each class remain sequential to protect shared fixtures.
-- PostgreSQL integration classes use a shared JUnit resource lock so their shared container state cannot race across classes. Read-only schema checks do no cleanup; repository query fixtures roll back, and write tests clean up their rows.
-- `BookServiceTest` creates its repository mock and service once, resets the mock before each scenario, and uses the real stateless `BookMapper`.
-- `BookTest` creates one Jakarta `ValidatorFactory` for the class and closes it after all validation tests.
-- `GlobalExceptionHandlerTest` uses one stateless handler and real Spring exception objects instead of unnecessary mocks.
-- `logback-test.xml` disables application logs during tests so expected exception scenarios do not spend time printing stack traces.
-
-Use `.\mvnw.cmd test` for incremental feedback and `.\mvnw.cmd clean verify` for the default verification lifecycle on Windows; use `./mvnw` on Linux/macOS. Read test counts and failures from the reports produced by that run under `target/surefire-reports/`; the opt-in integration profile writes its results under `target/failsafe-reports/`. Build times depend on the machine, cache, and dependency downloads.
-
-Run all unit tests:
-
-```powershell
-.\mvnw.cmd clean test
-```
-
-Run PostgreSQL integration tests (requires Docker; the test-only BCrypt hash for Flyway V2 is in test properties):
-
-```powershell
-.\mvnw.cmd -Pintegration verify
-```
-
-Run only the global exception-handler tests:
-
-```powershell
-.\mvnw.cmd -Dtest=GlobalExceptionHandlerTest test
-```
-
-Run only the user API MVC contract tests:
-
-```powershell
-.\mvnw.cmd -Dtest=UserApiMvcTest test
-```
-
-Run only book unit/MVC tests:
-
-```powershell
-.\mvnw.cmd -Dtest=BookApiMvcTest,BookMapperTest,BookServiceTest,BookTest test
-```
-
-Generate the JaCoCo report at `target/site/jacoco/index.html`:
-
-```powershell
-.\mvnw.cmd clean verify
-```
-
-The default suite includes plain unit tests and MVC slices. It verifies JWT login, token validation, role mapping, Basic rejection, and request protection through the real filter chain, while real JPA transactions, Flyway migrations, and PostgreSQL constraints require the Docker-backed integration profile. JWT requires no database migration.
-
-Validation failures retain the `error`, `details`, `timestamp`, and `statusCode` fields and additionally return a structured map:
-
-```json
-{
-  "error": "Validation failed",
-  "details": "Title cannot be empty, Replacement cost must be greater than 0",
-  "timestamp": 1720000000000,
-  "statusCode": 400,
-  "fieldErrors": {
-    "title": "Title cannot be empty",
-    "replacementCost": "Replacement cost must be greater than 0"
-  }
-}
-```
-
-## Problems I Solved
-
-I worked through problems at several boundaries of the system and fixed them where they originated:
-
-- **Database startup and schema drift:** aligned the PostgreSQL schema with the Java entity model, made Flyway the schema authority, and kept Hibernate validation enabled.
-- **Unreliable container startup:** added PostgreSQL health checks and made the application wait for the database to become ready.
-- **Create, replace, and partial-update validation:** separated PUT's full-replacement rules from PATCH's optional-field behavior, with service-level validation as a second boundary.
-- **Fragile aggregate results:** replaced positional query results with typed projections for collection statistics and genre counts.
-- **Unbounded filtered results:** added a paginated query that combines text and replacement cost filters while validating sort fields.
-- **Account and credential safety:** normalized institutional IDs and emails, enforced account rules, stored BCrypt hashes, and kept password data out of response DTOs.
-
-The [Development Problems Solved](guides/development-problems-solved.md) write-up gives the symptoms, reasoning, fixes, and verification details for these problems. It also distinguishes unit/MVC evidence from PostgreSQL integration checks that still require Docker.
+- [Engineering Reference](reference/engineering-reference.md): repository map, endpoint inventory, configuration, build and test workflows.
+- [Role and JWT guide](reference/security-roles-and-jwt-guide.md) and [JWT design](reference/jwt-authentication-design.md): authentication details.
+- [Loan guide](guides/loan.md): the loan lifecycle, schema, and API.
+- [CI/CD and DevOps](devops/ci-cd.md) and the [runbook](devops/runbook.md): pipeline, deployment, and operations.
+- [Development Problems Solved](guides/development-problems-solved.md): the problems behind the current design and how each was verified.

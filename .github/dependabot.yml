@@ -1,5 +1,8 @@
 # Dependabot opens weekly pull requests for outdated dependencies so security releases are not missed.
 # Spring Boot-managed libraries should be updated by raising the parent version in pom.xml, not individually.
+# Not covered (update by hand when the related Dependabot PR lands):
+#   - the Trivy image digest in scripts/ci/trivy-scan.sh
+#   - the PostgreSQL digest in src/test/java/app/support/PostgresTestConfig.java (keep it equal to docker-compose.yml)
 version: 2
 updates:
   # Maven dependencies and plugins declared in pom.xml.

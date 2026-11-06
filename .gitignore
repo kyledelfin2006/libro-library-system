@@ -101,6 +101,8 @@ Thumbs.db
 .run/
 .kilo/
 .claude/
+.codex/
+.agents/
 
 # ============================================
 # ARCHIVES AND PROCESS FILES
