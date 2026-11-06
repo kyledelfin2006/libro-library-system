@@ -27,8 +27,7 @@ Libro is a Spring Boot REST API for the library of Aklan State University – Co
 | Build and test | Maven, JUnit 5, Mockito, Testcontainers, JaCoCo |
 | Delivery | Docker, Docker Compose, Caddy, GitHub Actions, Trivy |
 
-
-Developer: Aldrin Kyle Delfin
+My team, **CyberGuild**, placed among the top five teams in the Hack4Gov 5 Regional Qualifying Round, which focused on ethical hacking and cybersecurity principles. Main developer: **Aldrin Kyle Delfin**.
 
 ## Run locally
 
@@ -62,9 +61,9 @@ Every pull request and every push to `main` runs three parallel GitHub Actions c
 | `integration` | Flyway migrations, schema validation, and loan concurrency against PostgreSQL 18 |
 | `security` | Trivy finds no fixable HIGH or CRITICAL issues in dependencies or the container image |
 
-The production target is a single **OCI Always Free Ampere A1 VM** running the API, PostgreSQL, and a Caddy TLS proxy under Docker Compose. The planned delivery flow builds and scans one immutable ARM64 image, publishes it by commit SHA, and deploys it through an approved `production` environment. `scripts/deploy.sh` already does the deploy step by hand: it backs up the database, starts the new image, runs a smoke test (readiness, login, authenticated read, anonymous rejection), and restarts the previous image if anything fails. `backup.sh`, `restore.sh`, and `seed-demo.sh` cover recovery and demo data. The pipeline stages, environments, secrets handling, rollback, and monitoring are in [CI/CD and DevOps](docs/devops/ci-cd.md); provisioning steps are in the [Operations Runbook](docs/devops/runbook.md).
+The production target is a single **OCI Always Free Ampere A1 VM** running the API, PostgreSQL, and a Caddy TLS proxy under Docker Compose. After CI passes on `main`, the CD workflow builds and scans one immutable ARM64 image on a native ARM runner, publishes it to GitHub Container Registry by commit SHA, and deploys that digest through an approved `production` environment once the VM exists. `scripts/deploy.sh` already does the deploy step by hand: it backs up the database, starts the new image, runs a smoke test (readiness, login, authenticated read, anonymous rejection), and restarts the previous image if anything fails. `backup.sh`, `restore.sh`, and `seed-demo.sh` cover recovery and demo data. The pipeline stages, environments, secrets handling, rollback, and monitoring are in [CI/CD and DevOps](docs/devops/ci-cd.md); provisioning steps are in the [Operations Runbook](docs/devops/runbook.md).
 
-**The service is not deployed yet:** the scripts were rehearsed against a local Docker stack, but no VM is provisioned and no CD workflow exists.
+**The service is not deployed yet:** the scripts were rehearsed against a local Docker stack and the image-publishing workflow is in place, but no VM is provisioned, so the deploy job is switched off.
 
 ## Repo map
 
@@ -93,7 +92,8 @@ Start with [Architecture and Reference](docs/architecture.md) for how the system
 | CI (`test`, `integration`, `security`) | Running on every pull request and push to `main` |
 | Container image and Compose stack | Implemented, with health checks |
 | Deploy, rollback, backup, and smoke-test scripts; runbook | Implemented and rehearsed locally |
-| OCI VM and CD workflow | Not provisioned / not built; see the [proposal](proposals/0001-pre-oci-deployment-improvements.md) |
+| CD workflow (ARM64 build, scan, publish, gated deploy) | Implemented; deploy job off until the VM exists |
+| OCI VM | Not provisioned; see the [proposal](proposals/0001-pre-oci-deployment-improvements.md) |
 | Open items | V3-to-V4 migration upgrade test on PostgreSQL; browser review of the OpenAPI/Swagger output; TLS with a real domain, login-failure and rate-limit alerts, and an independent security review before public exposure |
 
 The [Development Roadmap](docs/reference/ROADMAP.md) tracks the detail.

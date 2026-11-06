@@ -1,6 +1,6 @@
 # 0001 — Pre-OCI deployment improvements
 
-Status: accepted (Stage 0–1 implemented in this change; Stages 2–3 open)
+Status: accepted (Stages 0–2 implemented; Stage 3 open)
 
 ## Context
 
@@ -60,4 +60,5 @@ Libro's API, schema, tests, and CI are in place, but nothing is deployed. The ta
 - **Untested on OCI.** The scripts are tested against a local Docker stack, not an OCI host. The first provisioning is the real test.
 - **Public demo credentials.** Demo patron accounts are published by design. They hold no staff rights, and their data is synthetic and resettable from the seed script.
 - **Seeded administrator.** Flyway V2 always creates `0000-0001`. Production gives it a unique hash; changing that is a separate migration decision.
-- **Open:** which branch-protection rules `main` requires (verify in repository settings), and whether Stage 2 uses SSH or OCI workload identity.
+- **Open:** which branch-protection rules `main` requires (verify in repository settings).
+- **Resolved:** Stage 2 deploys over SSH with a dedicated key and a pinned host key, not OCI workload identity, because the pipeline needs no OCI API access.

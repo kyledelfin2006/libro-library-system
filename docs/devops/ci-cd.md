@@ -9,7 +9,8 @@ Libro is validated by an implemented GitHub Actions pipeline and packaged as a c
 | TLS reverse proxy (Caddy) | Implemented as an opt-in Compose profile |
 | Operations scripts: deploy with rollback, smoke test, backup and restore, demo seed ([`scripts/`](../../scripts/)) | Implemented; rehearsed against a local Docker stack, not yet on OCI |
 | Production Compose override and [runbook](runbook.md) | Implemented |
-| Continuous delivery workflow to OCI | Designed below; no deploy workflow or provisioned VM exists |
+| Continuous delivery workflow ([`cd.yml`](../../.github/workflows/cd.yml)): ARM64 build, scan, publish, gated deploy | Implemented; the deploy job stays off until the VM exists and `OCI_DEPLOY_ENABLED` is set |
+| OCI VM | Not provisioned |
 
 ## Target environment
 
@@ -53,12 +54,14 @@ The workflow runs on GitHub-hosted Ubuntu runners for every pull request (any ba
 
 Controls: workflow permissions are `contents: read`, no deployment credentials exist in CI, third-party actions are pinned to commit SHAs, Trivy runs from a versioned official image, and test reports are kept for 14 days. Requiring all three checks before merging is a GitHub branch-protection setting, separate from the workflow file.
 
-### Continuous delivery (design)
+### Continuous delivery (implemented, deploy gated)
 
-1. **Gate.** The deploy job runs only for `main` after `test`, `integration`, and `security` succeed.
-2. **Build once.** Build a `linux/arm64` image, scan that exact image, and publish it tagged with the commit SHA. The server pulls that artifact by digest and never rebuilds or uses a mutable `latest` tag.
-3. **Approve.** The first releases use a manually approved `production` environment (or `workflow_dispatch`). Automatic deployment on every `main` push waits until a backup restore and a rollback have been rehearsed.
-4. **Deploy.** Over SSH, run `scripts/deploy.sh --image <registry reference pinned by digest>`. It backs up PostgreSQL, records the previous image, starts the stack from the base Compose file plus [`infra/docker-compose.prod.yml`](../../infra/docker-compose.prod.yml), and waits for health. Until the workflow exists, the same script builds the image on the VM from the checked-out commit.
+[`cd.yml`](../../.github/workflows/cd.yml) is a separate workflow that extends CI; it does not replace it. It has two jobs.
+
+1. **Gate.** The `image` job starts only when the `CI` workflow finished successfully for a push to `main` (or on a manual run). Pull requests that change `cd.yml` or the Dockerfile run a build-and-scan dry run with no push.
+2. **Build once.** On a native GitHub-hosted ARM64 runner it builds one `linux/arm64` image, scans that exact image with Trivy (fixable HIGH or CRITICAL findings fail the release), and publishes it to GitHub Container Registry tagged with the full commit SHA. The job outputs the immutable digest. The server pulls that digest and never rebuilds, and no mutable `latest` tag is used.
+3. **Approve.** The `deploy` job is skipped unless the repository variable `OCI_DEPLOY_ENABLED` is `true`, and it is held by the `production` environment's required reviewers. Automatic deployment on every `main` push waits until a backup restore and a rollback have been rehearsed on the VM.
+4. **Deploy.** The job connects over SSH with a pinned host key, checks out the validated commit in `/opt/libro`, and runs `scripts/deploy.sh --image <digest>`, which refuses a reference without a digest. The script backs up PostgreSQL, records the previous image, starts the stack from the base Compose file plus [`infra/docker-compose.prod.yml`](../../infra/docker-compose.prod.yml), and waits for health. Run by hand without `--image`, the same script builds the image on the VM from the checked-out commit.
 5. **Verify.** `scripts/smoke.sh` checks `/readyz` and `/livez`, logs in as the public demo student, performs an authenticated read, and confirms that an anonymous read is rejected. Any failure triggers the rollback below; success records the new image as live.
 
 ## Environments
@@ -77,7 +80,7 @@ There is no separate staging environment: one low-traffic VM does not justify a 
 - The application needs a PostgreSQL password, a Base64 JWT signing key of at least 32 bytes (`LIBRO_JWT_SECRET_BASE64`), and BCrypt hashes for the bootstrap accounts. Only hashes are accepted; plaintext account passwords never appear in configuration.
 - On the VM, the production `.env` is owned by the deploy user with `chmod 600`; `scripts/deploy.sh` refuses to run if the file is group- or world-readable.
 - Staff accounts on the live demo (`0000-0000` librarian, `0000-0001` administrator) use strong, unique passwords that exist only on the host. The only published credentials are patron-only demo logins ([Demo Accounts](../guides/demo-accounts.md)).
-- GitHub Actions holds only the deploy SSH key and host details, as `production` environment secrets scoped to the deploy job. The default workflow permission stays `contents: read`; `packages: write` goes only to the image-publishing job, and `id-token: write` only if OCI workload identity federation replaces long-lived OCI API keys. See [GitHub deployment environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments) and [OCI workload identity federation](https://docs.oracle.com/en-us/iaas/Content/Identity/api-getstarted/token_exchange_grant_type_workload_id-federation.htm).
+- GitHub Actions holds only four `production` environment secrets, used by the deploy job: `OCI_HOST`, `OCI_USER`, `OCI_SSH_KEY` (a dedicated deploy key), and `OCI_SSH_KNOWN_HOSTS` (the pinned host key). The default workflow permission stays `contents: read`; `packages: write` goes only to the image job, which uses the built-in `GITHUB_TOKEN`. The workflow uses no third-party actions beyond the SHA-pinned checkout. A dedicated SSH key is simpler than OCI workload identity federation here, because the pipeline needs no OCI API access. See [GitHub deployment environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
 - Logs and API errors never contain password hashes, stack traces, or credentials.
 
 ## Rollback

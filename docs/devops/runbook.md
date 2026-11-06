@@ -90,7 +90,20 @@ The restore asks you to type the database name, takes a safety backup, replaces 
 - **Manual rollback.** The previous image tag is in `/mnt/libro/state/previous-image`. A script rollback restarts it; if the failed release applied a Flyway migration, restore the pre-deploy backup instead, because migrations are forward-only.
 - **Never** run `docker compose down -v`; it deletes the database volume.
 
-## 7. Troubleshooting
+## 7. Enable automated deployment
+
+[`cd.yml`](../../.github/workflows/cd.yml) publishes an ARM64 image after every successful CI run on `main`. It deploys only after you complete this one-time setup, so do it after the manual first deploy in section 4 works.
+
+1. **Make the package pullable.** After the first publish, open the `libro-api` package on GitHub and set its visibility to **public**, because the VM pulls the image without credentials. The image contains no secrets.
+2. **Create a deploy key.** On your machine run `ssh-keygen -t ed25519 -N "" -f libro_deploy`, append `libro_deploy.pub` to `~/.ssh/authorized_keys` of the deploy user on the VM, and keep the private key only for the next step. The user must be in the `docker` group, and the repository must be cloned at `/opt/libro` with its `.env` in place.
+3. **Pin the host key.** Run `ssh-keyscan -t ed25519 <host>` and compare the fingerprint with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` run on the VM before trusting it.
+4. **Create the environment.** In the repository settings add a `production` environment with **required reviewers** (yourself), and add the environment secrets `OCI_HOST`, `OCI_USER`, `OCI_SSH_KEY` (the private key), and `OCI_SSH_KNOWN_HOSTS` (the verified line from step 3). Delete the local key files afterwards.
+5. **Turn it on.** Add the repository variable `OCI_DEPLOY_ENABLED` with the value `true`. Each successful `main` build then waits for your approval before deploying.
+6. **Protect `main`.** Add a branch ruleset that requires the `test`, `integration`, and `security` checks, so only validated commits can be released.
+
+Keep manual approval until you have rehearsed a restore and a rollback on the VM. To pause deployments, set `OCI_DEPLOY_ENABLED` to anything other than `true`; image publishing continues.
+
+## 8. Troubleshooting
 
 | Symptom | Check |
 | --- | --- |
