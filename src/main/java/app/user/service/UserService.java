@@ -1,10 +1,11 @@
 package app.user.service;
 
+import app.global.exception.InvalidRequestException;
 import app.user.dto.UserCreateRequestDTO;
-import app.user.dto.UserCreateUpdateDTO;
-import app.user.dto.UserReplaceRequest;
+import app.user.dto.UserPatchRequestDTO;
+import app.user.dto.UserReplaceRequestDTO;
 import app.user.dto.UserResponseDTO;
-import app.user.dto.ChangePasswordDTO;
+import app.user.dto.PasswordChangeRequestDTO;
 import app.user.entity.User;
 import app.user.entity.enums.UserCourse;
 import app.user.entity.enums.UserRole;
@@ -26,7 +27,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -35,12 +35,16 @@ import java.util.Set;
  * conversion.
  *
  * <p>This service is the boundary between the user feature's controller and
- * repository. Controllers should pass request DTOs to this class and receive
+ * repository. Controllers pass request DTOs to this class and receive
  * response DTOs rather than JPA entities.</p>
+ * <p>Who may act on which account is decided by {@link UserAccessPolicy}; this class
+ * loads the target, asks the policy, and then applies the change. Reads default to a
+ * read-only transaction; writes override it with {@code @Transactional}.</p>
  */
 @Slf4j
 @Service
 @AllArgsConstructor
+@Transactional(readOnly = true)
 public class UserService {
 
     private static final Set<String> SORTABLE_USER_FIELDS = Set.of(
@@ -51,6 +55,8 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final UserMapper userMapper;
     private final Validator validator;
+    /** Owner and role rules for account access; see {@link UserAccessPolicy}. */
+    private final UserAccessPolicy accessPolicy;
 
     /**
      * Validates and persists a new user.
@@ -62,7 +68,7 @@ public class UserService {
      *
      * @param request the user creation request
      * @return the saved user without password data
-     * @throws IllegalArgumentException if the request or a business rule is invalid
+     * @throws InvalidRequestException if the request or a business rule is invalid
      */
     @Transactional
     public UserResponseDTO createUser(UserCreateRequestDTO request) {
@@ -82,7 +88,7 @@ public class UserService {
             UserCreateRequestDTO request,
             Collection<? extends GrantedAuthority> authorities
     ) {
-        requireLibrarian(authorities);
+        accessPolicy.requireLibrarian(authorities);
         return createUserWithRole(request, UserRole.FACULTY);
     }
 
@@ -99,7 +105,7 @@ public class UserService {
             UserCreateRequestDTO request,
             Collection<? extends GrantedAuthority> authorities
     ) {
-        requireLibrarian(authorities);
+        accessPolicy.requireLibrarian(authorities);
         return createUserWithRole(request, UserRole.ADMINISTRATOR);
     }
 
@@ -112,7 +118,7 @@ public class UserService {
      */
     private UserResponseDTO createUserWithRole(UserCreateRequestDTO request, UserRole role) {
         if (request == null) {
-            throw new IllegalArgumentException("User request cannot be null");
+            throw new InvalidRequestException("User request cannot be null");
         }
 
         // validate request
@@ -129,17 +135,17 @@ public class UserService {
 
         // Character count does not bound multibyte passwords to BCrypt's 72-byte input limit.
         if (!PasswordPolicy.isWithinBcryptByteLimit(request.getPassword())) {
-            throw new IllegalArgumentException("Password must not exceed 72 UTF-8 bytes");
+            throw new InvalidRequestException("Password must not exceed 72 UTF-8 bytes");
         }
 
         // check if university id is already used within the system
         if (userRepository.existsByUniversityId(universityId)) {
-            throw new IllegalArgumentException("University ID is already registered");
+            throw new InvalidRequestException("University ID is already registered");
         }
 
         // check if email is already used within the system
         if (userRepository.existsByEmailIgnoreCase(email)) {
-            throw new IllegalArgumentException("Email is already registered");
+            throw new InvalidRequestException("Email is already registered");
         }
 
         // enforces the relationship between role, course, and IT major
@@ -178,19 +184,19 @@ public class UserService {
      * @param authorities roles granted to the authenticated caller
      * @return the updated public profile without password data
      * @throws AccessDeniedException if the caller cannot manage the target account
-     * @throws IllegalArgumentException if the request or profile values are invalid
+     * @throws InvalidRequestException if the request or profile values are invalid
      * @throws UserNotFoundException if the target account does not exist
      */
     @Transactional
     public UserResponseDTO replaceUserProfile(
             String callerId,
             String targetId,
-            UserReplaceRequest request,
+            UserReplaceRequestDTO request,
             Collection<? extends GrantedAuthority> authorities
     ) {
         // Reject a missing body before reading any of its fields.
         if (request == null) {
-            throw new IllegalArgumentException("User profile cannot be null");
+            throw new InvalidRequestException("User profile cannot be null");
         }
 
         // Normalize both IDs so the owner comparison uses the same format as storage.
@@ -202,7 +208,7 @@ public class UserService {
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
         // Check ownership or staff permission before exposing or changing profile data.
-        requireAccountAccess(normalizedCallerId, normalizedTargetId, user, authorities);
+        accessPolicy.requireAccountAccess(normalizedCallerId, normalizedTargetId, user.getUserRole(), authorities);
 
         // Require every field for this full replacement and enforce DTO constraints.
         validateRequest(request);
@@ -223,7 +229,7 @@ public class UserService {
         // An unchanged email is valid; a different email must be unique.
         if (!email.equals(user.getEmail())
                 && userRepository.existsByEmailIgnoreCase(email)) {
-            throw new IllegalArgumentException("Email is already registered");
+            throw new InvalidRequestException("Email is already registered");
         }
 
         // Replace only profile fields; university ID and account fields stay fixed.
@@ -249,19 +255,19 @@ public class UserService {
      * @param authorities roles granted to the authenticated caller
      * @return the updated public profile without password data
      * @throws AccessDeniedException if the caller cannot manage the target account
-     * @throws IllegalArgumentException if the request or a supplied value is invalid
+     * @throws InvalidRequestException if the request or a supplied value is invalid
      * @throws UserNotFoundException if the target account does not exist
      */
     @Transactional
     public UserResponseDTO updateUser(
             String callerId,
             String targetId,
-            UserCreateUpdateDTO request,
+            UserPatchRequestDTO request,
             Collection<? extends GrantedAuthority> authorities
     ) {
         // Reject a missing request before reading any supplied fields.
         if (request == null) {
-            throw new IllegalArgumentException("User update request cannot be null");
+            throw new InvalidRequestException("User update request cannot be null");
         }
 
         // Normalize both IDs so authorization compares canonical university IDs.
@@ -273,10 +279,10 @@ public class UserService {
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
         // Prevent a caller from changing another account without owner or staff permission.
-        requireAccountAccess(normalizedCallerId, normalizedTargetId, user, authorities);
+        accessPolicy.requireAccountAccess(normalizedCallerId, normalizedTargetId, user.getUserRole(), authorities);
 
         // Normalize supplied values without changing the request object.
-        UserCreateUpdateDTO normalizedRequest = new UserCreateUpdateDTO(
+        UserPatchRequestDTO normalizedRequest = new UserPatchRequestDTO(
                 trimNullable(request.getFirstName()),
                 trimNullable(request.getLastName()),
                 normalizeMiddleInitial(request.getMiddleInitial()),
@@ -300,7 +306,7 @@ public class UserService {
         if (newEmail != null
                 && !newEmail.equals(user.getEmail())
                 && userRepository.existsByEmailIgnoreCase(newEmail)) {
-            throw new IllegalArgumentException("Email is already registered");
+            throw new InvalidRequestException("Email is already registered");
         }
 
         // Apply only supplied fields.
@@ -340,7 +346,7 @@ public class UserService {
      * @param request current password for an owner change and the new password
      * @param authorities roles granted to the authenticated caller
      * @throws AccessDeniedException if the caller cannot manage the target account
-     * @throws IllegalArgumentException if the request is missing or the current password is incorrect
+     * @throws InvalidRequestException if the request is missing or the current password is incorrect
      * @throws UserNotFoundException if the target account does not exist
      * @throws ConstraintViolationException if the new password violates policy
      */
@@ -348,12 +354,12 @@ public class UserService {
     public void updatePassword(
             String callerId,
             String targetId,
-            ChangePasswordDTO request,
+            PasswordChangeRequestDTO request,
             Collection<? extends GrantedAuthority> authorities
     ) {
         // Reject a missing body before reading either password.
         if (request == null) {
-            throw new IllegalArgumentException("Password update request cannot be null");
+            throw new InvalidRequestException("Password update request cannot be null");
         }
 
         // Reject malformed passwords before querying the account. This also protects
@@ -362,7 +368,7 @@ public class UserService {
 
         // Do not let BCrypt silently truncate a multibyte replacement password.
         if (!PasswordPolicy.isWithinBcryptByteLimit(request.getNewPassword())) {
-            throw new IllegalArgumentException("Password must not exceed 72 UTF-8 bytes");
+            throw new InvalidRequestException("Password must not exceed 72 UTF-8 bytes");
         }
 
         // Normalize caller and target IDs before checking ownership.
@@ -374,7 +380,7 @@ public class UserService {
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
         // Check authorization before processing the supplied password values.
-        requireAccountAccess(normalizedCallerId, normalizedTargetId, user, authorities);
+        accessPolicy.requireAccountAccess(normalizedCallerId, normalizedTargetId, user.getUserRole(), authorities);
 
         // Require a current password when the caller is changing their own password.
         if (normalizedCallerId.equals(normalizedTargetId)) {
@@ -382,7 +388,7 @@ public class UserService {
 
             // Verify the owner's current password against the stored BCrypt hash.
             if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
-                throw new IllegalArgumentException("Current password is incorrect");
+                throw new InvalidRequestException("Current password is incorrect");
             }
         }
 
@@ -471,7 +477,7 @@ public class UserService {
     private void validateIfPresent(String value, String fieldName) {
         // Treat null as omission; reject only supplied blank values.
         if (value != null && value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " cannot be blank");
+            throw new InvalidRequestException(fieldName + " cannot be blank");
         }
     }
 
@@ -483,7 +489,7 @@ public class UserService {
      * @param authorities roles granted to the authenticated caller
      * @return the caller's permitted page of public account profiles
      * @throws AccessDeniedException if the caller is not an administrator or librarian
-     * @throws IllegalArgumentException if pageable is null or contains an unsupported sort field
+     * @throws InvalidRequestException if pageable is null or contains an unsupported sort field
      */
     @Transactional(readOnly = true)
     public Page<UserResponseDTO> getAllUsers(
@@ -492,23 +498,21 @@ public class UserService {
             Collection<? extends GrantedAuthority> authorities
     ) {
         // Enforce the directory boundary even if a service caller bypasses SecurityConfig.
-        requireStaff(callerId, authorities);
+        normalizeAndValidateUniversityId(callerId);
+        accessPolicy.requireStaff(authorities);
 
         // Guard service callers that bypass Spring MVC pagination binding.
         if (pageable == null) {
-            throw new IllegalArgumentException("Pageable cannot be null");
+            throw new InvalidRequestException("Pageable cannot be null");
         }
 
         // Restrict sort properties so client input cannot select arbitrary entity fields.
         if (pageable.getSort().stream().anyMatch(order -> !SORTABLE_USER_FIELDS.contains(order.getProperty()))) {
-            throw new IllegalArgumentException("Unsupported user sort field. Allowed fields: universityId, firstName, lastName, middleInitial, email, userRole, userCourse, major");
+            throw new InvalidRequestException("Unsupported user sort field. Allowed fields: universityId, firstName, lastName, middleInitial, email, userRole, userCourse, major");
         }
 
         // Library assistants see students/faculty; the librarian also sees assistants.
-        List<UserRole> visibleRoles = isLibrarian(authorities)
-                ? List.of(UserRole.STUDENT, UserRole.FACULTY, UserRole.ADMINISTRATOR)
-                : List.of(UserRole.STUDENT, UserRole.FACULTY);
-        return userRepository.findByUserRoleIn(visibleRoles, pageable)
+        return userRepository.findByUserRoleIn(accessPolicy.visibleRoles(authorities), pageable)
                 .map(userMapper::toResponseDTO);
     }
 
@@ -521,7 +525,7 @@ public class UserService {
      * @return the matching user without password data
      * @throws AccessDeniedException if the caller cannot view the target account
      * @throws UserNotFoundException if no matching user exists
-     * @throws IllegalArgumentException if the university ID format is invalid
+     * @throws InvalidRequestException if the university ID format is invalid
      */
     @Transactional(readOnly = true)
     public UserResponseDTO getUserByUniversityId(
@@ -538,7 +542,7 @@ public class UserService {
                 .orElseThrow(() -> new UserNotFoundException(normalizedTargetId));
 
         // Check the caller's role and the target account's role before returning the profile.
-        requireAccountAccess(normalizedCallerId, normalizedTargetId, user, authorities);
+        accessPolicy.requireAccountAccess(normalizedCallerId, normalizedTargetId, user.getUserRole(), authorities);
 
         // Keep the persistence entity inside the service boundary.
         return userMapper.toResponseDTO(user);
@@ -552,7 +556,7 @@ public class UserService {
      * @param authorities roles granted to the authenticated caller
      * @throws UserNotFoundException if no matching user exists
      * @throws AccessDeniedException if neither ownership nor a staff rule permits deletion
-     * @throws IllegalArgumentException if the university ID format is invalid
+     * @throws InvalidRequestException if the university ID format is invalid
      * @throws org.springframework.dao.DataIntegrityViolationException if loan history references the account
      */
     @Transactional
@@ -570,15 +574,8 @@ public class UserService {
         User user = userRepository.findByUniversityId(normalizedTargetId)
                 .orElseThrow(() -> new UserNotFoundException(normalizedTargetId));
 
-        // Students and faculty may delete their own account.
-        boolean ownerCanDelete = normalizedCallerId.equals(normalizedTargetId)
-                && (user.getUserRole() == UserRole.STUDENT || user.getUserRole() == UserRole.FACULTY);
-
-        // Administrators may delete students/faculty; librarians may also delete assistants.
-        boolean staffCanDelete = canStaffManage(user.getUserRole(), authorities);
-        if (!ownerCanDelete && !staffCanDelete) {
-            throw new AccessDeniedException("Access denied");
-        }
+        // Students/faculty may delete themselves; staff may delete the roles they manage.
+        accessPolicy.requireCanDelete(normalizedCallerId, normalizedTargetId, user.getUserRole(), authorities);
 
         // Delete the managed entity within this transaction.
         userRepository.delete(user);
@@ -589,7 +586,7 @@ public class UserService {
      *
      * @param universityId the supplied university ID
      * @return the trimmed university ID
-     * @throws IllegalArgumentException if the ID is blank or malformed
+     * @throws InvalidRequestException if the ID is blank or malformed
      */
     private String normalizeAndValidateUniversityId(String universityId) {
         // Trim before checking the ID format used by persistence and ownership checks.
@@ -598,12 +595,12 @@ public class UserService {
                 : universityId.trim();
 
         if (normalizedUniversityId == null || normalizedUniversityId.isBlank()) {
-            throw new IllegalArgumentException("University ID cannot be null or blank");
+            throw new InvalidRequestException("University ID cannot be null or blank");
         }
 
         // Enforce the expected four-digit, dash, four-digit format.
         if (!normalizedUniversityId.matches("\\d{4}-\\d{4}")) {
-            throw new IllegalArgumentException(
+            throw new InvalidRequestException(
                     "University ID must follow this format: 2025-4321"
             );
         }
@@ -612,122 +609,10 @@ public class UserService {
     }
 
     /**
-     * Confirms that the caller is the owner or authorized staff for the target.
-     *
-     * <p>Profile reads, updates, and password operations call this after loading the target.
-     * Owners may manage their own account. Administrators may manage student and faculty
-     * accounts; librarians may also manage administrator accounts. Neither staff role may
-     * manage another librarian's account.</p>
-     *
-     * @param callerId normalized university ID of the authenticated caller
-     * @param targetId normalized university ID requested by the caller
-     * @param target loaded target user whose role determines staff boundaries
-     * @param authorities authorities granted to the authenticated caller
-     * @throws AccessDeniedException if no ownership or staff rule permits access
-     */
-    private void requireAccountAccess(
-            String callerId,
-            String targetId,
-            User target,
-            Collection<? extends GrantedAuthority> authorities
-    ) {
-        // The account owner can manage their own profile and password regardless of role.
-        if (callerId.equals(targetId)) {
-            return;
-        }
-
-        if (canStaffManage(target.getUserRole(), authorities)) {
-            return;
-        }
-
-        // Reject cross-account requests that do not meet the rules above.
-        throw new AccessDeniedException("Access denied");
-    }
-
-    /**
-     * Applies the same staff target-role boundary to profile access and deletion.
-     * Ownership is checked by callers because staff accounts may manage their own
-     * profile/password but cannot delete themselves.
-     */
-    private boolean canStaffManage(
-            UserRole targetRole,
-            Collection<? extends GrantedAuthority> authorities
-    ) {
-        return switch (targetRole) {
-            case STUDENT, FACULTY -> isStaff(authorities);
-            case ADMINISTRATOR -> isLibrarian(authorities);
-            case LIBRARIAN -> false;
-        };
-    }
-
-    /** Rejects account creation by anyone other than the authenticated librarian. */
-    private void requireLibrarian(Collection<? extends GrantedAuthority> authorities) {
-        if (!isLibrarian(authorities)) {
-            throw new AccessDeniedException("Access denied");
-        }
-    }
-
-    /**
-     * Requires the caller to hold the library assistant or librarian authority.
-     *
-     * @param callerId university ID of the authenticated caller, validated before listing
-     * @param authorities authorities granted to the authenticated caller
-     * @throws AccessDeniedException if the caller does not hold either staff role
-     */
-    private void requireStaff(
-            String callerId,
-            Collection<? extends GrantedAuthority> authorities
-    ) {
-        // Reject a missing or malformed authenticated identity before checking its role.
-        normalizeAndValidateUniversityId(callerId);
-
-        // Require one of the two staff authorities for the account directory.
-        if (!isStaff(authorities)) {
-            throw new AccessDeniedException("Access denied");
-        }
-    }
-
-    /**
-     * Checks whether the supplied authorities include a staff role.
-     *
-     * @param authorities roles granted to the authenticated caller
-     * @return {@code true} for administrators or librarians, otherwise {@code false}
-     */
-    private boolean isStaff(Collection<? extends GrantedAuthority> authorities) {
-        // Treat a missing authority collection as no privileges.
-        if (authorities == null) {
-            return false;
-        }
-
-        // Compare exact Spring Security authority names rather than role substrings.
-        return isAdministrator(authorities) || isLibrarian(authorities);
-    }
-
-    /** Checks whether the caller has the library-assistant authority. */
-    private boolean isAdministrator(Collection<? extends GrantedAuthority> authorities) {
-        return hasAuthority(authorities, "ROLE_ADMINISTRATOR");
-    }
-
-    /** Checks whether the caller has the library librarian authority. */
-    private boolean isLibrarian(Collection<? extends GrantedAuthority> authorities) {
-        return hasAuthority(authorities, "ROLE_LIBRARIAN");
-    }
-
-    /** Compares exact Spring authorities; absent authorities grant no access. */
-    private boolean hasAuthority(
-            Collection<? extends GrantedAuthority> authorities,
-            String expectedAuthority
-    ) {
-        return authorities != null && authorities.stream()
-                .map(GrantedAuthority::getAuthority)
-                .anyMatch(expectedAuthority::equals);
-    }
-
-    /**
      * Enforces the relationship between role, course, and IT major.
      *
      * @param request the user creation request containing academic fields
-     * @throws IllegalArgumentException if the role, course, and major combination is invalid
+     * @throws InvalidRequestException if the role, course, and major combination is invalid
      */
     private void validateAcademicRules(UserCreateRequestDTO request, UserRole role) {
         UserCourse course = request.getUserCourse();
@@ -735,7 +620,7 @@ public class UserService {
         if (role != UserRole.STUDENT) {
             // Faculty and library staff do not have student course or major values.
             if (course != null || request.getMajor() != null) {
-                throw new IllegalArgumentException(
+                throw new InvalidRequestException(
                         "Non-student accounts cannot have a course or a major"
                 );
             }
@@ -744,17 +629,17 @@ public class UserService {
 
         if (course == null) {
             // Students must belong to a course.
-            throw new IllegalArgumentException("Students must have a course");
+            throw new InvalidRequestException("Students must have a course");
         }
 
         // A major applies only to IT students, and IT students must choose one.
         if ((course == UserCourse.EMC || course == UserCourse.IS)
                 && request.getMajor() != null) {
-            throw new IllegalArgumentException("Only IT students can have majors");
+            throw new InvalidRequestException("Only IT students can have majors");
         }
 
         if (course == UserCourse.IT && request.getMajor() == null) {
-            throw new IllegalArgumentException("IT students must have a major");
+            throw new InvalidRequestException("IT students must have a major");
         }
     }
 
@@ -765,7 +650,7 @@ public class UserService {
      *
      * @param email the supplied email address
      * @return the normalized email address
-     * @throws IllegalArgumentException if the email is blank
+     * @throws InvalidRequestException if the email is blank
      */
     private String normalizeAndValidateEmail(String email) {
         // Normalize before checking required-value rules.
@@ -783,12 +668,12 @@ public class UserService {
      *
      * @param value the value to check
      * @param fieldName the field's human-readable name for the error message
-     * @throws IllegalArgumentException if the value is null or blank
+     * @throws InvalidRequestException if the value is null or blank
      */
     private void validateRequiredValue(String value, String fieldName) {
         // Keep required-field checks active for internal service callers too.
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " cannot be null or blank");
+            throw new InvalidRequestException(fieldName + " cannot be null or blank");
         }
     }
 }
