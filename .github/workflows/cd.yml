@@ -1,0 +1,129 @@
+# CD for the Libro Library API (GitHub Actions). Extends CI; it does not replace it.
+#
+# After CI passes on main this workflow builds ONE linux/arm64 image on a GitHub-hosted ARM runner, scans that exact
+# image, publishes it to GitHub Container Registry tagged with the commit SHA, and then (when enabled and approved)
+# deploys that image by digest to the OCI VM with scripts/deploy.sh. The server never rebuilds the release.
+#
+# Pull requests that change this workflow or the Dockerfile run the build and scan only (no push, no deploy), so edits
+# to the release path are exercised before they reach main.
+#
+# One-time setup is in docs/devops/runbook.md: the `production` environment, its secrets, and OCI_DEPLOY_ENABLED.
+name: CD
+
+on:
+  # Release path: run after the CI workflow finishes for a push to main.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # Manual release of the current main (still gated by the `production` environment).
+  workflow_dispatch:
+  # Dry run: build and scan without publishing when the release path itself changes.
+  pull_request:
+    paths:
+      - .github/workflows/cd.yml
+      - Dockerfile
+
+# Default to read-only; the jobs below request anything more they need.
+permissions:
+  contents: read
+
+jobs:
+  # Build, scan, and publish the ARM64 image. Skipped when CI did not succeed.
+  image:
+    name: image
+    if: >-
+      github.event_name != 'workflow_run'
+      || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    # GitHub-hosted native ARM64 runner (free for public repositories); avoids slow QEMU emulation.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # Only this job may push to GitHub Container Registry.
+    outputs:
+      image: ${{ steps.publish.outputs.image }}
+      sha: ${{ steps.revision.outputs.sha }}
+    steps:
+      # Resolve the exact commit that CI validated (the workflow_run head, otherwise the triggering commit).
+      - name: Resolve revision
+        id: revision
+        run: echo "sha=${{ github.event.workflow_run.head_sha || github.sha }}" >> "$GITHUB_OUTPUT"
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.revision.outputs.sha }}
+          persist-credentials: false
+      # Build natively for ARM64. The label links the package to this repository on GitHub.
+      - name: Build image
+        run: |
+          docker build --platform linux/arm64 \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.revision=${{ steps.revision.outputs.sha }}" \
+            -t libro-api:release .
+      # Scan the exact image that would be published; fixable HIGH/CRITICAL findings fail the release.
+      - name: Scan image
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1 \
+            image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 libro-api:release
+      # Publish by commit SHA and report the immutable digest. Skipped for pull request dry runs.
+      - name: Publish image
+        id: publish
+        if: github.event_name != 'pull_request'
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ steps.revision.outputs.sha }}
+        run: |
+          # GitHub Container Registry requires lowercase repository names.
+          repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/libro-api"
+          echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag libro-api:release "$repo:$SHA"
+          docker push "$repo:$SHA"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$repo:$SHA")"
+          echo "Published $digest"
+          echo "image=$digest" >> "$GITHUB_OUTPUT"
+
+  # Deploy the published digest to the OCI VM. Off until OCI_DEPLOY_ENABLED is set, and held for approval by the
+  # `production` environment's required reviewers.
+  deploy:
+    name: deploy
+    needs: image
+    if: >-
+      github.event_name != 'pull_request'
+      && vars.OCI_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      contents: read # No registry or token permissions are needed to deploy.
+    # Never run two deployments at once, and never cancel one that is already changing the server.
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.OCI_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.OCI_SSH_KNOWN_HOSTS }}
+          HOST: ${{ secrets.OCI_HOST }}
+          DEPLOY_USER: ${{ secrets.OCI_USER }}
+          SHA: ${{ needs.image.outputs.sha }}
+          IMAGE: ${{ needs.image.outputs.image }}
+        run: |
+          # Refuse anything that is not a full commit SHA and a digest-pinned GHCR reference.
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "unexpected revision"; exit 1; }
+          [[ "$IMAGE" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]] || { echo "unexpected image reference"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # The host key is pinned from a secret; the connection fails if the server presents a different key.
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # Update the checkout on the VM to the validated commit (scripts and Compose files), then deploy the digest.
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$HOST" 'bash -s' -- "$SHA" "$IMAGE" <<'REMOTE'
+          set -euo pipefail
+          cd /opt/libro
+          git fetch --quiet origin
+          git checkout --quiet --detach "$1"
+          scripts/deploy.sh --image "$2"
+          REMOTE
