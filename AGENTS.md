@@ -49,6 +49,7 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 - `RequestIdFilter` assigns an `X-Request-Id` (a safe inbound value or a UUID) to every request, the log pattern and error bodies. All book list endpoints are paginated (default size 12, maximum 100).
 - `docker compose --profile proxy up` adds a Caddy TLS reverse proxy (`infra/caddy/Caddyfile`); metrics `libro.rate_limit.rejections` and `libro.auth.logins` are exported on the private management port. JWT revocation is deliberately not implemented (accepted 15-minute window).
 - Stored `LocalDateTime` values use Asia/Manila through `LibraryTime` and the loan `Clock`. Swagger UI and `/v3/api-docs` are off unless `LIBRO_API_DOCS_ENABLED=true`.
+- Deployment to the OCI VM is operated by `scripts/` (`deploy.sh`, `smoke.sh`, `backup.sh`, `restore.sh`, `seed-demo.sh`) on top of `infra/docker-compose.prod.yml`; see the [Operations Runbook](docs/devops/runbook.md). No CD workflow exists yet.
 - The environment template is `.env.example`. CI (`.github/workflows/ci.yml`) runs `test`, `integration` and `security` (Trivy) jobs; the build enforces JDK 25 and an 80% line-coverage floor.
 - Loans are implemented under JWT Bearer authentication. Each Book row represents one physical copy; V4 adds loan history and copy status. V5 adds optional book descriptions and renames the stored monetary value to `replacement_cost` without changing existing values. See [Loan Implementation Guide](docs/guides/loan.md).
 - Flyway owns schema changes; Hibernate uses ddl-auto=validate. V5 is the current latest migration.
@@ -60,7 +61,7 @@ These are a snapshot, not a substitute for checking the code when a task changes
 - Keep HTTP handling in controllers, business rules and transactions in services, persistence behind repositories, and entity/DTO mapping explicit.
 - Use request and response DTOs at API boundaries. Never accept a JPA entity from a client or return one directly.
 - For Java methods you add or materially change, write method-level JavaDocs and line comments that explain the business rules and meaningful implementation steps.
-- Keep secrets and real personal data out of source, migrations, docs, tests, logs, and examples. The historical administrator and optional librarian bootstrap accept BCrypt hashes only; no account password or live hash belongs in source control.
+- Keep secrets and real personal data out of source, migrations, docs, tests, logs, and examples. The historical administrator and optional librarian bootstrap accept BCrypt hashes only; no account password or live hash belongs in source control. The one exception is the public demo patron password in [Demo Accounts](docs/guides/demo-accounts.md), which is published on purpose for patron-only accounts with synthetic data; staff credentials stay private.
 - Add forward-only Flyway migrations for schema changes once a migration may have been applied to a persistent database. Keep SQL and JPA mappings aligned.
 - Preserve the physical-book-copy domain decision and enforce loan ownership from the authenticated principal.
 - Update the README, this guide, the engineering reference, OpenAPI, and the roadmap only where their owned facts changed.

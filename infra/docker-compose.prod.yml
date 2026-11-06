@@ -1,0 +1,29 @@
+# Production override for the OCI Always Free VM. Always layered on top of the base file:
+#   docker compose -f docker-compose.yml -f infra/docker-compose.prod.yml --profile proxy up -d
+# scripts/deploy.sh runs this for you. Requires Docker Compose 2.24 or newer (for `!reset`).
+#
+# What this changes compared with the local stack:
+#   - PostgreSQL stores its data on a dedicated block volume (LIBRO_DATA_DIR), not in the boot-volume named volume.
+#   - PostgreSQL publishes no host port at all.
+#   - The proxy requires a real public host name instead of silently falling back to `localhost`.
+#   - The app trusts the proxy's forwarded headers so per-IP rate limits see real client addresses. This is safe only
+#     because the app port is published to loopback and the base file never exposes it publicly.
+#   - The app runs a specific, recorded image (LIBRO_IMAGE) so it can be rolled back by tag or digest.
+services:
+  db:
+    # Drop the loopback port mapping from the base file; only the app reaches the database, over the Compose network.
+    ports: !reset []
+    volumes:
+      # Same mount target as the base file, so this entry replaces the named volume. The directory must exist and be
+      # owned by the postgres user (UID 70 in the Alpine image); see docs/devops/runbook.md.
+      - ${LIBRO_DATA_DIR:?set LIBRO_DATA_DIR to the mounted block-volume path}/postgres:/var/lib/postgresql
+
+  app:
+    # Set by scripts/deploy.sh: a locally built tag, or a registry reference pinned by digest.
+    image: ${LIBRO_IMAGE:?set LIBRO_IMAGE (scripts/deploy.sh does this)}
+    environment:
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+
+  proxy:
+    environment:
+      LIBRO_DOMAIN: ${LIBRO_DOMAIN:?set LIBRO_DOMAIN to the public host name}

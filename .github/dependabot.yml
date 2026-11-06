@@ -13,6 +13,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # Images referenced by docker-compose.yml (PostgreSQL, Caddy). These are pinned by digest, so updates arrive as PRs.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
   # Actions used by .github/workflows (pinned by commit SHA; Dependabot updates the SHA and version comment).
   - package-ecosystem: github-actions
     directory: /
