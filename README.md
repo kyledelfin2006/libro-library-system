@@ -27,7 +27,8 @@ Libro is a Spring Boot REST API for the library of Aklan State University – Co
 | Build and test | Maven, JUnit 5, Mockito, Testcontainers, JaCoCo |
 | Delivery | Docker, Docker Compose, Caddy, GitHub Actions, Trivy |
 
-My team, **CyberGuild**, placed among the top five teams in the Hack4Gov 5 Regional Qualifying Round, which focused on ethical hacking and cybersecurity principles. Main developer: **Aldrin Kyle Delfin**.
+
+Developer: Aldrin Kyle Delfin
 
 ## Run locally
 
