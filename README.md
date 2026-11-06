@@ -12,6 +12,8 @@
 
 Libro is a Spring Boot-based library management system for Aklan State University – College of Computer Studies (ASU-CCS). It manages physical book copies, user accounts, and loan history.
 
+The project also includes a GitHub Actions CI pipeline for pull requests and pushes to `main`, covering unit/MVC tests, PostgreSQL-backed integration tests, and container/dependency vulnerability scans. See the [CI/CD and DevOps portfolio overview](docs/devops/ci-cd.md) for the workflow design, security controls, and deployment status.
+
 ### Features
 
 - **Catalog:** Manage physical copies; search and filter by title, author, genre, or replacement cost; sort and paginate results.
@@ -24,6 +26,18 @@ Each catalog record is one physical copy. Replacement cost records its value for
 ### API access
 
 The API contract is generated at [Swagger UI](http://localhost:8080/swagger-ui.html) and [`/v3/api-docs`](http://localhost:8080/v3/api-docs). Both documentation routes are **disabled by default**; set `LIBRO_API_DOCS_ENABLED=true` (the local `.env.example` does) to serve them publicly without a token. Every other route except `POST /app/users/signup`, `POST /app/auth/login` and the health probes requires a Bearer token. The API is stateless and does not require a CSRF token for header-authenticated requests. See [JWT Authentication Design](guiding-docs/jwt-authentication-design.md), [Institutional Context](docs/institutional-context.md), and the [API Documentation Guideline](docs/api-documentation-guideline.md).
+
+## CI/CD and DevOps
+
+Every pull request into any target branch and every push to `main` runs three parallel GitHub Actions checks. A push to another branch is checked when it updates an open pull request; a branch without a PR does not trigger this workflow. New runs cancel stale in-progress runs for the same PR or branch.
+
+| Check | Timeout | Portfolio evidence |
+| --- | ---: | --- |
+| `test` | 15 minutes | Unit and MVC tests, Maven verification, and an 80% JaCoCo line-coverage floor. |
+| `integration` | 25 minutes | PostgreSQL 18 integration tests against Testcontainers; the Maven lifecycle also runs the unit/MVC suite. |
+| `security` | 20 minutes | Trivy scans dependency manifests and the built Docker image, failing on fixable HIGH or CRITICAL vulnerabilities. |
+
+The workflow runs on Java 25, uses read-only repository permissions, and retains test reports for 14 days. It validates changes but does not publish the image or deploy the service. Configure GitHub branch protection separately to require all three checks before merging. Read the [CI/CD and DevOps portfolio overview](docs/devops/ci-cd.md) for implementation details, container operations, and remaining deployment readiness work.
 
 Main Developer: **Aldrin Kyle Delfin**
 
@@ -40,6 +54,7 @@ My team, **CyberGuild**, placed among the top five teams in the **Hack4Gov 5 Reg
 | Database | PostgreSQL 18 |
 | Migrations | Flyway 13.3.0 |
 | Containerization | Docker & Docker Compose |
+| CI and security checks | GitHub Actions, Testcontainers, Trivy |
 | Build Tool | Maven 3.x |
 | Code Generation | Lombok 1.18.46 |
 | Testing | JUnit 5, Mockito, Testcontainers, JaCoCo |
@@ -61,6 +76,7 @@ My team, **CyberGuild**, placed among the top five teams in the **Hack4Gov 5 Reg
 * [Code Highlights](#code-highlights)
 * [API Endpoints](#api-endpoints)
 * [Setup & Installation](#setup--installation)
+* [CI/CD and DevOps](#cicd-and-devops)
 * [Troubleshooting](#troubleshooting)
 * [Data Management](#data-management)
 * [Testing](#testing)
@@ -82,6 +98,10 @@ This README remains the project's main portfolio entry point. Supporting documen
 4. [Domain Decisions](docs/domain-decisions.md) explains why a Book represents one physical copy and how loans preserve copy history.
 5. [Loan Implementation Guide](docs/loan.md) explains the loan lifecycle, permissions, API, database design, and local build flow.
 6. [JWT Authentication Design](guiding-docs/jwt-authentication-design.md) documents the live token rules, security boundaries, request flows, errors, configuration, and known limits.
+
+### For DevOps
+
+1. [CI/CD and DevOps](docs/devops/ci-cd.md) presents the GitHub Actions pipeline, quality and security gates, container operations, and the current boundary between CI and deployment automation.
 
 ### For agents, AI, and contributors
 
@@ -290,6 +310,8 @@ pom.xml
 docs/
   api-documentation-guideline.md
   development-problems-solved.md
+  devops/
+    ci-cd.md
   domain-decisions.md
   institutional-context.md
   loan.md
