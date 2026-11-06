@@ -10,7 +10,7 @@ Libro's API, schema, tests, and CI are in place, but nothing is deployed. The ta
 
 - Make the first deployment safe, repeatable, and reversible.
 - Keep every secret out of the repository and off the public internet.
-- Give recruiters a working demo: patron logins, synthetic data, and Swagger UI.
+- Provide a working demo with patron logins, synthetic data, and Swagger UI.
 - Keep the CI workflow; extend it, don't replace it.
 
 ## Non-goals
@@ -23,7 +23,7 @@ Libro's API, schema, tests, and CI are in place, but nothing is deployed. The ta
 
 | Question | Decision |
 | --- | --- |
-| Staff accounts on the live demo | The librarian and the seeded `0000-0001` administrator get strong, unique secrets stored only on the VM. The old `Librarian@0000` / `Assistant@0001` passwords stay documented for local use only. |
+| Staff accounts on the public demo | The librarian and the seeded `0000-0001` administrator get strong, unique secrets stored only on the VM. Staff passwords are never published. |
 | Public demo logins | A seeded demo student and demo faculty account with no staff powers; their password is published on purpose. |
 | Idle reclaim | Document Pay As You Go with a budget alert, staying inside Always Free limits. |
 | Hostname | A free DNS name tied to the VM's public IP, set through `LIBRO_DOMAIN`. |
@@ -45,7 +45,7 @@ Libro's API, schema, tests, and CI are in place, but nothing is deployed. The ta
 | Delivery | Build and scan `linux/arm64` on a free ARM runner, publish by SHA, approved deploy job | Same artifact tested and deployed | L | After first deploy |
 | CI | Run unit tests once, cache Docker layers and Trivy, group Dependabot, dependency review | Faster, cheaper runs | S–M | After first deploy |
 | Tests and docs | V3→V4 upgrade test; browser review of Swagger output | Open roadmap items | M | After first deploy |
-| UI | Separate SPA hosted on free static hosting | Recruiter-visible | L | Nice to have |
+| UI | Separate SPA hosted on free static hosting | Browser access to library workflows | L | Nice to have |
 | Secrets | Move from a `0600` `.env` to OCI Vault | Removes plaintext at rest | M | Nice to have |
 
 ## Sequenced rollout

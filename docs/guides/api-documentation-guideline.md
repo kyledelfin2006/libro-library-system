@@ -1,6 +1,6 @@
 # API Documentation Guideline
 
-This guide defines how to keep the authentication, book, user, and loan APIs complete in generated OpenAPI while keeping Spring MVC controller code focused on HTTP behavior. Swagger UI is intended to be the project's interactive API reference and portfolio demonstration; the OpenAPI document is the contract it renders. Swagger UI and `/v3/api-docs` are disabled by default and served publicly only when `LIBRO_API_DOCS_ENABLED=true`.
+This guide defines how to keep the authentication, book, user, and loan APIs complete in generated OpenAPI while keeping Spring MVC controller code focused on HTTP behavior. Swagger UI is the interactive API reference; the OpenAPI document is the contract it renders. Swagger UI and `/v3/api-docs` are disabled by default and served publicly only when `LIBRO_API_DOCS_ENABLED=true`.
 
 ## Documentation ownership
 
@@ -67,9 +67,9 @@ Do not compress all endpoint documentation into controller JavaDoc, create a par
 
 ## Swagger UI and deployment readiness
 
-Swagger UI is an interactive API explorer backed by the generated OpenAPI specification. It is suitable as the project's API-facing portfolio UI, but it does not replace a custom library frontend and does not itself deploy the Spring Boot service. A deployment still needs to host the application and database, publish the intended Swagger UI/spec routes, and configure TLS, CORS, and authentication consistently with the deployed API.
+Swagger UI is an interactive API explorer backed by the generated OpenAPI specification. A deployment still needs to host the application and database, publish the intended Swagger UI/spec routes, and configure TLS, CORS, and authentication consistently with the deployed API.
 
-Before calling the API documentation portfolio-ready, inspect the generated `/v3/api-docs` and Swagger UI for all four tags and verify:
+Before publishing the API documentation, inspect the generated `/v3/api-docs` and Swagger UI for all four tags and verify:
 
 - every live route appears under the correct resource tag (Authentication, Books, Users, or Loans);
 - summaries, descriptions, parameter defaults/limits, request schemas, response schemas, status codes, and expected errors match runtime behavior;

@@ -1,104 +1,107 @@
-<h1 align="center">Libro - Library Management System</h1>
+<h1 align="center">Libro — Library Management API</h1>
 
-<p align="center">
-  <img src="assets/LIBRO_LOGO.png" alt="Libro system logo" width="180">
-</p>
+<p align="center"><img src="assets/LIBRO_LOGO.png" alt="Libro logo" width="160"></p>
 
 ![Java](https://img.shields.io/badge/Java-25-orange?logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.2-6DB33F?logo=springboot&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
 [![CI](https://github.com/kyledelfin2006/libro-library-system/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kyledelfin2006/libro-library-system/actions/workflows/ci.yml)
 
-## What this is
+Libro is a Java 25 / Spring Boot 4 REST API for the Aklan State University College of Computer Studies library. It manages physical book copies, patron and staff accounts, and the full checkout history of each copy. The API, PostgreSQL schema, security rules, tests, and container delivery pipeline are implemented. The planned OCI deployment is **not live**.
 
-Libro is a Spring Boot REST API for the library of Aklan State University – College of Computer Studies (ASU-CCS). It manages physical book copies, user accounts, and loan history. Each catalog record is one physical copy, which keeps loan history accurate per copy (see [Domain Decisions](docs/guides/domain-decisions.md)).
+## What the system does
 
-- **Catalog:** search, filter, sort, and paginate copies by title, author, genre, or replacement cost; collection and genre statistics.
-- **Loans:** students and faculty borrow for 14 days, up to three active loans each; overdue loans block new checkouts. See the [Loan Implementation Guide](docs/guides/loan.md).
-- **Accounts and roles:** public signup creates students; librarians create faculty and library-assistant accounts. Four roles (`STUDENT`, `FACULTY`, `ADMINISTRATOR`, `LIBRARIAN`) are enforced at the route and service layers.
-- **Security:** stateless HS256 JWT Bearer authentication, BCrypt passwords, per-IP rate limits on login and signup, and a uniform JSON error contract. See the [JWT Authentication Design](docs/reference/jwt-authentication-design.md).
-- **Operations:** Flyway-owned schema, Docker Compose, public `/livez` and `/readyz` probes, and Prometheus metrics on a private management port.
-
-| Layer | Technology |
+| Area | Implemented behavior |
 | --- | --- |
-| Language and framework | Java 25, Spring Boot 4.1.2 (Web, Data JPA, Security, OAuth2 Resource Server, Validation) |
-| Data | PostgreSQL 18, Flyway 13.3.0, Hibernate with schema validation |
-| Build and test | Maven, JUnit 5, Mockito, Testcontainers, JaCoCo |
-| Delivery | Docker, Docker Compose, Caddy, GitHub Actions, Trivy |
+| Catalog | Create and manage physical copies; search, filter, sort, and paginate by catalog fields and replacement cost; view collection statistics. |
+| Circulation | Students and faculty borrow and return copies. Loans are due in 14 days, limited to three active loans per borrower; overdue loans block new checkouts. Staff can mark a loan and its copy lost. |
+| Accounts | Public student signup; librarian-created faculty and library-assistant accounts; role-scoped profile and password management. `ADMINISTRATOR` is the library-assistant role. |
+| Security | 15-minute HS256 Bearer tokens, BCrypt passwords, route role gates, service-level ownership checks, login/signup rate limits, and consistent JSON errors with request IDs. |
 
+Every book row represents **one physical copy**, so a loan refers to the exact item issued. Loan history remains after return or loss. A PostgreSQL partial unique index prevents two active loans for the same copy, while transactions and row locks protect concurrent checkout rules. See [Domain Decisions](docs/guides/domain-decisions.md) and the [Loan Guide](docs/guides/loan.md).
 
-Developer: Aldrin Kyle Delfin
+## Architecture
+
+```mermaid
+flowchart LR
+    Client[API client] --> Security[Spring Security<br/>JWT Bearer and role gates]
+    Security --> Controller[Feature controllers<br/>HTTP and DTO validation]
+    Controller --> Service[Feature services<br/>rules, ownership, transactions, mapping]
+    Service --> Repository[Spring Data JPA repositories]
+    Repository --> Database[(PostgreSQL 18)]
+    Flyway[Flyway migrations] --> Database
+```
+
+The single-module codebase groups `auth`, `book`, `loan`, and `user` by feature, then by layer. Controllers accept and return DTOs; services own business rules, transactions, and entity-to-DTO mapping; repositories own persistence. Shared responses, errors, request IDs, time handling, and OpenAPI configuration live in `global`. Flyway owns the schema, and Hibernate validates it at startup. [Architecture Overview](docs/architecture.md) shows the request and data flows; [ADR 0002](docs/adr/0002-layered-feature-packages.md) records the package decision.
+
+### Notable code changes
+
+| Change | Result |
+| --- | --- |
+| Standardized feature packages and moved DTO mapping into services | Controllers stay focused on HTTP, and JPA entities do not cross the API boundary. |
+| Moved account ownership and target-role rules into `UserAccessPolicy` | One policy handles student, faculty, assistant, and librarian account operations. |
+| Introduced shared not-found and invalid-request exception types | Expected client errors have consistent status codes; unexpected faults get a generic 500 response. |
+| Layered the test profile over runtime configuration | Tests exercise the real application defaults with only test-specific overrides. |
+
+## Key workflows
+
+1. **Sign in:** `POST /app/auth/login` verifies the stored BCrypt hash and issues a short-lived token. Protected requests send `Authorization: Bearer <token>`; signup and health probes are public.
+2. **Borrow and return:** `POST /app/loans/{bookId}` derives the borrower from the token, checks the copy and patron limits, and creates an `ACTIVE` loan. `GET /app/loans/me` shows paged history; `PUT /app/loans/{loanId}/return` records the return.
+3. **Resolve a lost copy:** authorized staff use `PUT /app/loans/{loanId}/lost`; the loan retains who resolved it and when, and the copy becomes unavailable. Loan history prevents deletion of the referenced user or copy.
+4. **Manage the catalog and accounts:** staff roles gate writes, while service checks enforce account ownership and target-role rules. Book reads are available to all authenticated roles.
+
+The [Role and JWT Guide](docs/reference/security-roles-and-jwt-guide.md) has the full permission matrix. The generated OpenAPI document is the endpoint contract; Swagger UI and `/v3/api-docs` are disabled by default and can be enabled locally with `LIBRO_API_DOCS_ENABLED=true`.
+
+## Engineering problems solved
+
+| Problem | Project change |
+| --- | --- |
+| Entity types and database columns disagreed at startup | Made Flyway the sole schema authority, aligned migrations with JPA, and kept Hibernate schema validation enabled. |
+| Container startup could race PostgreSQL readiness | Added a database health check and made the app wait for a healthy database. |
+| Concurrent checkout could assign one copy twice | Added row locking, a database unique index for active loans, and PostgreSQL concurrency tests. |
+| HTTP-only or mocked tests could miss real persistence errors | Split fast unit/MVC tests from Testcontainers integration tests that exercise migrations, JPA, constraints, and loan races. |
+| Scattered account rules and error handling were hard to audit | Centralized target-role/ownership checks in `UserAccessPolicy` and mapped client failures through shared exception types. |
+
+The [Development Problems Solved](docs/guides/development-problems-solved.md) guide traces more issues from symptom to fix and verification. The [Engineering Reference](docs/reference/engineering-reference.md) documents current code contracts and test boundaries.
+
+## CI/CD and operations
+
+Every pull request and push to `main` runs three independent GitHub Actions jobs:
+
+| Job | Gate |
+| --- | --- |
+| `unit-test` | Unit and MVC tests with an 80% JaCoCo line-coverage floor. |
+| `integration-test` | Testcontainers with PostgreSQL 18: Flyway, schema validation, persistence, and concurrent loans. Unit tests are skipped in this job so they run once. |
+| `security-scan` | Trivy scans dependencies and the built image for fixable HIGH or CRITICAL findings. |
+
+After successful CI on `main`, the CD workflow:
+
+1. Builds and scans a native ARM64 image, publishes it to GitHub Container Registry by commit SHA, and records its immutable digest.
+2. Runs the deploy job only when `OCI_DEPLOY_ENABLED=true` and the `production` environment approves it. The target is one OCI VM with the API, PostgreSQL, and Caddy under Docker Compose.
+3. Uses deployment scripts to back up the database, start the pinned image, smoke-test readiness and authenticated access, and roll back the app image on failure.
+
+The VM has **not been provisioned**, so deployment is gated; the scripts were rehearsed locally. Public `/livez` and `/readyz` probes, private Prometheus metrics, and request IDs support operations.
+
+See [CI/CD and DevOps](docs/devops/ci-cd.md) for pipeline and security details, and the [Operations Runbook](docs/devops/runbook.md) for provisioning, backups, restore, and deployment. [ROADMAP](docs/reference/ROADMAP.md) tracks the remaining production gates.
 
 ## Run locally
 
-Requires Docker with Compose. The stack builds the API from source and starts PostgreSQL.
+Docker Compose builds the API and starts PostgreSQL. Copy `.env.example` to `.env`, then set the required PostgreSQL credentials, a test/local `LIBRO_ADMIN_PASSWORD_HASH` (BCrypt), and `LIBRO_JWT_SECRET_BASE64` (at least 32 decoded bytes). `.env` is ignored by Git.
 
-1. Create the environment file and fill in the required values:
-
-   ```powershell
-   Copy-Item .env.example .env
-   ```
-
-   Set the PostgreSQL credentials, `LIBRO_ADMIN_PASSWORD_HASH` (a BCrypt hash of a password you choose), and `LIBRO_JWT_SECRET_BASE64` (`openssl rand -base64 32`). `.env` is git-ignored.
-
-2. Start the stack:
-
-   ```bash
-   docker compose up --build
-   ```
-
-3. Check readiness at `http://localhost:8080/readyz`, then log in with `POST /app/auth/login` and send the returned token as `Authorization: Bearer <token>`.
-
-Swagger UI and `/v3/api-docs` are off unless `LIBRO_API_DOCS_ENABLED=true`, which you can set in your local `.env` (the template leaves it `false`). To run the app outside Docker, enable the TLS proxy profile, or provision the first librarian, see [Local Setup and Configuration](docs/guides/local-setup.md). Run the tests with `./mvnw verify`; add `-Pintegration` for the PostgreSQL suite, which needs Docker.
-
-## How it deploys
-
-Every pull request and every push to `main` runs three parallel GitHub Actions checks:
-
-| Check | What it proves |
-| --- | --- |
-| `unit-test` | Unit and MVC tests, with an 80% line-coverage floor |
-| `integration-test` | Flyway migrations, schema validation, and loan concurrency against PostgreSQL 18 |
-| `security-scan` | Trivy finds no fixable HIGH or CRITICAL issues in dependencies or the container image |
-
-The production target is a single **OCI Always Free Ampere A1 VM** running the API, PostgreSQL, and a Caddy TLS proxy under Docker Compose. After CI passes on `main`, the CD workflow builds and scans one immutable ARM64 image on a native ARM runner, publishes it to GitHub Container Registry by commit SHA, and deploys that digest through an approved `production` environment once the VM exists. `scripts/deploy.sh` already does the deploy step by hand: it backs up the database, starts the new image, runs a smoke test (readiness, login, authenticated read, anonymous rejection), and restarts the previous image if anything fails. `backup.sh`, `restore.sh`, and `seed-demo.sh` cover recovery and demo data. The pipeline stages, environments, secrets handling, rollback, and monitoring are in [CI/CD and DevOps](docs/devops/ci-cd.md); provisioning steps are in the [Operations Runbook](docs/devops/runbook.md).
-
-**The service is not deployed yet:** the scripts were rehearsed against a local Docker stack and the image-publishing workflow is in place, but no VM is provisioned, so the deploy job is switched off.
-
-## Repo map
-
-```text
-src/             Spring Boot application (one package per feature: auth, book, loan, user, global) and tests
-infra/           Production Compose override and the Caddy reverse-proxy configuration
-scripts/         Deploy, rollback, smoke-test, backup, restore, and demo-seed scripts; ci/ holds the shared Trivy scan
-docs/
-  architecture.md  Short overview: components, request flow, layers, data model
-  adr/             Architecture decision records (0001: pre-OCI deployment improvements)
-  devops/          CI/CD, environments, secrets, rollback, monitoring, operations runbook
-  guides/          Domain decisions, loan guide, local setup, institutional context, API documentation standard
-  reference/       Engineering reference, JWT design, role policy, roadmap
-.github/         CI and CD workflows, Dependabot configuration
-Dockerfile, docker-compose.yml, pom.xml, mvnw   Build and runtime entry points
-AGENTS.md        Contributor and AI-agent guide
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
 ```
 
-Start with the [Architecture Overview](docs/architecture.md) for how the system works, the [Engineering Reference](docs/reference/engineering-reference.md) for contracts and configuration, and [Development Problems Solved](docs/guides/development-problems-solved.md) for the engineering decisions behind it. [Institutional Context](docs/guides/institutional-context.md) explains the ASU-CCS user domain.
+Check `http://localhost:8080/readyz`, then sign in through `POST /app/auth/login`. The Maven Wrapper pins the build tool; Docker is required for the integration suite.
 
-## Status
+```bash
+./mvnw verify
+./mvnw -Pintegration -DskipUTs -Djacoco.haltOnFailure=false verify
+```
 
-| Area | State |
-| --- | --- |
-| Catalog, accounts, roles, JWT authentication, loans | Implemented and covered by unit, MVC, and PostgreSQL tests |
-| CI (`unit-test`, `integration-test`, `security-scan`) | Running on every pull request and push to `main` |
-| Container image and Compose stack | Implemented, with health checks |
-| Deploy, rollback, backup, and smoke-test scripts; runbook | Implemented and rehearsed locally |
-| CD workflow (ARM64 build, scan, publish, gated deploy) | Implemented; deploy job off until the VM exists |
-| OCI VM | Not provisioned; see [ADR 0001](docs/adr/0001-pre-oci-deployment-improvements.md) |
-| Open items | V3-to-V4 migration upgrade test on PostgreSQL; browser review of the OpenAPI/Swagger output; TLS with a real domain, login-failure and rate-limit alerts, and an independent security review before public exposure |
-
-The [Development Roadmap](docs/reference/ROADMAP.md) tracks the detail.
+The integration run also needs a test-only `LIBRO_ADMIN_PASSWORD_HASH` in the shell environment; Maven does not load Compose's `.env`. See [Local Setup](docs/guides/local-setup.md) for configuration and the [API Documentation Guideline](docs/guides/api-documentation-guideline.md) for OpenAPI conventions.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+[MIT](LICENSE)

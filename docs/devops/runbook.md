@@ -48,7 +48,7 @@ Generate a BCrypt hash without storing the password. The command prompts for it,
 docker run --rm -it httpd:2.4-alpine htpasswd -nBC 10 "" | tr -d ':\n' | sed 's/^\$2y/$2a/'
 ```
 
-Production staff passwords must not be the documented local ones; see [Demo Accounts](../guides/demo-accounts.md). Keep a copy in your password manager, not in the repository.
+Choose unique staff passwords for the deployment; see [Demo Accounts](../guides/demo-accounts.md). Keep them in a password manager, not in the repository.
 
 ## 4. First deploy
 

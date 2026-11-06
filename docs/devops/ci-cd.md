@@ -14,7 +14,7 @@ Libro is validated by an implemented GitHub Actions pipeline and packaged as a c
 
 ## Target environment
 
-**One OCI Always Free Ampere A1 (ARM64) VM** running the API, PostgreSQL, and Caddy under Docker Compose. It is a low-traffic demo with synthetic data. It deliberately has no high availability or autoscaling, because neither improves a single-instance portfolio service.
+**One OCI Always Free Ampere A1 (ARM64) VM** running the API, PostgreSQL, and Caddy under Docker Compose. It is a low-traffic demo with synthetic data. The single-instance design has no high availability or autoscaling.
 
 ```mermaid
 flowchart LR
@@ -70,7 +70,7 @@ Controls: workflow permissions are `contents: read`, no deployment credentials e
 | --- | --- | --- | --- |
 | Local | Development and demos | Docker Compose on a developer machine; see [Local Setup](../guides/local-setup.md) | Disposable volume |
 | CI | Verify every change | Ephemeral GitHub runners with Testcontainers | Throwaway containers |
-| Production demo | Public portfolio instance | One OCI Always Free VM; see the [runbook](runbook.md) | Synthetic only |
+| Production demo | Public API instance | One OCI Always Free VM; see the [runbook](runbook.md) | Synthetic only |
 
 There is no separate staging environment: one low-traffic VM does not justify a second copy, and CI plus the migration tests cover pre-release verification.
 
@@ -79,7 +79,7 @@ There is no separate staging environment: one low-traffic VM does not justify a 
 - No secret is stored in the repository. [`.env.example`](../../.env.example) holds placeholders; real `.env` files and key files (`*.pem`, `*.key`) are git-ignored.
 - The application needs a PostgreSQL password, a Base64 JWT signing key of at least 32 bytes (`LIBRO_JWT_SECRET_BASE64`), and BCrypt hashes for the bootstrap accounts. Only hashes are accepted; plaintext account passwords never appear in configuration.
 - On the VM, the production `.env` is owned by the deploy user with `chmod 600`; `scripts/deploy.sh` refuses to run if the file is group- or world-readable.
-- Staff accounts on the live demo (`0000-0000` librarian, `0000-0001` administrator) use strong, unique passwords that exist only on the host. The only published credentials are patron-only demo logins ([Demo Accounts](../guides/demo-accounts.md)).
+- Staff accounts on the planned public demo (`0000-0000` librarian, `0000-0001` administrator) will use strong, unique passwords stored only on the host. The only published credentials are patron-only demo logins ([Demo Accounts](../guides/demo-accounts.md)).
 - GitHub Actions holds only four `production` environment secrets, used by the deploy job: `OCI_HOST`, `OCI_USER`, `OCI_SSH_KEY` (a dedicated deploy key), and `OCI_SSH_KNOWN_HOSTS` (the pinned host key). The default workflow permission stays `contents: read`; `packages: write` goes only to the image job, which uses the built-in `GITHUB_TOKEN`. The workflow uses no third-party actions beyond the SHA-pinned checkout. A dedicated SSH key is simpler than OCI workload identity federation here, because the pipeline needs no OCI API access. See [GitHub deployment environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
 - Logs and API errors never contain password hashes, stack traces, or credentials.
 
