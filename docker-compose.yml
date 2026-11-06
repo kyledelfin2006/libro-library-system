@@ -3,12 +3,19 @@
 #   docker compose up --build      (Docker builds the application from source)
 # Docker Compose reads variables from the root .env file automatically.
 # Fill the required values before starting. Public-route limits have defaults and can be tuned in `.env`.
+# Rotate container logs so a long-running host cannot fill its disk.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # PostgreSQL stores the library data. Its named volume survives container
   # recreation and ordinary `docker compose down`; removing it with
   # `docker compose down -v` permanently deletes the local database contents.
   db:
-    image: postgres:18-alpine # Official PostgreSQL image; keep its major version intentional.
+    image: postgres:18-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395 # Official PostgreSQL image pinned by digest; keep its major version intentional.
     container_name: library-postgres
     environment:
       # Compose substitutes these values from .env. Use local development
@@ -31,6 +38,9 @@ services:
       timeout: 5s
       retries: 10
       start_period: 5s
+    # Cap memory so a runaway query cannot starve the API on a small host.
+    mem_limit: 512m
+    logging: *default-logging
     # Restart after a crash or Docker daemon restart; `docker compose down` still stops it.
     restart: unless-stopped
 
@@ -78,8 +88,8 @@ services:
       LIBRO_BOOTSTRAP_LIBRARIAN_LAST_NAME: ${LIBRO_BOOTSTRAP_LIBRARIAN_LAST_NAME:-}
       # Optional BCrypt hash only; blank by default, requires all other values, and never accepts plaintext.
       LIBRO_BOOTSTRAP_LIBRARIAN_PASSWORD_HASH: ${LIBRO_BOOTSTRAP_LIBRARIAN_PASSWORD_HASH:-}
-    # Hardening: cap memory (JVM heap is 75% of this via MaxRAMPercentage) and block privilege escalation.
-    mem_limit: 768m
+    # Hardening: cap memory (JVM heap is 75% of this via MaxRAMPercentage; idle use measured near 365 MB) and block privilege escalation.
+    mem_limit: 1g
     security_opt:
       - no-new-privileges:true
     ports:
@@ -93,13 +103,14 @@ services:
       timeout: 5s
       retries: 3
       start_period: 60s
+    logging: *default-logging
     restart: unless-stopped
 
   # Optional TLS reverse proxy (`docker compose --profile proxy up`). It is the only service that listens on the
   # public interfaces; the app stays on loopback, so clients cannot bypass TLS or the proxy.
   # Set LIBRO_DOMAIN to your host name and SERVER_FORWARD_HEADERS_STRATEGY=native in .env when using it.
   proxy:
-    image: caddy:2.8-alpine
+    image: caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17
     container_name: library-proxy
     profiles: ["proxy"]
     depends_on:
@@ -117,6 +128,7 @@ services:
     mem_limit: 128m
     security_opt:
       - no-new-privileges:true
+    logging: *default-logging
     restart: unless-stopped
 
 volumes:

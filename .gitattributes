@@ -4,3 +4,6 @@
 /mvnw.cmd text eol=crlf
 # Keep Docker instructions portable across Windows checkouts and Linux builders.
 /Dockerfile text eol=lf
+
+# Operations scripts run on Linux hosts and must keep LF line endings.
+*.sh text eol=lf
