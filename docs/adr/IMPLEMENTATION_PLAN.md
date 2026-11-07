@@ -93,7 +93,7 @@ Parts 1 and 3 can run in parallel. Run Part 2 last, so it also exercises the new
 
 **Problem.** `PUT /app/users/{universityId}/password` requires `currentPassword` (`PasswordChangeRequestDTO`), so a user who forgot their password has no recovery path, and the project has no email delivery.
 
-**Decision (D5).** Staff set a temporary password for an account they may already manage; the user must change it at next login.
+**Decision (D3).** Staff set a temporary password for an account they may already manage; the user must change it at next login.
 
 **Design.**
 
