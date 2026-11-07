@@ -52,7 +52,21 @@ The workflow runs on GitHub-hosted Ubuntu runners for every pull request (any ba
 | `integration-test` | 25 min | `./mvnw -B -ntp -Pintegration -DskipUTs -Djacoco.haltOnFailure=false verify`: only the PostgreSQL 18 suite through Testcontainers (`-DskipUTs` turns off Surefire, so unit tests do not run twice), covering Flyway migrations, Hibernate schema validation, and concurrent-checkout races. |
 | `security-scan` | 20 min | [`scripts/ci/trivy-scan.sh`](../../scripts/ci/trivy-scan.sh) scans dependency manifests and the built Docker image; it fails on fixable HIGH or CRITICAL findings. Accepted exceptions live in [`.trivyignore`](../../.trivyignore) with expiry comments. |
 
-Controls: workflow permissions are `contents: read`, no deployment credentials exist in CI, third-party actions are pinned to commit SHAs, Trivy runs from its official image pinned by digest, and test reports are kept for 14 days. The scan policy (severity, `--ignore-unfixed`, `.trivyignore`) lives in one script that CI and CD both call, so the merge gate and the release gate cannot drift apart. Requiring all three checks before merging is a GitHub branch-protection setting, separate from the workflow file.
+Controls: workflow permissions are `contents: read`, no deployment credentials exist in CI, third-party actions are pinned to commit SHAs, Trivy runs from its official image pinned by digest, and test reports are kept for 14 days. The scan policy (severity, `--ignore-unfixed`, `.trivyignore`) lives in one script that CI and CD both call, so the merge gate and the release gate cannot drift apart. Requiring all three checks before merging is a GitHub branch-protection setting, separate from the workflow file; see [Branch protection](#branch-protection).
+
+### Branch protection
+
+`main` is protected by a GitHub branch-protection rule (a repository setting, not a file in this repo):
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| Required status checks | `unit-test`, `integration-test`, `security-scan` | Nothing merges unless the same three jobs this workflow runs have passed. |
+| Require a pull request | Yes, 0 required approvals | Direct pushes to `main` are rejected so every change passes CI first; no approval is required because the project has a single maintainer. |
+| Require branches to be up to date | No | Avoids forcing a rebase and a full CI rerun after each unrelated merge. |
+| Force pushes and branch deletion | Blocked | Protects `main` history. |
+| Enforce for administrators | No | The repository owner can bypass the rule in an emergency; use it sparingly. |
+
+If a job is renamed in `ci.yml`, update the required check names in the same change: a required check that no longer runs leaves pull requests stuck at "Expected, waiting for status". To review or change the rule, use Settings, then Branches on GitHub, or `gh api repos/<owner>/<repo>/branches/main/protection`.
 
 ### Continuous delivery (implemented, deploy gated)
 

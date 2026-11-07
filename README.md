@@ -235,9 +235,9 @@ Successful responses use an `ApiResponse` envelope; errors use `ErrorResponse` w
 flowchart LR
     PR[Pull request] --> CI[CI checks]
     Main[Push to main] --> CI
-    CI --> Test[test: unit, MVC, coverage]
-    CI --> Integration[integration: PostgreSQL]
-    CI --> Security[security: Trivy]
+    CI --> Test[unit-test: unit, MVC, coverage]
+    CI --> Integration[integration-test: PostgreSQL]
+    CI --> Security[security-scan: Trivy]
     Test --> Pass[All checks pass]
     Integration --> Pass
     Security --> Pass
@@ -253,9 +253,9 @@ Every pull request and every push to `main` runs three parallel checks in [`.git
 
 | Check | What it proves |
 | --- | --- |
-| `test` | Unit and MVC tests, with an 80% line-coverage floor |
-| `integration` | Flyway migrations, schema validation, and loan concurrency against PostgreSQL 18 |
-| `security` | Trivy finds no fixable HIGH or CRITICAL issues in dependencies or the container image |
+| `unit-test` | Unit and MVC tests, with an 80% line-coverage floor |
+| `integration-test` | Flyway migrations, schema validation, and loan concurrency against PostgreSQL 18 |
+| `security-scan` | Trivy finds no fixable HIGH or CRITICAL issues in dependencies or the container image |
 
 ### Triggers & Quality Gates
 
@@ -324,7 +324,7 @@ Read the [Agent and Contributor Guide](AGENTS.md) before changing code or docume
 | Area | State |
 | --- | --- |
 | Catalog, accounts, roles, JWT authentication, loans | Implemented and covered by unit, MVC, and PostgreSQL tests |
-| CI (`test`, `integration`, `security`) | Running on every pull request and push to `main` |
+| CI (`unit-test`, `integration-test`, `security-scan`) | Running on every pull request and push to `main`; required by branch protection on `main` |
 | Container image and Compose stack | Implemented, with health checks |
 | Deploy, rollback, backup, and smoke-test scripts; runbook | Implemented and rehearsed locally |
 | CD workflow (ARM64 build, scan, publish, gated deploy) | Implemented; deploy job off until the VM exists |
