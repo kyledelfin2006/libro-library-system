@@ -12,7 +12,7 @@ This file is the repository's internal entry point for AI agents and human contr
    - [Development roadmap](docs/reference/ROADMAP.md) for outstanding work.
    - [API documentation guideline](docs/guides/api-documentation-guideline.md) for controller/OpenAPI documentation.
    - [Domain decisions](docs/guides/domain-decisions.md) for the physical-copy model and loan constraints.
-   - [Implementation plan](docs/adr/IMPLEMENTATION_PLAN.md) for open problems and remaining work, split into parts.
+   - [Implementation plan](docs/adr/IMPLEMENTATION_PLAN.md) for the work to finish before the UI starts, split into parts.
    - [Architecture design rules](docs/architecture.md#design-rules) for the settled layered feature-package structure.
 
 ## Sources of truth

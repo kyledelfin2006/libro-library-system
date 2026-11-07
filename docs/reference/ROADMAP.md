@@ -2,7 +2,7 @@
 
 This is the working implementation roadmap. It is not the public project overview or an API contract. Live role/JWT rules are in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md) and the [JWT Authentication Design](jwt-authentication-design.md); this checklist tracks implementation status.
 
-The step-by-step plan for the remaining work, split into parts for a person or an AI agent, is in the [Implementation Plan](../adr/IMPLEMENTATION_PLAN.md).
+The step-by-step plan for the work to finish before the UI starts, split into parts for a person or an AI agent, is in the [Implementation Plan](../adr/IMPLEMENTATION_PLAN.md).
 
 ## Current state
 

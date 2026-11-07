@@ -328,7 +328,7 @@ Read the [Agent and Contributor Guide](AGENTS.md) before changing code or docume
 | Container image and Compose stack | Implemented, with health checks |
 | Deploy, rollback, backup, and smoke-test scripts; runbook | Implemented and rehearsed locally |
 | CD workflow (ARM64 build, scan, publish, gated deploy) | Implemented; deploy job off until the VM exists |
-| OCI VM | Not provisioned; see the [implementation plan](docs/adr/IMPLEMENTATION_PLAN.md) |
+| OCI VM | Not provisioned; see the [Operations Runbook](docs/devops/runbook.md) and [Roadmap](docs/reference/ROADMAP.md) |
 | Open items | Fix the [OpenAPI browser review findings](docs/reference/openapi-browser-review.md); TLS with a real domain, login-failure and rate-limit alerts, and an independent security review before public exposure |
 
 The [Development Roadmap](docs/reference/ROADMAP.md) tracks the detail.
