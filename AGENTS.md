@@ -12,7 +12,8 @@ This file is the repository's internal entry point for AI agents and human contr
    - [Development roadmap](docs/reference/ROADMAP.md) for outstanding work.
    - [API documentation guideline](docs/guides/api-documentation-guideline.md) for controller/OpenAPI documentation.
    - [Domain decisions](docs/guides/domain-decisions.md) for the physical-copy model and loan constraints.
-   - [Architecture decision records](docs/adr/README.md) for settled structural choices (for example, layered feature packages over hexagonal).
+   - [Implementation plan](docs/adr/IMPLEMENTATION_PLAN.md) for open problems and remaining work, split into parts.
+   - [Architecture design rules](docs/architecture.md#design-rules) for the settled layered feature-package structure.
 
 ## Sources of truth
 
@@ -27,7 +28,8 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 | API documentation conventions | [API Documentation Guideline](docs/guides/api-documentation-guideline.md) |
 | JWT authentication and current role/loan policy | [Role and JWT guide](docs/reference/security-roles-and-jwt-guide.md) and [JWT Authentication Design](docs/reference/jwt-authentication-design.md); verify live behavior against code and tests |
 | Remaining work | [Development roadmap](docs/reference/ROADMAP.md) |
-| Settled architecture choices | [Architecture decision records](docs/adr/README.md) |
+| Settled architecture choices | [Architecture design rules](docs/architecture.md#design-rules) |
+| Open work and next steps | [Implementation plan](docs/adr/IMPLEMENTATION_PLAN.md) |
 | Recruiter-facing project description | [README](README.md) and the public-facing documents it links to |
 
 ## Current implementation facts
@@ -56,7 +58,7 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 - The environment template is `.env.example`. CI (`.github/workflows/ci.yml`) runs `unit-test`, `integration-test` (`-Pintegration -DskipUTs`, so unit tests run once) and `security-scan` (Trivy via `scripts/ci/trivy-scan.sh`, shared with CD) jobs; the build enforces JDK 25 and an 80% line-coverage floor.
 - Loans are implemented under JWT Bearer authentication. Each Book row represents one physical copy; V4 adds loan history and copy status. V5 adds optional book descriptions and renames the stored monetary value to `replacement_cost` without changing existing values. See [Loan Implementation Guide](docs/guides/loan.md).
 - Flyway owns schema changes; Hibernate uses ddl-auto=validate. V5 is the current latest migration.
-- Packages: every feature (`auth`, `book`, `loan`, `user`) uses the same sub-packages (`controller`, `service`, `repository`, `entity`, `dto`, `mapper`, `exception`, plus `config` where needed); shared code is in `global` (`exception`, `response`, `logging`, `openapi`, `time`). Services accept request DTOs and return response DTOs; entities never reach controllers. See [ADR 0002](docs/adr/0002-layered-feature-packages.md).
+- Packages: every feature (`auth`, `book`, `loan`, `user`) uses the same sub-packages (`controller`, `service`, `repository`, `entity`, `dto`, `mapper`, `exception`, plus `config` where needed); shared code is in `global` (`exception`, `response`, `logging`, `openapi`, `time`). Services accept request DTOs and return response DTOs; entities never reach controllers. See [Architecture design rules](docs/architecture.md#design-rules).
 - Errors: a missing resource throws a `ResourceNotFoundException` subclass (404); a broken business rule throws `InvalidRequestException` or a subclass (400). A bare `IllegalArgumentException` is a server fault (500, generic message). Account owner/role checks live in `UserAccessPolicy`.
 - Tests mirror the main packages under `src/test/java/app/`. `*Test` classes run in Surefire (`./mvnw verify`), `*IT` classes in Failsafe (`-Pintegration`); `-DskipUTs` turns off Surefire only. Spring tests use `@ActiveProfiles("test")`, and `application-test.properties` layers only test overrides on top of the real `application.properties`.
 - Configuration defaults live only in `application.properties`. `docker-compose.yml` passes optional variables only when set, and `.env.example` keeps optional values commented out.
