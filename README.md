@@ -222,8 +222,8 @@ Authorization: Bearer <signed JWT>
 | Area | Representative endpoints | Access |
 | --- | --- | --- |
 | Books | `GET /app/books/all`, `GET /app/books/query`, `GET /app/books/{id}`, `POST /app/books/add` | All roles read; library assistants and librarians write. |
-| Users | `POST /app/users/signup`, `GET /app/users/{universityId}`, `POST /app/users/faculty` | Signup is public; profiles are owner/staff scoped; only librarians create faculty. |
-| Loans | `POST /app/loans/{bookId}`, `PUT /app/loans/{loanId}/return`, `GET /app/loans/me` | Students/faculty borrow and return their own loans; all roles read their own history. |
+| Users | `POST /app/users/signup`, `GET /app/users/me`, `GET /app/users/{universityId}`, `POST /app/users/faculty` | Signup is public; profiles are owner/staff scoped; only librarians create faculty. |
+| Loans | `POST /app/loans/{bookId}`, `PUT /app/loans/{loanId}/return`, `GET /app/loans/me`, `GET /app/loans` | Students/faculty borrow and return their own loans; staff can list loans across permitted borrowers. |
 
 Successful responses use an `ApiResponse` envelope; errors use `ErrorResponse` with a `requestId`. List results are paginated (default size 12, maximum 100). Enable `LIBRO_API_DOCS_ENABLED=true` locally for `/swagger-ui.html` and `/v3/api-docs`; they are off by default. See the [Engineering Reference](docs/reference/engineering-reference.md) for the API inventory and [Roles and JWT Guide](docs/reference/security-roles-and-jwt-guide.md) for permissions.
 
@@ -235,9 +235,9 @@ Successful responses use an `ApiResponse` envelope; errors use `ErrorResponse` w
 flowchart LR
     PR[Pull request] --> CI[CI checks]
     Main[Push to main] --> CI
-    CI --> Test[test: unit, MVC, coverage]
-    CI --> Integration[integration: PostgreSQL]
-    CI --> Security[security: Trivy]
+    CI --> Test[unit-test: unit, MVC, coverage]
+    CI --> Integration[integration-test: PostgreSQL]
+    CI --> Security[security-scan: Trivy]
     Test --> Pass[All checks pass]
     Integration --> Pass
     Security --> Pass
@@ -253,9 +253,9 @@ Every pull request and every push to `main` runs three parallel checks in [`.git
 
 | Check | What it proves |
 | --- | --- |
-| `test` | Unit and MVC tests, with an 80% line-coverage floor |
-| `integration` | Flyway migrations, schema validation, and loan concurrency against PostgreSQL 18 |
-| `security` | Trivy finds no fixable HIGH or CRITICAL issues in dependencies or the container image |
+| `unit-test` | Unit and MVC tests, with an 80% line-coverage floor |
+| `integration-test` | Flyway migrations, schema validation, and loan concurrency against PostgreSQL 18 |
+| `security-scan` | Trivy finds no fixable HIGH or CRITICAL issues in dependencies or the container image |
 
 ### Triggers & Quality Gates
 
@@ -324,12 +324,12 @@ Read the [Agent and Contributor Guide](AGENTS.md) before changing code or docume
 | Area | State |
 | --- | --- |
 | Catalog, accounts, roles, JWT authentication, loans | Implemented and covered by unit, MVC, and PostgreSQL tests |
-| CI (`test`, `integration`, `security`) | Running on every pull request and push to `main` |
+| CI (`unit-test`, `integration-test`, `security-scan`) | Running on every pull request and push to `main`; required by branch protection on `main` |
 | Container image and Compose stack | Implemented, with health checks |
 | Deploy, rollback, backup, and smoke-test scripts; runbook | Implemented and rehearsed locally |
 | CD workflow (ARM64 build, scan, publish, gated deploy) | Implemented; deploy job off until the VM exists |
 | OCI VM | Not provisioned; see [ADR 0001](docs/adr/0001-pre-oci-deployment-improvements.md) |
-| Open items | V3-to-V4 migration upgrade test on PostgreSQL; browser review of the OpenAPI/Swagger output; TLS with a real domain, login-failure and rate-limit alerts, and an independent security review before public exposure |
+| Open items | Fix the [OpenAPI browser review findings](docs/reference/openapi-browser-review.md); TLS with a real domain, login-failure and rate-limit alerts, and an independent security review before public exposure |
 
 The [Development Roadmap](docs/reference/ROADMAP.md) tracks the detail.
 

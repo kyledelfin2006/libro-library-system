@@ -35,6 +35,7 @@ Account boundaries:
 - Only `LIBRARIAN` may create a school faculty account through `POST /app/users/faculty` or a library assistant through `POST /app/users/administrators`.
 - `GET /app/users` lists student and faculty accounts for administrators; the librarian can also list administrator accounts.
 - `GET /app/users/{universityId}` is available to the owner. Administrators may additionally read student/faculty profiles. Librarians may additionally read student/faculty/administrator profiles, but no staff role may read another librarian's profile.
+- `GET /app/users/me` loads the authenticated account's current public profile using the token subject. It returns 404 if that account has since been deleted.
 - Profile PATCH/PUT and password change are available to the owner, administrators, and librarians. Administrators may manage student/faculty accounts; librarians may also manage administrator accounts. Neither staff role may manage another librarian's profile/password.
 - `DELETE /app/users/{universityId}` allows students/faculty to delete themselves, administrators to delete students/faculty, and librarians to delete students/faculty/administrators. Administrator and librarian accounts cannot delete themselves; librarian accounts cannot be deleted through this route.
 - To preserve loan history and its foreign-key references, account deletion returns HTTP 409 while any loan record references that user.
@@ -51,6 +52,7 @@ Loans are implemented as a separate feature under `app.loan`, following the exis
 | PUT | `/app/loans/{loanId}/return` | Return the caller's active loan | Students/faculty only; own loan only |
 | PUT | `/app/loans/{loanId}/lost` | Staff closes an active loan as lost and marks the copy lost | Library assistants: student/faculty; librarians: student/faculty/library assistants |
 | GET | `/app/loans/me` | View the caller's loan history, including active and terminal loans | All roles |
+| GET | `/app/loans` | Paginated library-wide list, optionally filtered by status, overdue loans, or borrower | Administrators: student/faculty loans; librarians: student/faculty/administrator loans |
 | GET | `/app/loans/users/{universityId}` | View a patron's loan history | Administrators: students/faculty; librarians: students/faculty/administrators |
 
 The borrower is always derived from the authenticated principal. The client supplies a book ID to borrow, never a borrower ID. Loan responses contain a DTO, not JPA entities.

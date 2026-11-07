@@ -128,6 +128,8 @@ public class SecurityConfig {
                         .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
                         .requestMatchers(HttpMethod.GET, "/app/loans/me")
                         .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
+                        .requestMatchers(HttpMethod.GET, "/app/loans")
+                        .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
                         .requestMatchers(HttpMethod.GET, "/app/loans/users/**")
                         .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
 

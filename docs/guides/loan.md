@@ -29,6 +29,7 @@ Overdue is a calculated condition, not a status: `status == ACTIVE && now.isAfte
 - Any loan history prevents deletion of its referenced book copy or user. The API returns `409 Conflict`; the foreign keys use `ON DELETE RESTRICT`.
 - There are no fines, penalty balances, borrower suspensions, or repeat-offender rules in this version. A lost loan closes the active loan slot but does not assess a penalty.
 - History uses zero-based pages, defaults to 12 rows per page, permits at most 100, and only allows `id`, `borrowedAt`, `dueAt`, `returnedAt`, or `status` as sort fields. Sort direction is `asc` or `desc`; without a requested sort, history uses `borrowedAt` descending then `id` descending.
+- The library-wide staff list at `GET /app/loans` uses the same pagination and sort rules. Optional `status` accepts `ACTIVE`, `RETURNED`, or `LOST`; `overdue=true` selects active loans whose due time is before the current Manila time; `borrower` selects one university ID. The query applies staff role scope and filters before counting pages. An unknown borrower returns 404; an out-of-scope borrower returns 403.
 
 ## User flow
 
@@ -103,6 +104,7 @@ The controller handles HTTP binding and response status. `LoanService` owns vali
 | `PUT /app/loans/{loanId}/return` | Students and faculty, for their own active loan | Records the return; returns `200` |
 | `PUT /app/loans/{loanId}/lost` | Library assistants and librarians, within their target-role scope | Closes the loan as lost and marks the copy lost; returns `200` |
 | `GET /app/loans/me` | All four roles | Caller’s own paged loan history |
+| `GET /app/loans` | Library assistants and librarians | Paged library-wide list within the staff role's borrower scope |
 | `GET /app/loans/users/{universityId}` | Library assistants and librarians, within their target-role scope | Target user’s paged loan history |
 
 Example checkout response data:
@@ -154,8 +156,8 @@ Prerequisites are Java 25 and Docker with Compose. The committed Maven Wrapper s
 
 To include PostgreSQL integration tests, run `./mvnw -Pintegration clean verify` with Docker available and `LIBRO_ADMIN_PASSWORD_HASH` set in the shell environment inherited by Maven to a test-only BCrypt hash. Maven does not load the Docker Compose `.env` file; Flyway V2 needs the variable to seed its bootstrap account in the disposable test database. The test profile supplies a deterministic test-only JWT key; production still requires `LIBRO_JWT_SECRET_BASE64`.
 
-For a loan smoke test, have a library assistant or librarian create a book copy, log in as a student or faculty borrower through `POST /app/auth/login`, then send the returned Bearer token with `POST /app/loans/{bookId}`, `GET /app/loans/me`, and `PUT /app/loans/{loanId}/return`. Swagger UI is available at `http://localhost:8080/swagger-ui.html` only when `LIBRO_API_DOCS_ENABLED=true`; browser review is still pending. API requests use the Authorization header and do not require a CSRF token.
+For a loan smoke test, have a library assistant or librarian create a book copy, log in as a student or faculty borrower through `POST /app/auth/login`, then send the returned Bearer token with `POST /app/loans/{bookId}`, `GET /app/loans/me`, and `PUT /app/loans/{loanId}/return`. Swagger UI is available at `http://localhost:8080/swagger-ui.html` only when `LIBRO_API_DOCS_ENABLED=true`; see the [browser review findings](../reference/openapi-browser-review.md). API requests use the Authorization header and do not require a CSRF token.
 
 ## Before extending the feature
 
-`LoanServiceTest` covers the main checkout, return, lost-resolution, role-scope, ownership, and history rules. `LoanSecurityMvcTest` checks route roles, principal-derived identity, and header-only stateless requests. `BookPersistenceIT` covers fresh V1-to-V5 schema validation, the V4-to-V5 value-preserving upgrade, and the concurrent catalog-edit/lost-resolution race; `LoanPersistenceIT` covers return persistence, the one-active-loan index, and deletion restrictions. `LoanConcurrencyIT` covers concurrent checkouts; a concurrent borrower-limit test and the V3-to-V4 upgrade test remain open. Do not edit an applied migration; add a new forward-only migration. Keep the README architecture summary and this guide synchronized with the entity and database model.
+`LoanServiceTest` covers checkout, return, lost-resolution, staff listing, role scope, ownership, and paging. `LoanSecurityMvcTest` checks route roles and principal-derived identity. `BookPersistenceIT` covers fresh V1-to-V5 schema validation, the V4-to-V5 value-preserving upgrade, and the concurrent catalog-edit/lost-resolution race. `LoanPersistenceIT` covers staff query counts, return persistence, the one-active-loan index, and deletion restrictions. `LoanMigrationIT` checks V3-to-V4 data preservation and constraints; `LoanConcurrencyIT` covers concurrent checkouts. Do not edit an applied migration; add a new forward-only migration.

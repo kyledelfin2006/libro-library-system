@@ -120,6 +120,19 @@ public class UserController {
                 authentication.getAuthorities())));
     }
 
+    /** Returns the authenticated account's current public profile. */
+    @GetMapping("/me")
+    @Operation(summary = "Get my profile",
+            description = "All four roles may view their own current profile. The account is loaded from the Bearer token subject; deleted accounts return 404. Password data is never returned.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Current public profile", useReturnTypeSchema = true)
+    @ErrorApiResponse(responseCode = "401", description = "Bearer token is missing or invalid")
+    @ErrorApiResponse(responseCode = "404", description = "Authenticated account no longer exists")
+    public ResponseEntity<ApiResponse<UserResponseDTO>> getMyProfile(Authentication authentication) {
+        // Use the verified subject for both caller and target, so no client-supplied ID selects an account.
+        return ResponseEntity.ok(ApiResponse.ok(service.getUserByUniversityId(
+                authentication.getName(), authentication.getName(), authentication.getAuthorities())));
+    }
+
     /**
      * Retrieves one public profile in the standard success envelope.
      *

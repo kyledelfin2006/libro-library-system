@@ -20,6 +20,9 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 import java.time.LocalDateTime;
 
@@ -164,6 +167,30 @@ class LoanSecurityMvcTest {
         mockMvc.perform(get("/app/loans/me"))
                 .andExpect(status().isUnauthorized());
 
+        verifyNoInteractions(loanService);
+    }
+
+    /** Staff can list library-wide loans using the authenticated identity and query filters. */
+    @Test
+    void assistantCanListFilteredLoans() throws Exception {
+        when(loanService.getStaffLoans(eq("2025-8765"), eq(LoanStatus.ACTIVE), eq(true),
+                eq(BORROWER_ID), any(Pageable.class))).thenReturn(Page.empty());
+
+        mockMvc.perform(get("/app/loans").with(user("2025-8765").roles("ADMINISTRATOR"))
+                        .queryParam("status", "ACTIVE").queryParam("overdue", "true")
+                        .queryParam("borrower", BORROWER_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+
+        verify(loanService).getStaffLoans(eq("2025-8765"), eq(LoanStatus.ACTIVE), eq(true),
+                eq(BORROWER_ID), any(Pageable.class));
+    }
+
+    /** Patron tokens cannot reach the library-wide list service. */
+    @Test
+    void studentCannotListLibraryLoans() throws Exception {
+        mockMvc.perform(get("/app/loans").with(user(BORROWER_ID).roles("STUDENT")))
+                .andExpect(status().isForbidden());
         verifyNoInteractions(loanService);
     }
 

@@ -12,6 +12,7 @@ import app.loan.mapper.LoanMapper;
 import app.loan.repository.LoanRepository;
 import app.user.entity.User;
 import app.user.entity.enums.UserRole;
+import app.user.exception.UserNotFoundException;
 import app.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -316,6 +317,63 @@ class LoanServiceTest {
         assertThrows(IllegalArgumentException.class, () -> loanService.getMyHistory(BORROWER_ID, unsafePage));
 
         verify(loanRepository, never()).findByBorrower_UniversityId(anyString(), any(Pageable.class));
+    }
+
+    /** Staff scope, overdue time, and page limits are passed to the repository before counting. */
+    @Test
+    void getStaffLoans_scopesAssistantQueryAndUsesManilaClock() {
+        when(userRepository.findByUniversityId(STAFF_ID))
+                .thenReturn(Optional.of(user(UserRole.ADMINISTRATOR, STAFF_ID)));
+        when(loanRepository.findStaffLoans(any(), eq(LoanStatus.ACTIVE), eq(true),
+                eq(LoanStatus.ACTIVE), eq(NOW), eq(null), any(Pageable.class)))
+                .thenReturn(Page.empty());
+
+        loanService.getStaffLoans(STAFF_ID, LoanStatus.ACTIVE, true, null,
+                PageRequest.of(1, 150, Sort.by("status")));
+
+        ArgumentCaptor<List<UserRole>> roles = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
+        verify(loanRepository).findStaffLoans(roles.capture(), eq(LoanStatus.ACTIVE), eq(true),
+                eq(LoanStatus.ACTIVE), eq(NOW), eq(null), page.capture());
+        assertEquals(List.of(UserRole.STUDENT, UserRole.FACULTY), roles.getValue());
+        assertEquals(100, page.getValue().getPageSize());
+        assertEquals(1, page.getValue().getPageNumber());
+    }
+
+    /** Librarians may include assistant borrowers, while unknown borrowers fail with 404. */
+    @Test
+    void getStaffLoans_librarianCanFilterAssistantAndUnknownBorrowerFails() {
+        when(userRepository.findByUniversityId(STAFF_ID))
+                .thenReturn(Optional.of(user(UserRole.LIBRARIAN, STAFF_ID)));
+        when(userRepository.findByUniversityId(BORROWER_ID))
+                .thenReturn(Optional.of(user(UserRole.ADMINISTRATOR, BORROWER_ID)));
+        when(loanRepository.findStaffLoans(any(), eq(null), eq(false),
+                eq(LoanStatus.ACTIVE), eq(NOW), eq(BORROWER_ID), any(Pageable.class)))
+                .thenReturn(Page.empty());
+
+        loanService.getStaffLoans(STAFF_ID, null, false, BORROWER_ID, PageRequest.of(0, 12));
+        verify(loanRepository).findStaffLoans(eq(List.of(UserRole.STUDENT, UserRole.FACULTY,
+                UserRole.ADMINISTRATOR)), eq(null), eq(false), eq(LoanStatus.ACTIVE), eq(NOW),
+                eq(BORROWER_ID), any(Pageable.class));
+
+        assertThrows(UserNotFoundException.class, () -> loanService.getStaffLoans(
+                STAFF_ID, null, false, "2025-9999", PageRequest.of(0, 12)));
+    }
+
+    /** A valid patron token cannot call the staff service even if the route gate is bypassed. */
+    @Test
+    void getStaffLoans_rejectsPatronAndUnsupportedSort() {
+        when(userRepository.findByUniversityId(STAFF_ID))
+                .thenReturn(Optional.of(user(UserRole.STUDENT, STAFF_ID)));
+        assertThrows(AccessDeniedException.class, () -> loanService.getStaffLoans(
+                STAFF_ID, null, false, null, PageRequest.of(0, 12)));
+
+        when(userRepository.findByUniversityId(STAFF_ID))
+                .thenReturn(Optional.of(user(UserRole.ADMINISTRATOR, STAFF_ID)));
+        assertThrows(IllegalArgumentException.class, () -> loanService.getStaffLoans(
+                STAFF_ID, null, false, null, PageRequest.of(0, 12, Sort.by("borrower.passwordHash"))));
+        verify(loanRepository, never()).findStaffLoans(any(), any(), eq(false), any(),
+                any(), any(), any(Pageable.class));
     }
 
     /** Configures repository results for a borrower and an available physical copy. */

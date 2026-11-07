@@ -214,6 +214,22 @@ class SecurityFlowMvcTest {
                 .andExpect(jsonPath("$.error").value("Unauthorized"));
     }
 
+    /** The own-profile route requires Bearer authentication and uses the signed subject. */
+    @Test
+    void myProfileRequiresTokenAndUsesItsSubject() throws Exception {
+        mockMvc.perform(get("/app/users/me"))
+                .andExpect(status().isUnauthorized());
+
+        when(userService.getUserByUniversityId(
+                org.mockito.ArgumentMatchers.eq(UNIVERSITY_ID),
+                org.mockito.ArgumentMatchers.eq(UNIVERSITY_ID),
+                org.mockito.ArgumentMatchers.anyCollection())).thenReturn(userResponse());
+        mockMvc.perform(get("/app/users/me")
+                        .header(HttpHeaders.AUTHORIZATION, bearerAuthorization(UserRole.FACULTY)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.universityId").value(UNIVERSITY_ID));
+    }
+
     /** Confirms the OpenAPI/Swagger routes are not rejected by the security chain when docs are enabled (default). */
     @Test
     void apiDocsRoutesArePermittedWhenEnabled() throws Exception {
