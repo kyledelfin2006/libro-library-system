@@ -2,6 +2,7 @@ package app.loan.repository;
 
 import app.loan.entity.Loan;
 import app.loan.entity.LoanStatus;
+import app.user.entity.enums.UserRole;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -12,6 +13,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.Optional;
 
 /**
@@ -57,6 +59,29 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
      */
     @EntityGraph(attributePaths = {"borrower", "book", "lostBy"})
     Page<Loan> findByBorrower_UniversityId(String universityId, Pageable pageable);
+
+    /** Queries and counts only loans visible to staff, applying every filter before pagination. */
+    @EntityGraph(attributePaths = {"borrower", "book", "lostBy"})
+    @Query(value = """
+            SELECT l FROM Loan l JOIN l.borrower b
+            WHERE b.userRole IN :visibleRoles
+              AND (:status IS NULL OR l.status = :status)
+              AND (:overdue = false OR (l.status = :activeStatus AND l.dueAt < :now))
+              AND (:borrowerId IS NULL OR b.universityId = :borrowerId)
+            """, countQuery = """
+            SELECT COUNT(l) FROM Loan l JOIN l.borrower b
+            WHERE b.userRole IN :visibleRoles
+              AND (:status IS NULL OR l.status = :status)
+              AND (:overdue = false OR (l.status = :activeStatus AND l.dueAt < :now))
+              AND (:borrowerId IS NULL OR b.universityId = :borrowerId)
+            """)
+    Page<Loan> findStaffLoans(@Param("visibleRoles") Collection<UserRole> visibleRoles,
+                              @Param("status") LoanStatus status,
+                              @Param("overdue") boolean overdue,
+                              @Param("activeStatus") LoanStatus activeStatus,
+                              @Param("now") LocalDateTime now,
+                              @Param("borrowerId") String borrowerId,
+                              Pageable pageable);
 
     /**
      * Loads and write-locks a loan while staff closes it as lost or the borrower returns it.

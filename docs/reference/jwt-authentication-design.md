@@ -169,3 +169,5 @@ The normal Maven test suite exercises the real filter and decoder with signed co
 ## Revocation policy
 
 An issued token stays valid until it expires (at most 900 seconds plus 30 seconds of clock skew) even after a password change, role change or account deletion. This delay is **accepted** for this project: there are no refresh tokens, no denylist and no per-request account lookup. Changing it is a separate design decision, for example a token-version claim compared with the stored account on each request.
+
+For the first browser UI, handle token expiry with a small re-authentication prompt and return the user to the page they were using after login. The API currently has no refresh endpoint; its access token lasts at most 15 minutes, not 20. Revisit refresh-token design only if staff usage shows that this interruption is a material problem.

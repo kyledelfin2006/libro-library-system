@@ -378,6 +378,7 @@ User routes:
 | Method | Path | Purpose | Response shape |
 |---|---|---|---|
 | GET | `/app/users` | Paginated student/faculty directory for administrators; librarian also sees library assistants (default size 12) | `ApiResponse<Page<UserResponseDTO>>` |
+| GET | `/app/users/me` | Current profile for the authenticated account; deleted accounts return 404 | `ApiResponse<UserResponseDTO>` |
 | GET | `/app/users/{universityId}` | Retrieve own profile; staff may read accounts allowed by role | `ApiResponse<UserResponseDTO>` |
 | POST | `/app/users/signup` | Create a user account (public) | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 | POST | `/app/users/faculty` | Create a faculty account (librarian only) | `ApiResponse<UserResponseDTO>`, HTTP 201 |
@@ -395,6 +396,7 @@ Loan routes:
 | PUT | `/app/loans/{loanId}/return` | Borrower returns own active loan | `ApiResponse<LoanResponseDTO>` |
 | PUT | `/app/loans/{loanId}/lost` | Authorized library staff resolves an active loan as lost | `ApiResponse<LoanResponseDTO>` |
 | GET | `/app/loans/me` | Caller reads own paged history | `ApiResponse<Page<LoanResponseDTO>>` |
+| GET | `/app/loans` | Staff lists loans across permitted borrower roles; optional status, overdue, and borrower filters | `ApiResponse<Page<LoanResponseDTO>>` |
 | GET | `/app/loans/users/{universityId}` | Authorized staff reads a permitted user's history | `ApiResponse<Page<LoanResponseDTO>>` |
 
 Only students and faculty can borrow or return. All roles can read their own history. Library assistants can view/resolve student and faculty loans; librarians can also view/resolve library-assistant loans. Check `SecurityConfig` and `LoanService` for the enforced policy.
@@ -649,7 +651,8 @@ Test sources mirror the main packages under `src/test/java/app/`: a test lives i
 - `BookMapperTest`: focused tests for entity-to-DTO mapping, null inputs, and list mapping.
 - `GlobalExceptionHandlerTest`: direct unit tests for exception handlers, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
 - `BookPersistenceIT`: PostgreSQL 18 integration tests for Flyway migrations, Hibernate schema validation, repository queries and projections, committed service updates, and a catalog edit waiting for lost-loan resolution while preserving the committed `LOST` copy status.
-- `LoanPersistenceIT`: PostgreSQL integration tests for committed return history, the one-active-loan-per-copy index, and foreign-key deletion restrictions.
+- `LoanPersistenceIT`: PostgreSQL integration tests for staff loan query counts and filters, committed return history, the one-active-loan-per-copy index, and foreign-key deletion restrictions.
+- `LoanMigrationIT`: isolated PostgreSQL V3-to-V4 upgrade with retained user/book rows, loan indexes and constraints, and V4 Hibernate schema validation.
 - `UserPersistenceIT`: PostgreSQL integration tests for normalized creation, stored hashes, committed updates, and uniqueness/format constraints.
 - `LibrarianBootstrapIT`: PostgreSQL tests for first-account creation, repeated-start idempotence, unset configuration, and invalid/partial configuration. Integration tests share one context-managed PostgreSQL container and use a resource lock. Run them with `./mvnw -Pintegration verify` (or `mvnw.cmd` on Windows).
 
@@ -748,9 +751,9 @@ When a breaking change is intended, document migration guidance and update all e
 - CORS allows no browser origin by default; configure exact UI origins before serving a cross-origin browser client.
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
 - Signup always creates a student; librarians create faculty and library assistants; students/faculty may delete themselves, administrators may delete student/faculty accounts, and librarians may also delete library assistant accounts.
-- Loan routes and V4 are implemented. `LoanServiceTest` and `LoanSecurityMvcTest` cover key service rules and route gates; `BookPersistenceIT` and `LoanPersistenceIT` cover the current schema, the lost-status/catalog-edit lock interaction, loan history constraints, and terminal return persistence. Concurrent borrower-limit checkout attempts still need a dedicated PostgreSQL test. User routes have MVC contract, PostgreSQL integration, and JWT security-flow coverage; the security MVC tests mock the user repository.
+- Loan routes and V4 are implemented. `LoanServiceTest` and `LoanSecurityMvcTest` cover service rules and route gates; `BookPersistenceIT`, `LoanPersistenceIT`, and `LoanConcurrencyIT` cover the current schema, the lost-status/catalog-edit lock interaction, loan history constraints, terminal return persistence, and concurrent checkout limits. User routes have MVC contract, PostgreSQL integration, and JWT security-flow coverage; the security MVC tests mock the user repository.
 - `BookPersistenceIT` verifies a fresh PostgreSQL database migrates through V5 and passes Hibernate schema validation. It also migrates an isolated V4 schema to V5 and checks that stored monetary values remain intact; running the integration profile requires Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH`.
-- The V3-to-V4 migration upgrade path does not yet have a dedicated PostgreSQL test.
+- `LoanMigrationIT` verifies the V3-to-V4 upgrade path against PostgreSQL with V4 Hibernate validation.
 - API envelope and error `timestamp` fields are epoch milliseconds rather than ISO-8601 values. Loan date-time fields use `LocalDateTime` and are serialized without a timezone offset; the loan contract treats them as Asia/Manila local time.
 - Public probes are `/livez` and `/readyz` (details hidden; Docker checks use readiness). Actuator `health` and `prometheus` are served only on the private management port, which must not be published.
 - Ordinary indexes may not accelerate case-insensitive substring searches as expected.

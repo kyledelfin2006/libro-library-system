@@ -18,11 +18,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.List;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -120,6 +123,62 @@ class LoanPersistenceIT {
             userRepository.deleteById(borrower.getId());
             bookRepository.deleteById(copy.getId());
         }
+    }
+
+    /** PostgreSQL counts only role-scoped and filtered rows before applying page limits. */
+    @Test
+    void staffLoanQueryScopesAndFiltersBeforePagination() {
+        User student = createStudent();
+        User faculty = createStaffLikeUser(UserRole.FACULTY);
+        User assistant = createStaffLikeUser(UserRole.ADMINISTRATOR);
+        Book firstCopy = createBook();
+        Book secondCopy = createBook();
+        Book thirdCopy = createBook();
+        LocalDateTime now = LocalDateTime.of(2026, 10, 19, 10, 30);
+        Loan overdue = loanRepository.saveAndFlush(new Loan(student, firstCopy,
+                now.minusDays(15), now.minusDays(1)));
+        Loan current = loanRepository.saveAndFlush(new Loan(faculty, secondCopy,
+                now.minusDays(1), now.plusDays(13)));
+        Loan old = new Loan(assistant, thirdCopy, now.minusDays(30), now.minusDays(16));
+        old.markReturned(now.minusDays(20));
+        old = loanRepository.saveAndFlush(old);
+
+        try {
+            var firstPage = loanRepository.findStaffLoans(List.of(UserRole.STUDENT, UserRole.FACULTY),
+                    null, false, LoanStatus.ACTIVE, now, null,
+                    PageRequest.of(0, 1, Sort.by("id")));
+            assertEquals(2, firstPage.getTotalElements());
+            assertEquals(1, firstPage.getNumberOfElements());
+
+            var overduePage = loanRepository.findStaffLoans(List.of(UserRole.STUDENT, UserRole.FACULTY),
+                    LoanStatus.ACTIVE, true, LoanStatus.ACTIVE, now, null, PageRequest.of(0, 12));
+            assertEquals(1, overduePage.getTotalElements());
+            assertEquals(student.getUniversityId(), overduePage.getContent().getFirst().getBorrower().getUniversityId());
+
+            var librarianPage = loanRepository.findStaffLoans(List.of(UserRole.STUDENT, UserRole.FACULTY,
+                    UserRole.ADMINISTRATOR), null, false, LoanStatus.ACTIVE, now,
+                    assistant.getUniversityId(), PageRequest.of(0, 12));
+            assertEquals(1, librarianPage.getTotalElements());
+            assertEquals(LoanStatus.RETURNED, librarianPage.getContent().getFirst().getStatus());
+        } finally {
+            loanRepository.deleteAllById(List.of(overdue.getId(), current.getId(), old.getId()));
+            userRepository.deleteAllById(List.of(student.getId(), faculty.getId(), assistant.getId()));
+            bookRepository.deleteAllById(List.of(firstCopy.getId(), secondCopy.getId(), thirdCopy.getId()));
+        }
+    }
+
+    /** Creates a non-student fixture with a valid V3 role and no student course. */
+    private User createStaffLikeUser(UserRole role) {
+        int sequence = Math.floorMod(FIXTURE_SEQUENCE.incrementAndGet(), 10_000);
+        String universityId = String.format("6%03d-%04d", sequence / 10, sequence);
+        User user = new User();
+        user.setUniversityId(universityId);
+        user.setPasswordHash("test-only-hash");
+        user.setFirstName("Integration");
+        user.setLastName("Reader");
+        user.setEmail(universityId + "@example.test");
+        user.setUserRole(role);
+        return userRepository.saveAndFlush(user);
     }
 
     /** Creates a valid student account with unique test-only identifiers. */

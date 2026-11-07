@@ -3,9 +3,12 @@ package app.loan.controller;
 import app.global.openapi.ErrorApiResponse;
 import app.global.response.ApiResponse;
 import app.loan.dto.LoanResponseDTO;
+import app.loan.entity.LoanStatus;
 import app.loan.service.LoanService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.Parameters;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -137,6 +141,39 @@ public class LoanController {
     ) {
         // Use the caller principal so clients cannot select another account's own-history query.
         return ResponseEntity.ok(ApiResponse.ok(loanService.getMyHistory(authentication.getName(), pageable)));
+    }
+
+    /** Lists role-scoped loans across all borrowers for library staff. */
+    @GetMapping
+    @Operation(summary = "List library loans",
+            description = "Library assistants see student and faculty loans; librarians also see assistant loans. "
+                    + "Filter by status, borrower university ID, or overdue=true (active loans past due now in Asia/Manila). "
+                    + HISTORY_PAGINATION_DESCRIPTION)
+    @Parameters({
+            @Parameter(name = "page", description = "Zero-based page index; default 0.",
+                    schema = @Schema(type = "integer", defaultValue = "0")),
+            @Parameter(name = "size", description = "Page size; default 12, maximum 100.",
+                    schema = @Schema(type = "integer", defaultValue = "12", maximum = "100")),
+            @Parameter(name = "sort", description = "property,direction; properties: id, borrowedAt, dueAt, returnedAt, status. Direction: asc or desc.",
+                    example = "borrowedAt,desc")
+    })
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Authorized loan page", useReturnTypeSchema = true)
+    @ErrorApiResponse(responseCode = "401", description = "Bearer token is missing or invalid")
+    @ErrorApiResponse(responseCode = "400", description = "Invalid filter or unsupported sort property")
+    @ErrorApiResponse(responseCode = "403", description = "Only authorized library staff may list these loans")
+    @ErrorApiResponse(responseCode = "404", description = "Borrower account not found")
+    public ResponseEntity<ApiResponse<Page<LoanResponseDTO>>> staffLoans(
+            @RequestParam(required = false) LoanStatus status,
+            @RequestParam(defaultValue = "false") boolean overdue,
+            @Parameter(description = "Borrower university ID in ####-#### format.", example = "2025-4321")
+            @RequestParam(required = false) String borrower,
+            @ParameterObject @PageableDefault(size = 12, sort = {"borrowedAt", "id"},
+                    direction = org.springframework.data.domain.Sort.Direction.DESC) Pageable pageable,
+            Authentication authentication
+    ) {
+        // The service derives the staff scope from the stored account before querying any loans.
+        return ResponseEntity.ok(ApiResponse.ok(loanService.getStaffLoans(
+                authentication.getName(), status, overdue, borrower, pageable)));
     }
 
     /**

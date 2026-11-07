@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -237,6 +238,37 @@ public class LoanService {
 
         // Return only loans owned by the authorized target account.
         return loanRepository.findByBorrower_UniversityId(targetUniversityId, safePageable)
+                .map(loan -> loanMapper.toResponse(loan, now));
+    }
+
+    /**
+     * Lists library-wide loans within the persisted staff role's borrower scope.
+     * Filters are applied in the repository query so page counts include only visible rows.
+     */
+    @Transactional(readOnly = true)
+    public Page<LoanResponseDTO> getStaffLoans(String callerUniversityId, LoanStatus status,
+                                                boolean overdue, String borrowerId, Pageable pageable) {
+        User staff = userRepository.findByUniversityId(callerUniversityId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+        List<UserRole> visibleRoles = switch (staff.getUserRole()) {
+            case ADMINISTRATOR -> List.of(UserRole.STUDENT, UserRole.FACULTY);
+            case LIBRARIAN -> List.of(UserRole.STUDENT, UserRole.FACULTY, UserRole.ADMINISTRATOR);
+            default -> throw new AccessDeniedException("Only library staff may list loans");
+        };
+
+        // An explicit borrower must exist; retain the existing staff-to-target role boundary.
+        if (borrowerId != null) {
+            User borrower = userRepository.findByUniversityId(borrowerId)
+                    .orElseThrow(() -> new UserNotFoundException("User not found"));
+            if (!canManageLoanBorrower(staff.getUserRole(), borrower.getUserRole())) {
+                throw new AccessDeniedException("You are not allowed to view this patron's loans");
+            }
+        }
+
+        Pageable safePageable = normalizePageable(pageable);
+        LocalDateTime now = LocalDateTime.now(libraryClock);
+        return loanRepository.findStaffLoans(visibleRoles, status, overdue, LoanStatus.ACTIVE,
+                        now, borrowerId, safePageable)
                 .map(loan -> loanMapper.toResponse(loan, now));
     }
 

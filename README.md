@@ -222,8 +222,8 @@ Authorization: Bearer <signed JWT>
 | Area | Representative endpoints | Access |
 | --- | --- | --- |
 | Books | `GET /app/books/all`, `GET /app/books/query`, `GET /app/books/{id}`, `POST /app/books/add` | All roles read; library assistants and librarians write. |
-| Users | `POST /app/users/signup`, `GET /app/users/{universityId}`, `POST /app/users/faculty` | Signup is public; profiles are owner/staff scoped; only librarians create faculty. |
-| Loans | `POST /app/loans/{bookId}`, `PUT /app/loans/{loanId}/return`, `GET /app/loans/me` | Students/faculty borrow and return their own loans; all roles read their own history. |
+| Users | `POST /app/users/signup`, `GET /app/users/me`, `GET /app/users/{universityId}`, `POST /app/users/faculty` | Signup is public; profiles are owner/staff scoped; only librarians create faculty. |
+| Loans | `POST /app/loans/{bookId}`, `PUT /app/loans/{loanId}/return`, `GET /app/loans/me`, `GET /app/loans` | Students/faculty borrow and return their own loans; staff can list loans across permitted borrowers. |
 
 Successful responses use an `ApiResponse` envelope; errors use `ErrorResponse` with a `requestId`. List results are paginated (default size 12, maximum 100). Enable `LIBRO_API_DOCS_ENABLED=true` locally for `/swagger-ui.html` and `/v3/api-docs`; they are off by default. See the [Engineering Reference](docs/reference/engineering-reference.md) for the API inventory and [Roles and JWT Guide](docs/reference/security-roles-and-jwt-guide.md) for permissions.
 
@@ -329,7 +329,7 @@ Read the [Agent and Contributor Guide](AGENTS.md) before changing code or docume
 | Deploy, rollback, backup, and smoke-test scripts; runbook | Implemented and rehearsed locally |
 | CD workflow (ARM64 build, scan, publish, gated deploy) | Implemented; deploy job off until the VM exists |
 | OCI VM | Not provisioned; see [ADR 0001](docs/adr/0001-pre-oci-deployment-improvements.md) |
-| Open items | V3-to-V4 migration upgrade test on PostgreSQL; browser review of the OpenAPI/Swagger output; TLS with a real domain, login-failure and rate-limit alerts, and an independent security review before public exposure |
+| Open items | Fix the [OpenAPI browser review findings](docs/reference/openapi-browser-review.md); TLS with a real domain, login-failure and rate-limit alerts, and an independent security review before public exposure |
 
 The [Development Roadmap](docs/reference/ROADMAP.md) tracks the detail.
 

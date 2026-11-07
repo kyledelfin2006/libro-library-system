@@ -228,6 +228,30 @@ class UserControllerMvcTest {
                 .andExpect(jsonPath("$.statusCode").value(404));
     }
 
+    /** The own-profile route uses only the verified principal and never serializes credentials. */
+    @Test
+    void getMyProfile_usesPrincipalAndReturnsPublicDto() throws Exception {
+        when(service.getUserByUniversityId(eq(USER_ID), eq(USER_ID), anyCollection())).thenReturn(user());
+
+        mockMvc.perform(get("/app/users/me").principal(CALLER))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.universityId").value(USER_ID))
+                .andExpect(jsonPath("$.data.email").value("alex.rivera@example.edu"))
+                .andExpect(jsonPath("$.data.passwordHash").doesNotExist());
+
+        verify(service).getUserByUniversityId(eq(USER_ID), eq(USER_ID), anyCollection());
+    }
+
+    /** A still-valid token for an account deleted since issue receives 404. */
+    @Test
+    void getMyProfile_whenAccountWasDeletedReturnsNotFound() throws Exception {
+        when(service.getUserByUniversityId(eq(USER_ID), eq(USER_ID), anyCollection()))
+                .thenThrow(new UserNotFoundException(USER_ID));
+
+        mockMvc.perform(get("/app/users/me").principal(CALLER))
+                .andExpect(status().isNotFound());
+    }
+
     @Test
     void patchUser_returnsSuccessEnvelopeAndForwardsPartialBody() throws Exception {
         when(service.updateUser(eq(USER_ID), eq(USER_ID), any(UserPatchRequestDTO.class), anyCollection())).thenReturn(user());

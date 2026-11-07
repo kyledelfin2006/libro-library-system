@@ -43,7 +43,8 @@ See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-
 - [x] Add a concurrent checkout test proving the three-active-loan borrower limit and one-borrower-per-copy rule hold (`LoanConcurrencyIT`).
 - [x] Verify fresh V1-to-V5 startup through the PostgreSQL integration profile.
 - [x] Verify the V4-to-V5 upgrade path preserves existing replacement-cost values and schema validation.
-- [ ] Verify the V3-to-V4 upgrade path against PostgreSQL.
+- [x] Run the V3-to-V4 PostgreSQL upgrade test, including V4 Hibernate validation and data preservation.
+- [x] Add `GET /app/users/me` for the authenticated profile and a role-scoped, filtered `GET /app/loans` staff list.
 
 ### 3. Replace HTTP Basic with local JWT authentication (implemented)
 
@@ -62,7 +63,7 @@ See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-
 - [x] Add generated OpenAPI MVC assertions for Bearer security, public signup/login, and the login contract.
 - [x] Serve Swagger UI and `/v3/api-docs` publicly only when `LIBRO_API_DOCS_ENABLED=true` (off by default).
 - [x] Return every successful response in the `ApiResponse` envelope.
-- [ ] Review the live OpenAPI document and Swagger UI in a browser against the implementation.
+- [x] Review the live OpenAPI document and Swagger UI in a browser against the implementation; [findings to fix](openapi-browser-review.md).
 
 ## Database migration rule
 
