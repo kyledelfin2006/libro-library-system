@@ -2,6 +2,8 @@
 
 This is the working implementation roadmap. It is not the public project overview or an API contract. Live role/JWT rules are in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md) and the [JWT Authentication Design](jwt-authentication-design.md); this checklist tracks implementation status.
 
+The step-by-step plan for the remaining work, split into parts for a person or an AI agent, is in the [Implementation Plan](../adr/IMPLEMENTATION_PLAN.md).
+
 ## Current state
 
 | Area | Implemented now |
@@ -79,7 +81,7 @@ Before changing a migration, establish whether that version has been applied to 
 
 ## Structure and delivery cleanup
 
-- [x] Apply the same sub-packages in every feature, mirror them in tests, and record the layering choice in [ADR 0002](../adr/0002-layered-feature-packages.md).
+- [x] Apply the same sub-packages in every feature, mirror them in tests, and record the layering rules in [Architecture](../architecture.md#design-rules).
 - [x] Map entities to DTOs inside services only; default services to read-only transactions.
 - [x] Replace per-feature exception handlers with `ResourceNotFoundException` and `InvalidRequestException`; stop treating library `IllegalArgumentException`s as client errors.
 - [x] Move account owner/role checks into `UserAccessPolicy` with a matrix test.

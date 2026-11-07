@@ -189,7 +189,7 @@ Each checkout creates a new `LOAN` row for one physical copy and one borrower; `
 
 ## Design Rules
 
-These rules are applied the same way in every feature package; [ADR 0002](adr/0002-layered-feature-packages.md) explains why the project uses layered feature packages rather than hexagonal ports and adapters.
+These rules are applied the same way in every feature package; the project uses layered feature packages rather than hexagonal ports and adapters because the domain is a CRUD-heavy catalog with one real workflow (loans), one inbound adapter (REST), and one outbound adapter (JPA). JPA annotations stay on the domain classes; if a feature later gains a second adapter, that feature can introduce a port interface without restructuring the others.
 
 | Rule | Where it shows up |
 | --- | --- |

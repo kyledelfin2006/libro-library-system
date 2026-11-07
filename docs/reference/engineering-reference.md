@@ -55,7 +55,7 @@ library-api-system/
 |   `-- ci/trivy-scan.sh                     vulnerability scan shared by CI and CD
 |-- docs/
 |   |-- architecture.md                      short overview for readers new to the project
-|   |-- adr/                                 architecture decision records
+|   |-- adr/                                 open implementation plan
 |   |-- devops/                              CI/CD design and operations runbook
 |   |-- guides/                              domain, loan, API-doc, and setup guides
 |   `-- reference/                           this file, roles/JWT, roadmap

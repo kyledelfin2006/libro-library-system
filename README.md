@@ -76,7 +76,7 @@ flowchart LR
     Flyway[Flyway migrations] --> Database
 ```
 
-The single-module codebase groups `auth`, `book`, `loan`, and `user` by feature, then by layer. Controllers accept and return DTOs; services own business rules, transactions, and entity-to-DTO mapping; repositories own persistence. Shared responses, errors, request IDs, time handling, and OpenAPI configuration live in `global`. Flyway owns the schema, and Hibernate validates it at startup. [Architecture Overview](docs/architecture.md) shows the request and data flows; [ADR 0002](docs/adr/0002-layered-feature-packages.md) records the package decision.
+The single-module codebase groups `auth`, `book`, `loan`, and `user` by feature, then by layer. Controllers accept and return DTOs; services own business rules, transactions, and entity-to-DTO mapping; repositories own persistence. Shared responses, errors, request IDs, time handling, and OpenAPI configuration live in `global`. Flyway owns the schema, and Hibernate validates it at startup. [Architecture Overview](docs/architecture.md) shows the request and data flows; its Design Rules section records the package decision.
 
 ## Notable code changes
 
@@ -302,7 +302,7 @@ Run `./mvnw verify` for unit/MVC tests and the 80% line-coverage gate. Run `./mv
 src/             Spring Boot application (controllers, services, repositories, Flyway migrations) and tests
 infra/           Production Compose override and the Caddy reverse-proxy configuration
 scripts/         Deploy, rollback, smoke-test, backup, restore, and demo-seed scripts
-docs/adr/        Architecture decision records (0001: pre-OCI deployment, 0002: layered packages)
+docs/adr/        Open implementation plan (problems and remaining work)
 docs/
   architecture.md  Design, request flows, API inventory, data model, troubleshooting, tests
   devops/          CI/CD, environments, secrets, rollback, monitoring, operations runbook
@@ -328,7 +328,7 @@ Read the [Agent and Contributor Guide](AGENTS.md) before changing code or docume
 | Container image and Compose stack | Implemented, with health checks |
 | Deploy, rollback, backup, and smoke-test scripts; runbook | Implemented and rehearsed locally |
 | CD workflow (ARM64 build, scan, publish, gated deploy) | Implemented; deploy job off until the VM exists |
-| OCI VM | Not provisioned; see [ADR 0001](docs/adr/0001-pre-oci-deployment-improvements.md) |
+| OCI VM | Not provisioned; see the [implementation plan](docs/adr/IMPLEMENTATION_PLAN.md) |
 | Open items | Fix the [OpenAPI browser review findings](docs/reference/openapi-browser-review.md); TLS with a real domain, login-failure and rate-limit alerts, and an independent security review before public exposure |
 
 The [Development Roadmap](docs/reference/ROADMAP.md) tracks the detail.
