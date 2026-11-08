@@ -56,6 +56,7 @@ public class BookController {
     @GetMapping("/search")
     @Operation(summary = "Search books",
             description = "Search title, author, or genre with a case-insensitive substring. Replacement-cost searches require an exact numeric value. Results are paginated: page numbering starts at zero, default size 12, maximum 100; sort with sort=property,direction.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Matching book page", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Unsupported search type or invalid replacement-cost value")
     public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> searchBooks(
             @Parameter(description = "Field to search: author, title, genre, or replacementCost.", example = "title", schema = @Schema(allowableValues = {"author", "title", "genre", "replacementCost"}))
@@ -70,6 +71,7 @@ public class BookController {
     @GetMapping("/budget")
     @Operation(summary = "Find books by maximum replacement cost",
             description = "Returns all copies whose recorded replacement cost is at or below maxReplacementCost, inclusively. Results are paginated: page numbering starts at zero, default size 12, maximum 100.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Affordable book page", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "maxReplacementCost is not a valid decimal")
     public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> budgetBooks(
             @Parameter(description = "Inclusive maximum replacement cost.", example = "25.00")
@@ -94,6 +96,7 @@ public class BookController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a book by ID")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Matching book copy", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Book ID must be a number")
     @ErrorApiResponse(responseCode = "404", description = "Book not found")
     public ResponseEntity<ApiResponse<BookResponseDTO>> getBookById(@PathVariable Long id) {
@@ -102,6 +105,7 @@ public class BookController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete a book", description = "Only library assistants and the librarian may delete books. A physical copy referenced by any loan history cannot be deleted.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Book deleted", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Book ID must be a number")
     @ErrorApiResponse(responseCode = "404", description = "Book not found")
     @ErrorApiResponse(responseCode = "403", description = "Only library assistants and the librarian may delete books")
@@ -114,6 +118,7 @@ public class BookController {
     @GetMapping("/all")
     @Operation(summary = "List books with pagination",
             description = "Page numbering starts at zero. The default is page 0, size 12, sorted by id ascending; the maximum page size is 100. Sort with sort=property,direction using id, title, author, genre, or replacementCost. Unsupported sort properties return 400.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Book page", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Invalid pagination or sort parameter")
     public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> getAllBooks(
             @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
@@ -146,6 +151,7 @@ public class BookController {
     @GetMapping("/sorted")
     @Operation(summary = "List books sorted by a field",
             description = "Returns a page sorted ascending by title, author, id, replacementCost, or genre. The default field is title. The category parameter decides the order; page and size are honored (default size 12, maximum 100).")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Sorted book page", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Unsupported sort field")
     public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> getSortedBooks(
             @Parameter(description = "Allowed values: title, author, id, replacementCost, genre.", schema = @Schema(allowableValues = {"title", "author", "id", "replacementCost", "genre"}))
@@ -165,6 +171,7 @@ public class BookController {
     @GetMapping("/replacement-cost")
     @Operation(summary = "Filter books by replacement-cost range",
             description = "Returns copies with replacement costs between minReplacementCost and maxReplacementCost, inclusive. minReplacementCost must not exceed maxReplacementCost. Results are paginated: page numbering starts at zero, default size 12, maximum 100.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Books in replacement-cost range", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Invalid decimal value or minimum replacement cost exceeds maximum")
     public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> getReplacementCostRangedBooks(
             @Parameter(description = "Inclusive minimum replacement cost.", example = "10.00")
@@ -195,6 +202,7 @@ public class BookController {
     @PatchMapping("/{id}")
     @Operation(summary = "Partially update a book",
             description = "Library assistants and the librarian may update books. Updates only supplied fields. Omitted, null, or blank text fields remain unchanged; a supplied replacementCost must be greater than zero. Description is limited to 2,000 characters. Text values are trimmed before storage.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Updated book copy", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Invalid book ID or supplied field")
     @ErrorApiResponse(responseCode = "404", description = "Book not found")
     @ErrorApiResponse(responseCode = "403", description = "Only library assistants and the librarian may update books")
@@ -209,6 +217,7 @@ public class BookController {
     @PutMapping("/{id}")
     @Operation(summary = "Replace a book",
             description = "Library assistants and the librarian may update books. Replaces every mutable book field. Title, author, genre, and a positive replacementCost are required; description is optional and limited to 2,000 characters. Text values are trimmed before storage.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Replaced book copy", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Invalid book ID or request validation failed")
     @ErrorApiResponse(responseCode = "404", description = "Book not found")
     @ErrorApiResponse(responseCode = "403", description = "Only library assistants and the librarian may update books")

@@ -112,6 +112,8 @@ These **public patron-only accounts** use synthetic data. They can browse and bo
 
 After starting the [local stack](#quick-start), use the first command to create the student. The full seed also creates the faculty account and sample books and prompts for the librarian password. See [Demo Accounts](docs/guides/demo-accounts.md) for staff-account setup and [Local Setup](docs/guides/local-setup.md) for the optional first-librarian bootstrap. No public instance is available yet.
 
+On a **fresh, disposable local database**, run the full seed and then `bash scripts/smoke-journey.sh http://127.0.0.1:8080` with `SMOKE_STAFF_ID` and `SMOKE_STAFF_PASSWORD` set in the shell. Enable `LIBRO_API_DOCS_ENABLED=true` for this check. The journey borrows, returns, marks a faculty loan lost, resets the demo student, and restores that student's original password; do not run it against data you need to keep. The short deployment check remains `scripts/smoke.sh`.
+
 ## Quick Start
 
 ### Prerequisites
@@ -204,7 +206,7 @@ Successful response (`accessToken` and `timestamp` vary):
 {
   "success": true,
   "message": "Success",
-  "data": {"accessToken": "<signed JWT>", "tokenType": "Bearer", "expiresIn": 900},
+  "data": {"accessToken": "<signed JWT>", "tokenType": "Bearer", "expiresIn": 900, "mustChangePassword": false},
   "timestamp": 1720000000000
 }
 ```
@@ -222,10 +224,12 @@ Authorization: Bearer <signed JWT>
 | Area | Representative endpoints | Access |
 | --- | --- | --- |
 | Books | `GET /app/books/all`, `GET /app/books/query`, `GET /app/books/{id}`, `POST /app/books/add` | All roles read; library assistants and librarians write. |
-| Users | `POST /app/users/signup`, `GET /app/users/me`, `GET /app/users/{universityId}`, `POST /app/users/faculty` | Signup is public; profiles are owner/staff scoped; only librarians create faculty. |
+| Users | `POST /app/users/signup`, `GET /app/users/me`, `GET /app/users/{universityId}`, `PUT /app/users/{universityId}/password/reset` | Signup is public; profiles are owner/staff scoped; assistants may reset student/faculty passwords, and librarians may also reset assistant passwords. |
 | Loans | `POST /app/loans/{bookId}`, `PUT /app/loans/{loanId}/return`, `GET /app/loans/me`, `GET /app/loans` | Students/faculty borrow and return their own loans; staff can list loans across permitted borrowers. |
 
 Successful responses use an `ApiResponse` envelope; errors use `ErrorResponse` with a `requestId`. List results are paginated (default size 12, maximum 100). Enable `LIBRO_API_DOCS_ENABLED=true` locally for `/swagger-ui.html` and `/v3/api-docs`; they are off by default. See the [Engineering Reference](docs/reference/engineering-reference.md) for the API inventory and [Roles and JWT Guide](docs/reference/security-roles-and-jwt-guide.md) for permissions.
+
+After a staff-assisted reset, login and `GET /app/users/me` return `mustChangePassword: true`. The account owner changes the temporary password through `PUT /app/users/{universityId}/password` with `currentPassword` and `newPassword`; the flag then becomes false. The API reports the flag but does not block other requests while it is true, so the UI must direct the user through that change.
 
 ## CI/CD Pipeline Architecture
 
@@ -302,7 +306,7 @@ Run `./mvnw verify` for unit/MVC tests and the 80% line-coverage gate. Run `./mv
 src/             Spring Boot application (controllers, services, repositories, Flyway migrations) and tests
 infra/           Production Compose override and the Caddy reverse-proxy configuration
 scripts/         Deploy, rollback, smoke-test, backup, restore, and demo-seed scripts
-docs/adr/        Open implementation plan (problems and remaining work)
+docs/adr/        Planning archive; remaining work is in the roadmap
 docs/
   architecture.md  Design, request flows, API inventory, data model, troubleshooting, tests
   devops/          CI/CD, environments, secrets, rollback, monitoring, operations runbook
@@ -329,7 +333,7 @@ Read the [Agent and Contributor Guide](AGENTS.md) before changing code or docume
 | Deploy, rollback, backup, and smoke-test scripts; runbook | Implemented and rehearsed locally |
 | CD workflow (ARM64 build, scan, publish, gated deploy) | Implemented; deploy job off until the VM exists |
 | OCI VM | Not provisioned; see the [Operations Runbook](docs/devops/runbook.md) and [Roadmap](docs/reference/ROADMAP.md) |
-| Open items | Fix the [OpenAPI browser review findings](docs/reference/openapi-browser-review.md); TLS with a real domain, login-failure and rate-limit alerts, and an independent security review before public exposure |
+| Open items | TLS with a real domain, login-failure and rate-limit alerts, and an independent security review before public exposure |
 
 The [Development Roadmap](docs/reference/ROADMAP.md) tracks the detail.
 

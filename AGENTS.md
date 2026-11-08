@@ -12,7 +12,6 @@ This file is the repository's internal entry point for AI agents and human contr
    - [Development roadmap](docs/reference/ROADMAP.md) for outstanding work.
    - [API documentation guideline](docs/guides/api-documentation-guideline.md) for controller/OpenAPI documentation.
    - [Domain decisions](docs/guides/domain-decisions.md) for the physical-copy model and loan constraints.
-   - [Implementation plan](docs/adr/IMPLEMENTATION_PLAN.md) for the work to finish before the UI starts, split into parts.
    - [Architecture design rules](docs/architecture.md#design-rules) for the settled layered feature-package structure.
 
 ## Sources of truth
@@ -29,7 +28,7 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 | JWT authentication and current role/loan policy | [Role and JWT guide](docs/reference/security-roles-and-jwt-guide.md) and [JWT Authentication Design](docs/reference/jwt-authentication-design.md); verify live behavior against code and tests |
 | Remaining work | [Development roadmap](docs/reference/ROADMAP.md) |
 | Settled architecture choices | [Architecture design rules](docs/architecture.md#design-rules) |
-| Open work and next steps | [Implementation plan](docs/adr/IMPLEMENTATION_PLAN.md) |
+| Open work and next steps | [Development roadmap](docs/reference/ROADMAP.md) |
 | Recruiter-facing project description | [README](README.md) and the public-facing documents it links to |
 
 ## Current implementation facts
@@ -46,18 +45,18 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 - Book reads allow all four roles. Book creation, update, and deletion allow ADMINISTRATOR and LIBRARIAN.
 - A Book includes an optional description and a positive `replacementCost`; the public API uses replacement-cost names for search, sort, filtering, and statistics. The old `price` API names are removed.
 - Librarians create faculty and administrator/library-assistant accounts. Administrators can list/read/manage student and faculty accounts and delete those accounts; librarians may also manage/delete administrator accounts. Students and faculty can delete their own accounts. Staff cannot manage another librarian account; administrator and librarian accounts cannot delete themselves.
-- User account ownership and target-role rules are enforced in UserService as well as by route authorization. A role/password change or account deletion does not revoke an issued token before its expiry plus 30 seconds of clock skew.
+- User account ownership and target-role rules are enforced in UserService as well as by route authorization. Staff-assisted password reset sets `mustChangePassword`; an owner password change clears it. The flag is returned by login and `GET /app/users/me`, but the server does not block other routes while it is true. A role/password change or account deletion does not revoke an issued token before its expiry plus 30 seconds of clock skew.
 - `GET /app/users/me` returns the authenticated account's current public profile; a deleted account returns 404. Library staff can list role-scoped loans with `GET /app/loans`, filtering by status, overdue state, and borrower before pagination.
 - No librarian account is seeded by migration. An opt-in startup runner can create the first librarian from five environment variables, including a BCrypt hash; the values are all-or-nothing, repeat starts are idempotent, and logs omit account data and the hash. The historical V2 administrator bootstrap remains in place.
 - Spring Boot Actuator runs on a private management port (`MANAGEMENT_SERVER_PORT`, default 9091, never published) exposing `health` and `prometheus`. Public liveness and readiness probes are also served on the application port as `/livez` and `/readyz` with hidden details; Docker and Compose probe `/readyz`.
 - Every successful response uses the `ApiResponse<T>` envelope (`success`, `message`, `data`, `timestamp`), including login and pages (`ApiResponse<Page<T>>`); errors use `ErrorResponse`, which also carries `requestId`. Filter-chain 401/403 and 429 responses use the same JSON error body.
 - `RequestIdFilter` assigns an `X-Request-Id` (a safe inbound value or a UUID) to every request, the log pattern and error bodies. All book list endpoints are paginated (default size 12, maximum 100).
-- `docker compose --profile proxy up` adds a Caddy TLS reverse proxy (`infra/caddy/Caddyfile`); metrics `libro.rate_limit.rejections` and `libro.auth.logins` are exported on the private management port. JWT revocation is deliberately not implemented (accepted 15-minute window).
+- `docker compose --profile proxy up` adds a Caddy TLS reverse proxy (`infra/caddy/Caddyfile`); metrics `libro.rate_limit.rejections`, `libro.auth.logins`, and `libro.auth.password_resets` are exported on the private management port. JWT revocation is deliberately not implemented (accepted 15-minute window).
 - Stored `LocalDateTime` values use Asia/Manila through `LibraryTime` and the loan `Clock`. Swagger UI and `/v3/api-docs` are off unless `LIBRO_API_DOCS_ENABLED=true`.
 - Deployment to the OCI VM is operated by `scripts/` (`deploy.sh`, `smoke.sh`, `backup.sh`, `restore.sh`, `seed-demo.sh`) on top of `infra/docker-compose.prod.yml`; see the [Operations Runbook](docs/devops/runbook.md). `.github/workflows/cd.yml` builds, scans, and publishes the ARM64 image after CI passes on `main`; its deploy job runs only when the repository variable `OCI_DEPLOY_ENABLED` is `true` and the `production` environment approves.
 - The environment template is `.env.example`. CI (`.github/workflows/ci.yml`) runs `unit-test`, `integration-test` (`-Pintegration -DskipUTs`, so unit tests run once) and `security-scan` (Trivy via `scripts/ci/trivy-scan.sh`, shared with CD) jobs; the build enforces JDK 25 and an 80% line-coverage floor.
 - Loans are implemented under JWT Bearer authentication. Each Book row represents one physical copy; V4 adds loan history and copy status. V5 adds optional book descriptions and renames the stored monetary value to `replacement_cost` without changing existing values. See [Loan Implementation Guide](docs/guides/loan.md).
-- Flyway owns schema changes; Hibernate uses ddl-auto=validate. V5 is the current latest migration.
+- Flyway owns schema changes; Hibernate uses ddl-auto=validate. V6 is the current latest migration.
 - Packages: every feature (`auth`, `book`, `loan`, `user`) uses the same sub-packages (`controller`, `service`, `repository`, `entity`, `dto`, `mapper`, `exception`, plus `config` where needed); shared code is in `global` (`exception`, `response`, `logging`, `openapi`, `time`). Services accept request DTOs and return response DTOs; entities never reach controllers. See [Architecture design rules](docs/architecture.md#design-rules).
 - Errors: a missing resource throws a `ResourceNotFoundException` subclass (404); a broken business rule throws `InvalidRequestException` or a subclass (400). A bare `IllegalArgumentException` is a server fault (500, generic message). Account owner/role checks live in `UserAccessPolicy`.
 - Tests mirror the main packages under `src/test/java/app/`. `*Test` classes run in Surefire (`./mvnw verify`), `*IT` classes in Failsafe (`-Pintegration`); `-DskipUTs` turns off Surefire only. Spring tests use `@ActiveProfiles("test")`, and `application-test.properties` layers only test overrides on top of the real `application.properties`.

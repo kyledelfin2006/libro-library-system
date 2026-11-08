@@ -49,6 +49,32 @@ class UserAccessPolicyTest {
         }
     }
 
+    /** Pins every caller and target role for staff-assisted recovery. */
+    @ParameterizedTest(name = "{0} resetting {1} -> {2}")
+    @CsvSource({
+            "STUDENT, STUDENT, false", "STUDENT, FACULTY, false", "STUDENT, ADMINISTRATOR, false", "STUDENT, LIBRARIAN, false",
+            "FACULTY, STUDENT, false", "FACULTY, FACULTY, false", "FACULTY, ADMINISTRATOR, false", "FACULTY, LIBRARIAN, false",
+            "ADMINISTRATOR, STUDENT, true", "ADMINISTRATOR, FACULTY, true", "ADMINISTRATOR, ADMINISTRATOR, false", "ADMINISTRATOR, LIBRARIAN, false",
+            "LIBRARIAN, STUDENT, true", "LIBRARIAN, FACULTY, true", "LIBRARIAN, ADMINISTRATOR, true", "LIBRARIAN, LIBRARIAN, false"
+    })
+    void resetFollowsFullRoleMatrix(UserRole caller, UserRole target, boolean allowed) {
+        if (allowed) {
+            assertThatCode(() -> policy.requirePasswordReset(CALLER, OTHER, target, authoritiesOf(caller)))
+                    .doesNotThrowAnyException();
+        } else {
+            assertThatThrownBy(() -> policy.requirePasswordReset(CALLER, OTHER, target, authoritiesOf(caller)))
+                    .isInstanceOf(AccessDeniedException.class);
+        }
+    }
+
+    /** Staff cannot use recovery to skip proof of their own current password. */
+    @ParameterizedTest
+    @CsvSource({"ADMINISTRATOR", "LIBRARIAN"})
+    void staffCannotResetSelf(UserRole role) {
+        assertThatThrownBy(() -> policy.requirePasswordReset(CALLER, CALLER, role, authoritiesOf(role)))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
     /** Verifies every role, including the librarian, may manage its own profile and password. */
     @ParameterizedTest
     @CsvSource({"STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN"})

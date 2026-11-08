@@ -114,6 +114,8 @@ public class SecurityConfig {
                         .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
                         .requestMatchers(HttpMethod.PATCH, "/app/users/**")
                         .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
+                        .requestMatchers(HttpMethod.PUT, "/app/users/*/password/reset")
+                        .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
                         .requestMatchers(HttpMethod.PUT, "/app/users/**")
                         .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")
                         .requestMatchers(HttpMethod.DELETE, "/app/users/**")

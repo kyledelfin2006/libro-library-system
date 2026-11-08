@@ -31,6 +31,9 @@ public class User {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword;
+
     @NotBlank(message = "Last name is required")
     @Size(max = 50, message = "Last name must not exceed 50 characters")
     @Column(name = "last_name", nullable = false, length = 50)

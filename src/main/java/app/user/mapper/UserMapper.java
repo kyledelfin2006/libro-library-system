@@ -64,7 +64,8 @@ public class UserMapper {
                 user.getEmail(),
                 user.getUserRole(),
                 user.getUserCourse(),
-                user.getMajor()
+                user.getMajor(),
+                user.isMustChangePassword()
         );
     }
 

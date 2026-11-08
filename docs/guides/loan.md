@@ -146,7 +146,7 @@ Prerequisites are Java 25 and Docker with Compose. The committed Maven Wrapper s
    docker compose up --build
    ```
 
-   Flyway applies V1 through V5 at startup. Do not use `docker compose down -v` unless you intentionally want to destroy the database volume.
+   Flyway applies V1 through V6 at startup. Do not use `docker compose down -v` unless you intentionally want to destroy the database volume.
 
 3. Run the default unit/MVC verification suite:
 
@@ -156,8 +156,8 @@ Prerequisites are Java 25 and Docker with Compose. The committed Maven Wrapper s
 
 To include PostgreSQL integration tests, run `./mvnw -Pintegration clean verify` with Docker available and `LIBRO_ADMIN_PASSWORD_HASH` set in the shell environment inherited by Maven to a test-only BCrypt hash. Maven does not load the Docker Compose `.env` file; Flyway V2 needs the variable to seed its bootstrap account in the disposable test database. The test profile supplies a deterministic test-only JWT key; production still requires `LIBRO_JWT_SECRET_BASE64`.
 
-For a loan smoke test, have a library assistant or librarian create a book copy, log in as a student or faculty borrower through `POST /app/auth/login`, then send the returned Bearer token with `POST /app/loans/{bookId}`, `GET /app/loans/me`, and `PUT /app/loans/{loanId}/return`. Swagger UI is available at `http://localhost:8080/swagger-ui.html` only when `LIBRO_API_DOCS_ENABLED=true`; see the [browser review findings](../reference/openapi-browser-review.md). API requests use the Authorization header and do not require a CSRF token.
+For a loan smoke test, have a library assistant or librarian create a book copy, log in as a student or faculty borrower through `POST /app/auth/login`, then send the returned Bearer token with `POST /app/loans/{bookId}`, `GET /app/loans/me`, and `PUT /app/loans/{loanId}/return`. The disposable-stack journey in `scripts/smoke-journey.sh` also exercises loss resolution and account recovery. Swagger UI is available at `http://localhost:8080/swagger-ui.html` only when `LIBRO_API_DOCS_ENABLED=true`. API requests use the Authorization header and do not require a CSRF token.
 
 ## Before extending the feature
 
-`LoanServiceTest` covers checkout, return, lost-resolution, staff listing, role scope, ownership, and paging. `LoanSecurityMvcTest` checks route roles and principal-derived identity. `BookPersistenceIT` covers fresh V1-to-V5 schema validation, the V4-to-V5 value-preserving upgrade, and the concurrent catalog-edit/lost-resolution race. `LoanPersistenceIT` covers staff query counts, return persistence, the one-active-loan index, and deletion restrictions. `LoanMigrationIT` checks V3-to-V4 data preservation and constraints; `LoanConcurrencyIT` covers concurrent checkouts. Do not edit an applied migration; add a new forward-only migration.
+`LoanServiceTest` covers checkout, return, lost-resolution, staff listing, role scope, ownership, and paging. `LoanSecurityMvcTest` checks route roles and principal-derived identity. `BookPersistenceIT` covers fresh V1-to-V6 schema validation, the V4-to-V5 value-preserving upgrade, and the concurrent catalog-edit/lost-resolution race. `LoanPersistenceIT` covers staff query counts, return persistence, the one-active-loan index, and deletion restrictions. `LoanMigrationIT` checks V3-to-V4 data preservation and constraints; `LoanConcurrencyIT` covers concurrent checkouts. Do not edit an applied migration; add a new forward-only migration.

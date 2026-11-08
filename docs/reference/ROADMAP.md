@@ -2,7 +2,7 @@
 
 This is the working implementation roadmap. It is not the public project overview or an API contract. Live role/JWT rules are in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md) and the [JWT Authentication Design](jwt-authentication-design.md); this checklist tracks implementation status.
 
-The step-by-step plan for the work to finish before the UI starts, split into parts for a person or an AI agent, is in the [Implementation Plan](../adr/IMPLEMENTATION_PLAN.md).
+The pre-UI implementation plan is complete; its three parts are preserved in Git history. This roadmap tracks the remaining work.
 
 ## Current state
 
@@ -44,6 +44,7 @@ See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-
 - [x] Add PostgreSQL tests for returned history, the one-active-loan index, and protected deletion.
 - [x] Add a concurrent checkout test proving the three-active-loan borrower limit and one-borrower-per-copy rule hold (`LoanConcurrencyIT`).
 - [x] Verify fresh V1-to-V5 startup through the PostgreSQL integration profile.
+- [x] Verify fresh V1-to-V6 startup and the V5-to-V6 account upgrade.
 - [x] Verify the V4-to-V5 upgrade path preserves existing replacement-cost values and schema validation.
 - [x] Run the V3-to-V4 PostgreSQL upgrade test, including V4 Hibernate validation and data preservation.
 - [x] Add `GET /app/users/me` for the authenticated profile and a role-scoped, filtered `GET /app/loans` staff list.
@@ -65,7 +66,7 @@ See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-
 - [x] Add generated OpenAPI MVC assertions for Bearer security, public signup/login, and the login contract.
 - [x] Serve Swagger UI and `/v3/api-docs` publicly only when `LIBRO_API_DOCS_ENABLED=true` (off by default).
 - [x] Return every successful response in the `ApiResponse` envelope.
-- [x] Review the live OpenAPI document and Swagger UI in a browser against the implementation; [findings to fix](openapi-browser-review.md).
+- [x] Review and correct the generated OpenAPI contract, including success schemas, Bearer errors, pagination, and examples.
 
 ## Database migration rule
 

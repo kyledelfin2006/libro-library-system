@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record TokenResponseDTO(
         @Schema(description = "Signed access token used in Bearer authorization.") String accessToken,
         @Schema(example = "Bearer") String tokenType,
-        @Schema(description = "Token lifetime in seconds from issuance.", example = "900") long expiresIn
+        @Schema(description = "Token lifetime in seconds from issuance.", example = "900") long expiresIn,
+        @Schema(description = "True when the account must change its temporary password.", example = "false") boolean mustChangePassword
 ) {
 }
