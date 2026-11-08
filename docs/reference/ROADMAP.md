@@ -91,6 +91,14 @@ Before changing a migration, establish whether that version has been applied to 
 - [x] Layered Docker image with a single health check; one shared Trivy script for CI and CD; CI jobs `unit-test`, `integration-test`, `security-scan`, with unit tests running once.
 - [x] Protect `main`: require PRs and the `unit-test`, `integration-test`, and `security-scan` checks; block force-pushes and deletion; administrators may bypass (see [CI/CD and DevOps](../devops/ci-cd.md#branch-protection)).
 
+## Active implementation plans
+
+Three independent plans track the remaining build work. Each is replaced by as-built documentation and removed when finished.
+
+- [ ] [UI Implementation Plan](../implementation-plan-ui.md): the web UI.
+- [ ] [Backend Implementation Plan](../implementation-plan-backend.md): availability, error codes, directory filters, build info, and the audit trail the UI needs.
+- [ ] [OCI Idle-Reclamation Plan](../implementation-plan-oci-idle-reclamation.md): an opt-in keep-alive for the Always Free VM, documented after it is built.
+
 ## Source documents
 
 - [Security Roles and JWT Guide](security-roles-and-jwt-guide.md): live role/loan policy and JWT summary.
