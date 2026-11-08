@@ -6,6 +6,8 @@ import app.user.dto.UserPatchRequestDTO;
 import app.user.dto.UserReplaceRequestDTO;
 import app.user.dto.UserResponseDTO;
 import app.user.dto.PasswordChangeRequestDTO;
+import app.user.dto.PasswordResetRequestDTO;
+import io.micrometer.core.instrument.MeterRegistry;
 import app.user.entity.User;
 import app.user.entity.enums.UserCourse;
 import app.user.entity.enums.UserRole;
@@ -57,6 +59,7 @@ public class UserService {
     private final Validator validator;
     /** Owner and role rules for account access; see {@link UserAccessPolicy}. */
     private final UserAccessPolicy accessPolicy;
+    private final MeterRegistry meterRegistry;
 
     /**
      * Validates and persists a new user.
@@ -336,9 +339,9 @@ public class UserService {
     /**
      * Changes the password for the target account.
      *
-     * <p>Owners must provide their current password. Administrators and librarians
-     * may reset student/faculty passwords; librarians may also reset administrator
-     * passwords. Passwords are validated and only the encoded new hash
+     * <p>Owners must provide their current password. Staff-assisted recovery uses
+     * the separate reset method so it cannot bypass the required-change flag.
+     * Passwords are validated and only the encoded new hash
      * is stored; transaction commit persists the managed entity.</p>
      *
      * @param callerId university ID of the authenticated caller
@@ -379,17 +382,14 @@ public class UserService {
         User user = userRepository.findByUniversityId(normalizedTargetId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        // Check authorization before processing the supplied password values.
+        // Only the owner can clear the recovery flag by proving knowledge of the current password.
+        if (!normalizedCallerId.equals(normalizedTargetId)) {
+            throw new AccessDeniedException("Access denied");
+        }
         accessPolicy.requireAccountAccess(normalizedCallerId, normalizedTargetId, user.getUserRole(), authorities);
-
-        // Require a current password when the caller is changing their own password.
-        if (normalizedCallerId.equals(normalizedTargetId)) {
-            validateRequiredValue(request.getCurrentPassword(), "Current password");
-
-            // Verify the owner's current password against the stored BCrypt hash.
-            if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
-                throw new InvalidRequestException("Current password is incorrect");
-            }
+        validateRequiredValue(request.getCurrentPassword(), "Current password");
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
+            throw new InvalidRequestException("Current password is incorrect");
         }
 
         // Encode the new password before assigning it to the entity.
@@ -398,6 +398,31 @@ public class UserService {
 
         // Replace only the stored hash; raw password values never reach the entity.
         user.setPasswordHash(encodedPasswordHash);
+        user.setMustChangePassword(false);
+    }
+
+    /** Resets a managed account with a temporary password and records the required follow-up change. */
+    @Transactional
+    public void resetPassword(String callerId, String targetId, PasswordResetRequestDTO request,
+                              Collection<? extends GrantedAuthority> authorities) {
+        // A missing body is invalid regardless of the target account.
+        if (request == null) {
+            throw new InvalidRequestException("Password reset request cannot be null");
+        }
+        String normalizedCallerId = normalizeAndValidateUniversityId(callerId);
+        String normalizedTargetId = normalizeAndValidateUniversityId(targetId);
+        User user = userRepository.findByUniversityId(normalizedTargetId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+        // Check identity and target role before processing the supplied password.
+        accessPolicy.requirePasswordReset(normalizedCallerId, normalizedTargetId, user.getUserRole(), authorities);
+        validateRequest(request);
+        if (!PasswordPolicy.isWithinBcryptByteLimit(request.temporaryPassword())) {
+            throw new InvalidRequestException("Password must not exceed 72 UTF-8 bytes");
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.temporaryPassword()));
+        user.setMustChangePassword(true);
+        // Count successful resets without account identifiers or password data in metric labels.
+        meterRegistry.counter("libro.auth.password_resets").increment();
     }
 
     /**

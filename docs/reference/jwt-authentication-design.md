@@ -71,7 +71,9 @@ The default access lifetime is 900 seconds. `LIBRO_JWT_ACCESS_TOKEN_TTL_SECONDS`
 | `POST /app/users/signup`, `POST /app/auth/login` | Public | Signup pins role to `STUDENT`; login derives role from authenticated account |
 | `POST /app/users/faculty`, `POST /app/users/administrators` | `LIBRARIAN` | Each operation pins the created account to its intended role |
 | User directory | `ADMINISTRATOR` or `LIBRARIAN` for `GET /app/users` | Administrators see student/faculty accounts; librarians may also see administrators |
-| User profile/password routes | Authenticated library roles | Owner access plus staff-to-target-role limits; another librarian cannot be managed |
+| User profile routes | Authenticated library roles | Owner access plus staff-to-target-role limits; another librarian cannot be managed |
+| Owner password change | Authenticated library roles | Owner proves current password and clears the recovery flag |
+| Staff password reset | `ADMINISTRATOR` or `LIBRARIAN` | No self-reset; assistants may reset student/faculty accounts, librarians may also reset assistants; librarian accounts are excluded |
 | User deletion | Authenticated library roles | Student/faculty owners may delete themselves; staff may delete permitted target roles; librarian accounts and staff self-deletion are blocked; loan history causes 409 |
 | Book reads | Any of the four roles | Existing catalog rules |
 | Book writes | `ADMINISTRATOR` or `LIBRARIAN` | Existing catalog validation and copy-state rules |

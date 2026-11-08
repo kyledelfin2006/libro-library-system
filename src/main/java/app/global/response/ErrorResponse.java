@@ -8,15 +8,15 @@ import java.util.Map;
 @Getter
 @Schema(description = "Standard error response. Validation failures include fieldErrors keyed by request or entity field; non-field errors use _global.")
 public class ErrorResponse {
-    @Schema(example = "Validation failed")
+    @Schema(description = "Error category; varies with HTTP status.")
     private final String error;
-    @Schema(description = "Client-safe explanation. Does not include database internals or stack traces.", example = "Replacement cost must be greater than 0")
+    @Schema(description = "Client-safe explanation. Does not include database internals or stack traces.")
     private final String details;
     @Schema(description = "Response creation time as Unix epoch milliseconds.", example = "1720000000000")
     private final long timestamp;
-    @Schema(example = "400")
+    @Schema(description = "Matches the HTTP response status.")
     private final int statusCode;
-    @Schema(description = "Field name to validation message mapping; _global identifies object-level errors.", example = "{\"replacementCost\":\"Replacement cost must be greater than 0\"}")
+    @Schema(description = "Field name to validation message mapping for validation errors; usually empty for other statuses. _global identifies object-level errors.")
     private final Map<String, String> fieldErrors;
     @Schema(description = "Correlation ID, also returned in the X-Request-Id header. Quote it when reporting a problem.", example = "3f2b8c1e-5a41-4c0e-9a57-0d6f1b7e2c11")
     private final String requestId;

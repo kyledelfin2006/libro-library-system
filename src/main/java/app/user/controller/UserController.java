@@ -3,6 +3,7 @@ package app.user.controller;
 import app.global.response.ApiResponse;
 import app.global.openapi.ErrorApiResponse;
 import app.user.dto.PasswordChangeRequestDTO;
+import app.user.dto.PasswordResetRequestDTO;
 import app.user.dto.UserCreateRequestDTO;
 import app.user.dto.UserPatchRequestDTO;
 import app.user.dto.UserReplaceRequestDTO;
@@ -12,6 +13,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
@@ -68,7 +71,10 @@ public class UserController {
     @ErrorApiResponse(responseCode = "409", description = "A database uniqueness constraint was concurrently violated")
     @ErrorApiResponse(responseCode = "429", description = "This client has sent too many signup requests")
     public ResponseEntity<ApiResponse<UserResponseDTO>> createUser(
-            @Valid @RequestBody UserCreateRequestDTO request) {
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(
+                    value = "{\"universityId\":\"2025-4321\",\"password\":\"ExampleOnly1!\",\"firstName\":\"Alex\",\"lastName\":\"Rivera\",\"email\":\"alex.rivera@example.edu\",\"userCourse\":\"IS\"}")))
+            UserCreateRequestDTO request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new ApiResponse<>(true, "User created successfully", service.createUser(request)));
     }
@@ -110,6 +116,7 @@ public class UserController {
     @GetMapping
     @Operation(summary = "List accounts with pagination",
             description = "Library assistants may list student and school faculty profiles. The librarian may also list library assistant profiles. Page numbering starts at zero. The default is page 0, size 12, sorted by universityId ascending; the maximum page size is 100. Sort with sort=property,direction using universityId, firstName, lastName, middleInitial, email, userRole, userCourse, or major. Unsupported sort properties return 400.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Authorized account page", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Invalid pagination or sort parameter")
     @ErrorApiResponse(responseCode = "403", description = "Only library assistants and the librarian may list accounts")
     public ResponseEntity<ApiResponse<Page<UserResponseDTO>>> getAllUsers(
@@ -142,6 +149,7 @@ public class UserController {
     @GetMapping("/{universityId}")
     @Operation(summary = "Get a user by university ID",
             description = "Users may view their own profile. Library assistants and the librarian may also view student and school faculty profiles; only the librarian may view library assistant profiles. Passwords and password hashes are never included.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Public account profile", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "University ID must use the ####-#### format")
     @ErrorApiResponse(responseCode = "404", description = "User not found")
     @ErrorApiResponse(responseCode = "403", description = "Only the account owner or authorized staff may view this profile")
@@ -164,6 +172,7 @@ public class UserController {
     @PatchMapping("/{universityId}")
     @Operation(summary = "Update supplied profile fields",
             description = "Users may update their own profile; library assistants and the librarian may also update student or school faculty profiles, while only the librarian may update library assistant profiles. Updates only supplied fields; null or omitted fields are unchanged. Supplied names and email cannot be blank. A blank middle initial is treated as omitted. Values are trimmed and email is stored lowercase.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Updated public profile", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Invalid profile field, university ID, or email is already registered")
     @ErrorApiResponse(responseCode = "404", description = "User not found")
     @ErrorApiResponse(responseCode = "409", description = "A database uniqueness constraint was concurrently violated")
@@ -189,6 +198,7 @@ public class UserController {
     @PutMapping("/{universityId}")
     @Operation(summary = "Replace a user's profile",
             description = "Users may replace their own profile; library assistants and the librarian may also replace student and school faculty profiles, while only the librarian may replace library assistant profiles. Replaces first name, last name, middle initial, and email. First name, last name, and email are required; university ID, role, course, major, and password are not changed. Names are trimmed and email is stored lowercase.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Replaced public profile", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Request validation failed, university ID is invalid, or email is already registered")
     @ErrorApiResponse(responseCode = "404", description = "User not found")
     @ErrorApiResponse(responseCode = "409", description = "A database uniqueness constraint was concurrently violated")
@@ -213,7 +223,8 @@ public class UserController {
      */
     @PutMapping("/{universityId}/password")
     @Operation(summary = "Change a user's password",
-            description = "Users must provide their current password to change their own password. Library assistants and the librarian may reset student and school faculty passwords without the target user's current password; only the librarian may reset a library assistant's password. The new password must meet the 8–72 character complexity policy; password values are never returned.")
+            description = "Account owners provide their current password and a new password. A successful change clears mustChangePassword. Staff-assisted recovery uses the separate reset route. The new password must meet the 8–72 character complexity policy; password values are never returned.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Password changed", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Password format is invalid or the current password does not match")
     @ErrorApiResponse(responseCode = "404", description = "User not found")
     @ErrorApiResponse(responseCode = "403", description = "Only the account owner or authorized staff may change this password")
@@ -228,6 +239,25 @@ public class UserController {
         return ResponseEntity.ok(new ApiResponse<>(true, "Password updated successfully"));
     }
 
+    /** Lets authorized staff set a temporary password and require the owner to change it. */
+    @PutMapping("/{universityId}/password/reset")
+    @Operation(summary = "Reset a managed account password",
+            description = "Library assistants may reset student and faculty accounts; librarians may also reset library assistants. Staff cannot reset their own or a librarian account. The temporary password is never returned, and the account receives mustChangePassword=true until its owner changes it.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Temporary password set", useReturnTypeSchema = true)
+    @ErrorApiResponse(responseCode = "400", description = "Temporary password or university ID is invalid")
+    @ErrorApiResponse(responseCode = "403", description = "Caller cannot reset this account")
+    @ErrorApiResponse(responseCode = "404", description = "User not found")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(
+            @Parameter(description = "University identifier in ####-#### format.", example = "2025-4321")
+            @PathVariable String universityId,
+            @Valid @RequestBody PasswordResetRequestDTO request,
+            Authentication authentication) {
+        // The service checks the target role and denies self-reset before changing the hash.
+        service.resetPassword(authentication.getName(), universityId, request,
+                authentication.getAuthorities());
+        return ResponseEntity.ok(new ApiResponse<>(true, "Temporary password set"));
+    }
+
     /**
      * Deletes the account identified by the path value.
      *
@@ -237,6 +267,7 @@ public class UserController {
     @DeleteMapping("/{universityId}")
     @Operation(summary = "Delete a user account",
             description = "Students and school faculty may delete their own accounts. Library assistants may delete student and faculty accounts; the librarian may also delete library assistant accounts. Librarian accounts are protected.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Account deleted", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "University ID must use the ####-#### format")
     @ErrorApiResponse(responseCode = "404", description = "User not found")
     @ErrorApiResponse(responseCode = "403", description = "The caller cannot delete the requested account")

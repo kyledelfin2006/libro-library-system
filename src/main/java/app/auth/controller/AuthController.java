@@ -8,6 +8,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -47,7 +49,11 @@ public class AuthController {
     @ErrorApiResponse(responseCode = "400", description = "Login request is missing a valid university ID or password")
     @ErrorApiResponse(responseCode = "401", description = "University ID or password is incorrect")
     @ErrorApiResponse(responseCode = "429", description = "This client has sent too many login requests")
-    public ResponseEntity<app.global.response.ApiResponse<TokenResponseDTO>> login(@Valid @RequestBody LoginRequestDTO request) {
+    public ResponseEntity<app.global.response.ApiResponse<TokenResponseDTO>> login(
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(examples = @ExampleObject(
+                    value = "{\"universityId\":\"2025-4321\",\"password\":\"illustrative-only\"}")))
+            LoginRequestDTO request) {
         // Never cache a response containing a bearer credential.
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())

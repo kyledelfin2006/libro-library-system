@@ -55,7 +55,7 @@ library-api-system/
 |   `-- ci/trivy-scan.sh                     vulnerability scan shared by CI and CD
 |-- docs/
 |   |-- architecture.md                      short overview for readers new to the project
-|   |-- adr/                                 open implementation plan
+|   |-- adr/                                 planning archive
 |   |-- devops/                              CI/CD design and operations runbook
 |   |-- guides/                              domain, loan, API-doc, and setup guides
 |   `-- reference/                           this file, roles/JWT, roadmap
@@ -105,7 +105,7 @@ library-api-system/
     |   |       `-- time/                    LibraryTime, LibraryClockConfig (Asia/Manila Clock bean)
     |   `-- resources/
     |       |-- application.properties       every setting and its default
-    |       `-- db/migration/                Flyway V1..V5 (forward-only)
+    |       `-- db/migration/                Flyway V1..V6 (forward-only)
     `-- test/
         |-- java/app/                        mirrors the main packages
         |   |-- **/*Test.java                unit and MVC-slice tests (Surefire, `./mvnw verify`)
@@ -248,7 +248,7 @@ The count-and-total-replacement-cost aggregate uses the typed `LibraryAggregate`
 
 The user feature currently contains the entity, enums, create/response DTOs, mapper, repository, BCrypt `PasswordEncoder` bean, and `UserService`. `UserService` loads accounts, asks `UserAccessPolicy` whether the caller may act on the target, normalizes university IDs and email addresses, rejects duplicates, validates password complexity, hashes passwords before persistence, and enforces the role/course/major rules. Passwords must be 8–72 characters, include uppercase and lowercase letters, a number, and a symbol, and stay within BCrypt's 72 UTF-8 byte input limit. Signup, password changes, and login check the byte boundary before BCrypt processing. The enum and V2 database checks define the allowed academic values; the service enforces their cross-field relationships.
 
-`UserController` exposes public student signup, librarian-only faculty and library-assistant creation, a role-filtered staff directory, owner/staff-scoped profile and password operations, and role-scoped account deletion. `ADMINISTRATOR` means a library assistant (not a system administrator); `LIBRARIAN` means the library's librarian. Signup ignores the submitted role and creates a student; staff-account creation fixes the role in the service. `SecurityConfig` allows book reads to all roles and book CRUD to ADMINISTRATOR and LIBRARIAN. `UserService` checks ownership and target roles for account routes. V2 defines the original users table and historically seeds a bootstrap administrator from a supplied BCrypt hash; V3 adds LIBRARIAN to the accepted role and academic-field constraints. No librarian is seeded by migration; an optional startup runner creates the first one from a complete environment-provided identity and BCrypt hash. `LibroUserDetailsService` loads the stored hash and role for login and maps the role into Spring Security authorities.
+`UserController` exposes public student signup, librarian-only faculty and library-assistant creation, a role-filtered staff directory, owner/staff-scoped profiles, owner-only password changes, staff-assisted password resets, and role-scoped account deletion. `ADMINISTRATOR` means a library assistant (not a system administrator); `LIBRARIAN` means the library's librarian. Signup ignores the submitted role and creates a student; staff-account creation fixes the role in the service. `SecurityConfig` allows book reads to all roles and book CRUD to ADMINISTRATOR and LIBRARIAN. `UserService` checks ownership and target roles for account routes. V2 defines the original users table and historically seeds a bootstrap administrator from a supplied BCrypt hash; V3 adds LIBRARIAN to the accepted role and academic-field constraints. V6 adds the required-password-change flag. No librarian is seeded by migration; an optional startup runner creates the first one from a complete environment-provided identity and BCrypt hash. `LibroUserDetailsService` loads the stored hash and role for login and maps the role into Spring Security authorities.
 
 ### Entity and database model
 
@@ -328,11 +328,13 @@ Handler order matters conceptually. `DataIntegrityViolationException` is a subty
 
 ### Security
 
-`SecurityConfig` permits `POST /app/users/signup`, `POST /app/auth/login`, `GET /livez` and `GET /readyz` without authentication. Health details are hidden and every other Actuator endpoint lives on the private management port; other routes require a valid Bearer token. Book reads require any live role; book CRUD requires ADMINISTRATOR or LIBRARIAN. `POST /app/users/faculty` and `POST /app/users/administrators` require LIBRARIAN. The account directory requires ADMINISTRATOR or LIBRARIAN, while profile/password routes permit all authenticated roles through the filter chain and rely on `UserService` to enforce owner access or staff access by target role. Students and faculty may delete themselves; administrators may delete students/faculty; librarians may also delete administrators. The filter chain is stateless and disables CSRF because credentials are accepted only from the explicit Authorization header; CORS allows exact environment-configured origins and no credentials. Use HTTPS outside local development.
+`SecurityConfig` permits `POST /app/users/signup`, `POST /app/auth/login`, `GET /livez` and `GET /readyz` without authentication. Health details are hidden and every other Actuator endpoint lives on the private management port; other routes require a valid Bearer token. Book reads require any live role; book CRUD requires ADMINISTRATOR or LIBRARIAN. `POST /app/users/faculty` and `POST /app/users/administrators` require LIBRARIAN. The account directory and password-reset route require ADMINISTRATOR or LIBRARIAN; the service also checks the reset target's role and denies self-reset. The existing password-change route is owner-only and requires the current password. Students and faculty may delete themselves; administrators may delete students/faculty; librarians may also delete administrators. The filter chain is stateless and disables CSRF because credentials are accepted only from the explicit Authorization header; CORS allows exact environment-configured origins and no credentials. Use HTTPS outside local development.
 
 Local login uses `AuthenticationManager`, `LibroUserDetailsService`, and BCrypt, then issues an HS256 token with a maximum 900-second lifetime. `LIBRO_JWT_SECRET_BASE64` must decode to at least 32 bytes and has no development fallback. Public signup always creates STUDENT. Only the librarian creates school faculty and library assistant accounts. Flyway V2 seeds the administrator login `0000-0001` from `LIBRO_ADMIN_PASSWORD_HASH`, which must contain a BCrypt hash. To establish the first librarian, operators can set all five `LIBRO_BOOTSTRAP_LIBRARIAN_*` values at startup; the runner validates all-or-nothing configuration and a BCrypt-only hash, creates the account only when none exists, and logs no account data. Do not add an open librarian signup route or place a raw password or real JWT key in migrations or source. Before untrusted deployment, add gateway throttling, restrict direct app access, and monitor login/signup abuse. `SERVER_FORWARD_HEADERS_STRATEGY=native` is available only when ingress restricts the app port to the trusted proxy. See [JWT Authentication Design](jwt-authentication-design.md) for exact claim and validation rules.
 
 `UserAccessPolicy` (called by `UserService` after it loads the target) checks the authenticated university ID against the target account for profile reads, updates, password operations, and deletion. `UserAccessPolicyTest` pins the full role matrix. Owners may manage their own profile/password. Administrators may view/manage student and faculty accounts and delete those accounts. Librarians may also view/manage/delete administrator accounts. Neither staff role may manage another librarian account; administrator/librarian self-deletion is denied. The directory returns student/faculty accounts to administrators, and also library assistants to librarians.
+
+Staff recovery uses `PUT /app/users/{universityId}/password/reset` with a validated temporary password. The service hashes it, sets `must_change_password=true`, and increments `libro.auth.password_resets` without an account label. Login and `GET /app/users/me` expose `mustChangePassword`; an owner change with the current password clears it. The server does not block other operations while the flag is set, and previously issued JWTs remain valid until expiry plus clock skew. A locked-out librarian needs the backed-up operator procedure in the runbook.
 
 For account routes, Spring Security validates the Bearer token and supplies the controller's `Authentication` parameter. The controller passes `authentication.getName()` as `callerId` (the authenticated university ID), the path's `universityId` as `targetId` (the account requested), and `authentication.getAuthorities()` as the caller's granted roles. `UserService` loads the target account before checking its role. `canStaffManage` centralizes the target-role boundary shared by profile access and deletion; deletion checks ownership separately because students/faculty may delete themselves but staff accounts may not. The staff directory passes only permitted roles to `findByUserRoleIn`, so paging and sorting operate on the visible subset. Faculty and assistant creation receive the caller's authorities and select their stored role in the service; the request body's role cannot grant access.
 
@@ -385,7 +387,8 @@ User routes:
 | POST | `/app/users/administrators` | Create a library assistant account (librarian only) | `ApiResponse<UserResponseDTO>`, HTTP 201 |
 | PATCH | `/app/users/{universityId}` | Update own or student/faculty profile (staff may manage student/faculty) | `ApiResponse<UserResponseDTO>` |
 | PUT | `/app/users/{universityId}` | Replace own or student/faculty profile (staff may manage student/faculty) | `ApiResponse<UserResponseDTO>` |
-| PUT | `/app/users/{universityId}/password` | Change own password or staff-reset a student/faculty password | `ApiResponse<Void>` |
+| PUT | `/app/users/{universityId}/password` | Owner changes password with current password; clears recovery flag | `ApiResponse<Void>` |
+| PUT | `/app/users/{universityId}/password/reset` | Authorized staff sets temporary password and recovery flag | `ApiResponse<Void>` |
 | DELETE | `/app/users/{universityId}` | Owner deletes own student/faculty account; staff delete permitted target roles | `ApiResponse<Void>` |
 
 Loan routes:
@@ -435,7 +438,7 @@ Runtime driver used by the datasource to communicate with PostgreSQL. It is not 
 
 `spring-boot-starter-flyway` supplies the Boot 4 migration auto-configuration. Flyway 13.3.0 discovers versioned scripts in `classpath:db/migration`, records applied versions in `flyway_schema_history`, and migrates the database before JPA validation. The PostgreSQL module supplies database-specific Flyway support.
 
-Never edit a migration that may have been applied to a shared or persistent database. Add the next versioned migration (V6 or later for schema changes after the current V5). Migration filenames use Flyway's required double underscore between version and description; verify discovery during startup.
+Never edit a migration that may have been applied to a shared or persistent database. Add the next versioned migration (V7 or later for schema changes after the current V6). Migration filenames use Flyway's required double underscore between version and description; verify discovery during startup.
 
 ### Lombok
 
@@ -528,7 +531,7 @@ These defaults are set in `application.properties` and are intentional:
 
 ## Database Migration Rules
 
-`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` creates `users` with identity, role, course, major, uniqueness, format, and cross-field constraints, then inserts the historical `ADMINISTRATOR` account (library-assistant role) using the configured BCrypt hash. V3 adds the LIBRARIAN role and matching staff academic-field constraints. V4 adds `books.copy_status` and the `loans` table with state checks, foreign-key delete restrictions, borrower-history indexes, and the one-active-loan-per-copy index. V5 adds optional `books.description` and renames `price` to `replacement_cost` while preserving stored amounts. No librarian or loan data is seeded. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
+`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` creates `users` with identity, role, course, major, uniqueness, format, and cross-field constraints, then inserts the historical `ADMINISTRATOR` account (library-assistant role) using the configured BCrypt hash. V3 adds the LIBRARIAN role and matching staff academic-field constraints. V4 adds `books.copy_status` and the `loans` table with state checks, foreign-key delete restrictions, borrower-history indexes, and the one-active-loan-per-copy index. V5 adds optional `books.description` and renames `price` to `replacement_cost` while preserving stored amounts. V6 adds `users.must_change_password` as non-null with a false default, preserving existing accounts. No librarian or loan data is seeded. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
 
 For every schema change:
 
@@ -654,6 +657,7 @@ Test sources mirror the main packages under `src/test/java/app/`: a test lives i
 - `LoanPersistenceIT`: PostgreSQL integration tests for staff loan query counts and filters, committed return history, the one-active-loan-per-copy index, and foreign-key deletion restrictions.
 - `LoanMigrationIT`: isolated PostgreSQL V3-to-V4 upgrade with retained user/book rows, loan indexes and constraints, and V4 Hibernate schema validation.
 - `UserPersistenceIT`: PostgreSQL integration tests for normalized creation, stored hashes, committed updates, and uniqueness/format constraints.
+- `UserMigrationIT`: PostgreSQL V5-to-V6 upgrade with an existing account, the false default, and Hibernate validation of the new column.
 - `LibrarianBootstrapIT`: PostgreSQL tests for first-account creation, repeated-start idempotence, unset configuration, and invalid/partial configuration. Integration tests share one context-managed PostgreSQL container and use a resource lock. Run them with `./mvnw -Pintegration verify` (or `mvnw.cmd` on Windows).
 
 The unit/MVC suite execution setup is deliberately small and optimized:
@@ -745,14 +749,14 @@ When a breaking change is intended, document migration guidance and update all e
 
 ## Known Limitations and Risks
 
-- Signup, login, and Actuator health probes are public; all other routes require stateless JWT Bearer authentication. User profiles and passwords are owner-scoped with role-limited staff management; the directory and cross-account profile reads are staff-only.
+- Signup, login, and Actuator health probes are public; all other routes require stateless JWT Bearer authentication. Password changes require the account owner and current password; authorized staff use the separate reset route. The directory and cross-account profile reads are staff-only within their target-role scope.
 - A role/password change or account deletion may leave a token valid until expiry plus 30 seconds of clock skew; this is an accepted policy (see the JWT design). App-level per-IP throttles cover login and signup; before public internet exposure, the deployment gateway must add shared throttling and monitoring and prevent direct access to the app. Forwarded headers remain off by default and may be enabled only behind a trusted proxy.
 - Swagger UI and `/v3/api-docs` are off unless `LIBRO_API_DOCS_ENABLED=true`; enable them only where the API contract may be public.
 - CORS allows no browser origin by default; configure exact UI origins before serving a cross-origin browser client.
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
 - Signup always creates a student; librarians create faculty and library assistants; students/faculty may delete themselves, administrators may delete student/faculty accounts, and librarians may also delete library assistant accounts.
 - Loan routes and V4 are implemented. `LoanServiceTest` and `LoanSecurityMvcTest` cover service rules and route gates; `BookPersistenceIT`, `LoanPersistenceIT`, and `LoanConcurrencyIT` cover the current schema, the lost-status/catalog-edit lock interaction, loan history constraints, terminal return persistence, and concurrent checkout limits. User routes have MVC contract, PostgreSQL integration, and JWT security-flow coverage; the security MVC tests mock the user repository.
-- `BookPersistenceIT` verifies a fresh PostgreSQL database migrates through V5 and passes Hibernate schema validation. It also migrates an isolated V4 schema to V5 and checks that stored monetary values remain intact; running the integration profile requires Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH`.
+- `BookPersistenceIT` verifies a fresh PostgreSQL database migrates through V6 and passes Hibernate schema validation. It also migrates an isolated V4 schema to V5 and checks that stored monetary values remain intact; `UserMigrationIT` checks the V5-to-V6 account upgrade. The integration profile requires Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH`.
 - `LoanMigrationIT` verifies the V3-to-V4 upgrade path against PostgreSQL with V4 Hibernate validation.
 - API envelope and error `timestamp` fields are epoch milliseconds rather than ISO-8601 values. Loan date-time fields use `LocalDateTime` and are serialized without a timezone offset; the loan contract treats them as Asia/Manila local time.
 - Public probes are `/livez` and `/readyz` (details hidden; Docker checks use readiness). Actuator `health` and `prometheus` are served only on the private management port, which must not be published.

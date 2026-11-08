@@ -133,6 +133,7 @@ public class LoanController {
     @Operation(summary = "View my loan history",
             description = "Returns active, returned, and lost loans for the authenticated caller. "
                     + HISTORY_PAGINATION_DESCRIPTION + " Overdue is calculated at request time.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Own loan-history page", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Unsupported sort property")
     public ResponseEntity<ApiResponse<Page<LoanResponseDTO>>> myHistory(
             @ParameterObject @PageableDefault(size = 12, sort = {"borrowedAt", "id"}, direction = org.springframework.data.domain.Sort.Direction.DESC)
@@ -189,6 +190,7 @@ public class LoanController {
             description = "Library assistants may view student/faculty histories. "
                     + "Librarians may also view library-assistant histories. Neither staff role may view another librarian's history. "
                     + HISTORY_PAGINATION_DESCRIPTION)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Authorized patron loan-history page", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "403", description = "Caller cannot view this patron's history")
     @ErrorApiResponse(responseCode = "404", description = "Patron account not found")
     @ErrorApiResponse(responseCode = "400", description = "Unsupported sort property")

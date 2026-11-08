@@ -105,6 +105,34 @@ Keep manual approval until you have rehearsed a restore and a rollback on the VM
 
 ## 8. Troubleshooting
 
+### Recover a locked-out librarian
+
+The API deliberately cannot reset a librarian account. On the VM, take a backup before changing its database row:
+
+```bash
+cd /opt/libro
+scripts/backup.sh
+```
+
+Confirm the backup path printed by the script. Generate a temporary BCrypt hash in the terminal; the password is prompted for and is not written to the repository or shell history. The command captures the hash without printing it:
+
+```bash
+hash=$(docker run --rm -it httpd:2.4-alpine htpasswd -nBC 10 "" | tr -d ':\r\n' | sed 's/^\$2y/\$2a/')
+read -r -p 'Librarian university ID: ' librarian_id
+[[ "$librarian_id" =~ ^[0-9]{4}-[0-9]{4}$ ]] || { echo 'Invalid ID' >&2; exit 1; }
+```
+
+Load the private `.env` values needed by Compose, then update only that librarian row. Check that `UPDATE 1` is printed; `UPDATE 0` means the ID was wrong and no account changed. The SQL is sent through standard input, keeping the hash out of the command line and shell history:
+
+```bash
+set -a; source .env; set +a
+printf "UPDATE users SET password_hash='%s', must_change_password=true WHERE university_id='%s' AND user_role='LIBRARIAN';\n" "$hash" "$librarian_id" \
+  | docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1
+unset hash
+```
+
+Have the librarian log in with the temporary password and change it through `PUT /app/users/{universityId}/password`. The login response's `mustChangePassword` flag becomes false after that change. This flag guides the client; the backend does not block other routes while it is true, and already issued JWTs remain usable until their normal expiry plus clock skew.
+
 | Symptom | Check |
 | --- | --- |
 | Deploy stops at preflight | The message names the missing variable, file mode, or directory |

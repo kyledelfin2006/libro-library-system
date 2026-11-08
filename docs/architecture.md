@@ -25,7 +25,7 @@ flowchart LR
         AuthService -->|AuthenticationManager| UserDetails["LibroUserDetailsService<br/>lookup by university ID · map role"]
         UserDetails -->|findByUniversityId| UserRepo
         UserRepo --> ORM
-        Flyway["Flyway migrations<br/>V1 books · V2 users · V3 librarian role · V4 loans · V5 catalog fields"]
+        Flyway["Flyway migrations<br/>V1 books · V2 users · V3 librarian role · V4 loans · V5 catalog fields · V6 recovery flag"]
         Shared["Shared concerns<br/>DTOs · mappers · validation<br/>GlobalExceptionHandler · OpenAPI"]
         Security -->|authorized request| API
         Security -->|authorized request| UserController

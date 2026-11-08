@@ -51,6 +51,15 @@ public class UserAccessPolicy {
         throw new AccessDeniedException("Access denied");
     }
 
+    /** Requires staff authority for a different account within the caller's existing management scope. */
+    public void requirePasswordReset(String callerId, String targetId, UserRole targetRole,
+                                     Collection<? extends GrantedAuthority> authorities) {
+        // A staff member uses the owner change route for their own password.
+        if (callerId.equals(targetId) || !canStaffManage(targetRole, authorities)) {
+            throw new AccessDeniedException("Access denied");
+        }
+    }
+
     /**
      * Requires the caller to be allowed to delete the target account.
      * <p>

@@ -10,6 +10,7 @@ import app.loan.service.LoanService;
 import app.user.controller.UserController;
 import app.user.service.UserService;
 import org.junit.jupiter.api.Test;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.hamcrest.Matchers;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
@@ -27,6 +28,9 @@ import org.springdoc.core.properties.SpringDocConfigProperties;
 import org.springdoc.webmvc.core.configuration.SpringDocWebMvcConfiguration;
 
 import static org.mockito.Mockito.mock;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -133,5 +137,42 @@ class OpenApiMvcTest {
                 .andExpect(jsonPath("$.components.schemas.UserResponseDTO.properties.password").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.UserResponseDTO.properties.passwordHash").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.ErrorResponse.properties.fieldErrors").exists());
+    }
+
+    /** Checks generated client metadata for the gaps found in the browser review. */
+    @Test
+    void generatedSpecHasSuccessSchemasBearerFailuresAndCoherentExamples() throws Exception {
+        String body = mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        var root = new ObjectMapper().readTree(body);
+        var paths = root.path("paths");
+        for (String[] route : new String[][] {
+                {"/app/users", "get"}, {"/app/users/{universityId}", "put"},
+                {"/app/books/{id}", "get"}, {"/app/books/all", "get"},
+                {"/app/loans/me", "get"}, {"/app/loans/users/{universityId}", "get"}
+        }) {
+            var operation = paths.path(route[0]).path(route[1]);
+            assertFalse(operation.path("responses").path("200").path("content").isMissingNode(), route[0]);
+            assertTrue(operation.path("responses").path("200").path("content").elements().next()
+                    .has("schema"), route[0]);
+            assertTrue(operation.path("responses").has("401"), route[0]);
+        }
+        var sizeParameters = paths.path("/app/books/all").path("get").path("parameters");
+        boolean capped = false;
+        for (var parameter : sizeParameters) {
+            if ("size".equals(parameter.path("name").asText())) {
+                capped = parameter.path("schema").path("maximum").asInt() == 100;
+            }
+        }
+        assertTrue(capped);
+        assertTrue(body.contains("illustrative-only"));
+        assertTrue(body.contains("ExampleOnly1!"));
+        assertFalse(body.contains("Replacement cost must be greater than 0"));
+        assertEquals(401, paths.path("/app/books/{id}").path("get").path("responses")
+                .path("401").path("content").elements().next().path("example")
+                .path("statusCode").asInt());
+        assertEquals(0, paths.path("/app/books/all").path("get").path("responses")
+                .path("200").path("content").elements().next().path("example")
+                .path("data").path("totalElements").asInt());
     }
 }

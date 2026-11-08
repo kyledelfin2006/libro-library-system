@@ -32,4 +32,7 @@ public class UserResponseDTO {
 
     @Schema(description = "Present only for IT student accounts.")
     private UserITMajor major;
+
+    @Schema(description = "True after a staff-assisted reset until this account changes its password.")
+    private boolean mustChangePassword;
 }

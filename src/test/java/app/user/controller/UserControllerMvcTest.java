@@ -3,6 +3,7 @@ package app.user.controller;
 import app.LibraryApplication;
 import app.global.exception.GlobalExceptionHandler;
 import app.user.dto.PasswordChangeRequestDTO;
+import app.user.dto.PasswordResetRequestDTO;
 import app.user.dto.UserCreateRequestDTO;
 import app.user.dto.UserPatchRequestDTO;
 import app.user.dto.UserReplaceRequestDTO;
@@ -146,7 +147,7 @@ class UserControllerMvcTest {
     @Test
     void createAdministrator_returnsCreatedLibraryAssistantProfile() throws Exception {
         UserResponseDTO assistant = new UserResponseDTO("2025-8888", "Library", "Assistant", null,
-                "assistant@example.edu", UserRole.ADMINISTRATOR, null, null);
+                "assistant@example.edu", UserRole.ADMINISTRATOR, null, null, false);
         when(service.createAdministrator(any(UserCreateRequestDTO.class), anyCollection())).thenReturn(assistant);
 
         mockMvc.perform(post("/app/users/administrators")
@@ -331,6 +332,33 @@ class UserControllerMvcTest {
         verify(service, never()).updatePassword(any(), any(), any(), anyCollection());
     }
 
+    /** Staff reset accepts only a valid temporary password and returns no secret. */
+    @Test
+    void resetPassword_returnsEmptyEnvelopeAndForwardsTemporaryPassword() throws Exception {
+        mockMvc.perform(put("/app/users/{universityId}/password/reset", USER_ID)
+                        .principal(CALLER).contentType(APPLICATION_JSON)
+                        .content("{\"temporaryPassword\":\"Temporary1!\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data").doesNotExist())
+                .andExpect(jsonPath("$.temporaryPassword").doesNotExist());
+
+        ArgumentCaptor<PasswordResetRequestDTO> request = ArgumentCaptor.forClass(PasswordResetRequestDTO.class);
+        verify(service).resetPassword(eq(USER_ID), eq(USER_ID), request.capture(), anyCollection());
+        assertEquals("Temporary1!", request.getValue().temporaryPassword());
+    }
+
+    /** Invalid recovery input is rejected before the service can hash it. */
+    @Test
+    void resetPassword_rejectsWeakTemporaryPassword() throws Exception {
+        mockMvc.perform(put("/app/users/{universityId}/password/reset", USER_ID)
+                        .principal(CALLER).contentType(APPLICATION_JSON)
+                        .content("{\"temporaryPassword\":\"weak\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.temporaryPassword").exists());
+        verify(service, never()).resetPassword(any(), any(), any(), anyCollection());
+    }
+
     @Test
     void deleteUser_returnsSuccessEnvelope() throws Exception {
         mockMvc.perform(delete("/app/users/{universityId}", USER_ID).principal(CALLER))
@@ -360,6 +388,6 @@ class UserControllerMvcTest {
 
     private UserResponseDTO user() {
         return new UserResponseDTO(USER_ID, "Alex", "Rivera", "M",
-                "alex.rivera@example.edu", UserRole.STUDENT, UserCourse.IT, UserITMajor.SE);
+                "alex.rivera@example.edu", UserRole.STUDENT, UserCourse.IT, UserITMajor.SE, false);
     }
 }

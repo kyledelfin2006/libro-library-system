@@ -3,6 +3,8 @@ package app.user.service;
 import app.user.dto.UserPatchRequestDTO;
 import app.user.dto.UserResponseDTO;
 import app.user.dto.PasswordChangeRequestDTO;
+import app.user.dto.PasswordResetRequestDTO;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import app.user.dto.UserCreateRequestDTO;
 import app.user.entity.User;
 import app.user.entity.enums.UserCourse;
@@ -56,13 +58,16 @@ class UserServiceTest {
     private final ValidatorFactory validatorFactory =
             Validation.buildDefaultValidatorFactory();
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+
     /** Service under test using a real mapper and validator. */
     private final UserService userService = new UserService(
             repository,
             passwordEncoder,
             new UserMapper(),
             validatorFactory.getValidator(),
-            new UserAccessPolicy()
+            new UserAccessPolicy(),
+            meterRegistry
     );
 
     /** Persisted user fixture rebuilt before every scenario. */
@@ -233,18 +238,52 @@ class UserServiceTest {
     }
 
     @Test
-    void updatePassword_librarianCanResetAssistantButAdministratorCannot() {
+    void updatePassword_staffMustUseResetRoute() {
         existingUser.setUserRole(UserRole.ADMINISTRATOR);
         existingUser.setPasswordHash("old-hash");
         when(passwordEncoder.encode("NewPassword2@")).thenReturn("new-hash");
-        PasswordChangeRequestDTO request = new PasswordChangeRequestDTO(null, "NewPassword2@");
+        PasswordChangeRequestDTO request = new PasswordChangeRequestDTO("Current1!", "NewPassword2@");
 
         assertThrows(AccessDeniedException.class, () -> userService.updatePassword(
                 "2025-9999", "2025-4321", request, authorities("ADMINISTRATOR")));
 
-        userService.updatePassword("2025-9999", "2025-4321", request, authorities("LIBRARIAN"));
+        assertThrows(AccessDeniedException.class, () -> userService.updatePassword(
+                "2025-9999", "2025-4321", request, authorities("LIBRARIAN")));
+        assertEquals("old-hash", existingUser.getPasswordHash());
+    }
+
+    /** A permitted reset stores only an encoded password, raises the flag, and records one metric. */
+    @Test
+    void resetPassword_marksAccountForOwnerChange() {
+        existingUser.setPasswordHash("old-hash");
+        when(passwordEncoder.encode("Temporary1!")).thenReturn("new-hash");
+        double before = meterRegistry.counter("libro.auth.password_resets").count();
+
+        userService.resetPassword("2025-9999", "2025-4321",
+                new PasswordResetRequestDTO("Temporary1!"), authorities("ADMINISTRATOR"));
 
         assertEquals("new-hash", existingUser.getPasswordHash());
+        assertTrue(existingUser.isMustChangePassword());
+        assertEquals(before + 1, meterRegistry.counter("libro.auth.password_resets").count());
+        verify(repository, never()).save(any(User.class));
+    }
+
+    /** An assistant cannot reset a peer, even with a valid temporary password. */
+    @Test
+    void resetPassword_deniesOutOfScopeTarget() {
+        existingUser.setUserRole(UserRole.ADMINISTRATOR);
+        assertThrows(AccessDeniedException.class, () -> userService.resetPassword("2025-9999", "2025-4321",
+                new PasswordResetRequestDTO("Temporary1!"), authorities("ADMINISTRATOR")));
+        verify(passwordEncoder, never()).encode(anyString());
+    }
+
+    /** Multibyte passwords over the BCrypt byte boundary never reach the encoder. */
+    @Test
+    void resetPassword_rejectsOverlongUtf8() {
+        assertThrows(app.global.exception.InvalidRequestException.class,
+                () -> userService.resetPassword("2025-9999", "2025-4321",
+                        new PasswordResetRequestDTO("Ä".repeat(35) + "Aa1!"), authorities("LIBRARIAN")));
+        verify(passwordEncoder, never()).encode(anyString());
     }
 
     @Test
@@ -405,6 +444,7 @@ class UserServiceTest {
     @Test
     void updatePassword_shouldVerifyAndEncodeNewPassword() {
         existingUser.setPasswordHash("old-hash");
+        existingUser.setMustChangePassword(true);
         when(passwordEncoder.matches("Current1!", "old-hash")).thenReturn(true);
         when(passwordEncoder.encode("NewPassword2@")).thenReturn("new-hash");
 
@@ -414,6 +454,7 @@ class UserServiceTest {
         );
 
         assertEquals("new-hash", existingUser.getPasswordHash());
+        assertFalse(existingUser.isMustChangePassword());
         verify(passwordEncoder).matches("Current1!", "old-hash");
         verify(passwordEncoder).encode("NewPassword2@");
         verify(repository, never()).save(any(User.class));

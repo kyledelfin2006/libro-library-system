@@ -5,6 +5,7 @@ import app.auth.dto.LoginRequestDTO;
 import app.auth.dto.TokenResponseDTO;
 import app.user.entity.enums.UserRole;
 import app.user.validation.PasswordPolicy;
+import app.user.repository.UserRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Instant;
@@ -33,6 +34,7 @@ public class AuthService {
     private final JwtEncoder jwtEncoder;
     private final JwtProperties jwtProperties;
     private final MeterRegistry meterRegistry;
+    private final UserRepository userRepository;
 
     /**
      * Creates the login service.
@@ -41,15 +43,18 @@ public class AuthService {
      * @param jwtEncoder Nimbus-backed signer configured with the deployment key
      * @param jwtProperties trusted issuer, audience, and token lifetime
      * @param meterRegistry metrics registry for login outcome counters; a throwaway registry is used in slices without one
+     * @param userRepository reads the stored recovery flag after credentials are authenticated
      */
     public AuthService(AuthenticationManager authenticationManager,
                        JwtEncoder jwtEncoder,
                        JwtProperties jwtProperties,
-                       ObjectProvider<MeterRegistry> meterRegistry) {
+                       ObjectProvider<MeterRegistry> meterRegistry,
+                       UserRepository userRepository) {
         this.authenticationManager = authenticationManager;
         this.jwtEncoder = jwtEncoder;
         this.jwtProperties = jwtProperties;
         this.meterRegistry = meterRegistry.getIfAvailable(SimpleMeterRegistry::new);
+        this.userRepository = userRepository;
     }
 
     /**
@@ -99,7 +104,11 @@ public class AuthService {
         // The configured encoder and this header both pin the supported algorithm to HS256.
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         String token = jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
-        return new TokenResponseDTO(token, "Bearer", jwtProperties.accessTokenTtlSeconds());
+        // Read the current flag after authentication, so login and /users/me report the same stored state.
+        boolean mustChangePassword = userRepository.findByUniversityId(authentication.getName())
+                .orElseThrow(() -> new AuthenticationServiceException("Authenticated account no longer exists"))
+                .isMustChangePassword();
+        return new TokenResponseDTO(token, "Bearer", jwtProperties.accessTokenTtlSeconds(), mustChangePassword);
     }
 
     /**

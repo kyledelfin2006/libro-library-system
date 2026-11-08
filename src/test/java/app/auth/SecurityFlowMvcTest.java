@@ -67,6 +67,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -304,6 +305,7 @@ class SecurityFlowMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.data.expiresIn").value(900))
+                .andExpect(jsonPath("$.data.mustChangePassword").value(false))
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
                 .andExpect(jsonPath("$.data.userRole").doesNotExist())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
@@ -328,8 +330,21 @@ class SecurityFlowMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(1));
 
-        verify(userRepository, times(1)).findByUniversityId(UNIVERSITY_ID);
+        verify(userRepository, times(2)).findByUniversityId(UNIVERSITY_ID);
         verify(bookService).findBookById(1L);
+    }
+
+    /** Login reads the stored recovery flag and returns it outside the signed token. */
+    @Test
+    void loginReportsRequiredPasswordChange() throws Exception {
+        User user = libroUser();
+        user.setMustChangePassword(true);
+        when(userRepository.findByUniversityId(UNIVERSITY_ID)).thenReturn(Optional.of(user));
+
+        mockMvc.perform(post("/app/auth/login").contentType(APPLICATION_JSON)
+                        .content("{\"universityId\":\"2025-4321\",\"password\":\"GoodPassword1!\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mustChangePassword").value(true));
     }
 
     /** Confirms unknown accounts and incorrect passwords share one client-visible failure. */
@@ -500,7 +515,7 @@ class SecurityFlowMvcTest {
     void librarianCanCreateLibraryAssistant() throws Exception {
         when(userService.createAdministrator(any(), any())).thenReturn(new UserResponseDTO(
                 "2025-9999", "Library", "Assistant", null,
-                "assistant@example.edu", UserRole.ADMINISTRATOR, null, null));
+                "assistant@example.edu", UserRole.ADMINISTRATOR, null, null, false));
 
         mockMvc.perform(post("/app/users/administrators")
                         .header(HttpHeaders.AUTHORIZATION, bearerAuthorization(UserRole.LIBRARIAN))
@@ -526,6 +541,27 @@ class SecurityFlowMvcTest {
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(userService);
+    }
+
+    /** Only signed staff tokens reach the reset controller; the service checks the target role. */
+    @Test
+    void passwordResetRouteRequiresStaffToken() throws Exception {
+        String path = "/app/users/2025-9999/password/reset";
+        String body = "{\"temporaryPassword\":\"Temporary1!\"}";
+        mockMvc.perform(put(path).contentType(APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        for (UserRole patron : List.of(UserRole.STUDENT, UserRole.FACULTY)) {
+            mockMvc.perform(put(path).header(HttpHeaders.AUTHORIZATION, bearerAuthorization(patron))
+                            .contentType(APPLICATION_JSON).content(body))
+                    .andExpect(status().isForbidden());
+        }
+        for (UserRole staff : List.of(UserRole.ADMINISTRATOR, UserRole.LIBRARIAN)) {
+            mockMvc.perform(put(path).header(HttpHeaders.AUTHORIZATION, bearerAuthorization(staff))
+                            .contentType(APPLICATION_JSON).content(body))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+        verify(userService, times(2)).resetPassword(any(), any(), any(), any());
     }
 
     /** Confirms the librarian token claim maps to the route's ROLE_LIBRARIAN authority. */
@@ -595,7 +631,7 @@ class SecurityFlowMvcTest {
 
     private UserResponseDTO userResponse() {
         return new UserResponseDTO(UNIVERSITY_ID, "Alex", "Rivera", null,
-                "alex.rivera@example.edu", UserRole.STUDENT, UserCourse.IT, UserITMajor.SE);
+                "alex.rivera@example.edu", UserRole.STUDENT, UserCourse.IT, UserITMajor.SE, false);
     }
 
     private BookResponseDTO bookResponse() {
