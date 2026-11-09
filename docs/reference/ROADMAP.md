@@ -95,9 +95,9 @@ Before changing a migration, establish whether that version has been applied to 
 
 Three independent plans track the remaining build work. Each is replaced by as-built documentation and removed when finished.
 
-- [ ] [UI Implementation Plan](../adr/implementation-plan-ui.md): the web UI.
-- [ ] [Backend Implementation Plan](../adr/implementation-plan-backend.md): availability, error codes, directory filters, build info, and the audit trail the UI needs.
-- [ ] [OCI Idle-Reclamation Plan](../adr/implementation-plan-oci-idle-reclamation.md): an opt-in keep-alive for the Always Free VM, documented after it is built.
+- [ ] [UI Implementation Plan](../plans/implementation-plan-ui.md): the web UI.
+- [ ] [Backend Implementation Plan](../plans/implementation-plan-backend.md): availability, error codes, directory filters, build info, and the audit trail the UI needs.
+- [ ] [OCI Idle-Reclamation Plan](../plans/implementation-plan-oci-idle-reclamation.md): an opt-in keep-alive for the Always Free VM, documented after it is built.
 
 ## Source documents
 
