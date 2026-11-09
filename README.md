@@ -291,6 +291,7 @@ Run `./mvnw verify` for unit/MVC tests and the 80% line-coverage gate. Run `./mv
 | --- | --- |
 | System design, flows, and data model | [Architecture](docs/architecture.md) |
 | Current repository map, API inventory, configuration, and tests | [Engineering Reference](docs/reference/engineering-reference.md) |
+| Proposed UI, backend, and OCI implementation work | [Implementation Plans](docs/adr/README.md) and [Development Roadmap](docs/reference/ROADMAP.md) |
 | Running and configuring a local stack | [Local Setup](docs/guides/local-setup.md) |
 | Public patron logins and private staff-account policy | [Demo Accounts](docs/guides/demo-accounts.md) |
 | Physical-copy and loan decisions | [Domain Decisions](docs/guides/domain-decisions.md) and [Loan Implementation Guide](docs/guides/loan.md) |
@@ -306,7 +307,7 @@ Run `./mvnw verify` for unit/MVC tests and the 80% line-coverage gate. Run `./mv
 src/             Spring Boot application (controllers, services, repositories, Flyway migrations) and tests
 infra/           Production Compose override and the Caddy reverse-proxy configuration
 scripts/         Deploy, rollback, smoke-test, backup, restore, and demo-seed scripts
-docs/adr/        Planning archive; remaining work is in the roadmap
+docs/adr/        Proposed implementation plans; status is in the roadmap
 docs/
   architecture.md  Design, request flows, API inventory, data model, troubleshooting, tests
   devops/          CI/CD, environments, secrets, rollback, monitoring, operations runbook

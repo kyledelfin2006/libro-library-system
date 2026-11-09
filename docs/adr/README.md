@@ -1,5 +1,11 @@
-# Planning archive
+# Implementation plans
 
-The pre-UI implementation plan is complete. Finished decisions and work live in the code, tests, [Engineering Reference](../reference/engineering-reference.md), and Git history. Remaining work is in the [Roadmap](../reference/ROADMAP.md).
+Active proposals and their execution steps are kept here. The [Roadmap](../reference/ROADMAP.md) tracks their status; live behavior is documented in the code, tests, and [Engineering Reference](../reference/engineering-reference.md).
 
-The layered feature-package decision (formerly ADR 0002) now lives in [Architecture: Design Rules](../architecture.md#design-rules). The pre-OCI deployment work (formerly ADR 0001) is implemented through Stage 2; its remaining deployment items are tracked in the [Roadmap](../reference/ROADMAP.md) and the [Operations Runbook](../devops/runbook.md), not in the plan.
+| Plan | Scope | Status |
+| --- | --- | --- |
+| [UI implementation](implementation-plan-ui.md) | Web interface | Proposed |
+| [Backend additions](implementation-plan-backend.md) | API changes needed by the UI | Proposed |
+| [OCI idle reclamation](implementation-plan-oci-idle-reclamation.md) | Production VM idle mitigation | Proposed |
+
+The earlier pre-UI plan is complete and preserved in Git history. The layered feature-package decision (formerly ADR 0002) lives in [Architecture: Design Rules](../architecture.md#design-rules). Earlier OCI deployment work (formerly ADR 0001) is implemented through Stage 2; its remaining items are tracked in the [Roadmap](../reference/ROADMAP.md) and [Operations Runbook](../devops/runbook.md).

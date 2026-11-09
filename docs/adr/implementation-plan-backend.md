@@ -1,6 +1,6 @@
 # Implementation Plan: Backend Additions for the UI (Agent Execution Guide)
 
-Audience: an AI coding agent executing this plan, or a human contributor. Read [AGENTS.md](../AGENTS.md) first; its rules apply to every step.
+Audience: an AI coding agent executing this plan, or a human contributor. Read [AGENTS.md](../../AGENTS.md) first; its rules apply to every step.
 
 Status: proposed, not built. This is one of three independent plans:
 
@@ -14,7 +14,7 @@ Keep each plan's changes in its own PRs. This plan ships first or alongside the 
 
 ## 0. Rules for the executing agent
 
-1. Trace the existing request path before editing: controller, service, repository, mapper, DTO, tests. Follow the layering rules in [Architecture](architecture.md#design-rules).
+1. Trace the existing request path before editing: controller, service, repository, mapper, DTO, tests. Follow the layering rules in [Architecture](../architecture.md#design-rules).
 2. Every change is **additive and backward compatible**: new optional parameters, new response fields, new endpoints. Do not rename or remove existing fields.
 3. Use request and response DTOs only. Never expose a JPA entity. Services return DTOs.
 4. New client errors are subclasses of `InvalidRequestException` or `ResourceNotFoundException`. Never throw a bare `IllegalArgumentException` for a client error.

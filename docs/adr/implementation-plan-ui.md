@@ -8,7 +8,7 @@ Status: proposed; technical decisions confirmed by the project owner on 2026-11-
 | [Backend Implementation Plan](implementation-plan-backend.md) | The small additive API changes this UI needs (availability, error codes, directory filters, build info, audit trail). |
 | [OCI Idle-Reclamation Plan](implementation-plan-oci-idle-reclamation.md) | Keeping the OCI Always Free VM from being reclaimed. |
 
-Facts about the live API stay in the controllers, OpenAPI, and the [engineering reference](reference/engineering-reference.md). The loan lifecycle is in the [Loan Implementation Guide](guides/loan.md). Backend work found while planning is **not** listed here; it lives in the backend plan, and each UI phase below names the backend item it depends on.
+Facts about the live API stay in the controllers, OpenAPI, and the [engineering reference](../reference/engineering-reference.md). The loan lifecycle is in the [Loan Implementation Guide](../guides/loan.md). Backend work found while planning is **not** listed here; it lives in the backend plan, and each UI phase below names the backend item it depends on.
 
 ## 1. Goals and principles
 
@@ -78,7 +78,7 @@ These facts come from the controllers, DTOs, and the loan guide, not from assump
 | ADMINISTRATOR (library assistant) | Staff dashboard | Dashboard, Catalog, Loans, Inventory, Accounts (students and faculty), Audit (scoped, when built), Version, My Account |
 | LIBRARIAN | Staff dashboard | All of the above plus Accounts for library assistants and the full Audit log |
 
-Public: Sign in, Register, Status. The route guard table lives in one `permissions.ts` that mirrors `SecurityConfig` and is tested against the backend role matrix in the [Role and JWT guide](reference/security-roles-and-jwt-guide.md).
+Public: Sign in, Register, Status. The route guard table lives in one `permissions.ts` that mirrors `SecurityConfig` and is tested against the backend role matrix in the [Role and JWT guide](../reference/security-roles-and-jwt-guide.md).
 
 ## 5. Design concepts
 
@@ -117,7 +117,7 @@ Dates read "Mon 23 Nov 2026" with the relative form beside them ("in 9 days", "2
 
 ### 5.3 The logo
 
-The asset is [assets/LIBRO_LOGO.png](../assets/LIBRO_LOGO.png): 1292 by 1218 px, transparent background, about 958 KB. It shows an open book with a bookmark and the lowercase wordmark "libro" in a rounded bold face, with a green power-button hexagon at lower right. It has a white outline around its shapes, so it reads on dark and light surfaces.
+The asset is [assets/LIBRO_LOGO.png](../../assets/LIBRO_LOGO.png): 1292 by 1218 px, transparent background, about 958 KB. It shows an open book with a bookmark and the lowercase wordmark "libro" in a rounded bold face, with a green power-button hexagon at lower right. It has a white outline around its shapes, so it reads on dark and light surfaces.
 
 Dominant colors measured from the file: deep green near `#008040`, bright green near `#4DB82A`, and white. The palette in 5.4 derives from these. The bookmark in the logo is reused as the "On loan" ribbon on covers (5.7).
 
@@ -533,7 +533,7 @@ Each phase ends in a mergeable PR with tests and a working demo against `seed-de
 - `permissions.ts` has a test asserting it matches the backend matrix for every listed route.
 - The contrast test and axe checks pass in both themes, and the `BookCover` snapshot test covers every cloth color and pattern.
 - CI runs `ui-test`; CD ships the UI in the deployed Caddy configuration.
-- No tokens or passwords in storage, logs, URLs, or source; staff demo credentials stay private ([Demo Accounts](guides/demo-accounts.md)).
+- No tokens or passwords in storage, logs, URLs, or source; staff demo credentials stay private ([Demo Accounts](../guides/demo-accounts.md)).
 - README, the engineering reference and the roadmap are updated only for facts that changed. When the UI ships, replace this plan with as-built documentation and remove the file, following the repository's convention.
 
 ## 12. Risks
