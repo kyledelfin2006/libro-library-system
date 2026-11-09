@@ -35,6 +35,8 @@
           `-DskipTests` would skip both plugins, so it cannot run "integration tests only".
         -->
         <skipUTs>false</skipUTs>
+        <libro.commit>unknown</libro.commit>
+        <libro.build.time>off</libro.build.time>
 
         <!--
           Security overrides of versions managed by the Spring Boot BOM. Each one fixes a finding from the Trivy
@@ -246,6 +248,17 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals><goal>build-info</goal></goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <time>${libro.build.time}</time>
+                    <additionalProperties>
+                        <commit>${libro.commit}</commit>
+                    </additionalProperties>
+                </configuration>
             </plugin>
 
             <!-- Line-coverage measurement and the 80% gate. -->

@@ -8,13 +8,14 @@ The pre-UI implementation plan is complete; its three parts are preserved in Git
 
 | Area | Implemented now |
 | --- | --- |
-| Books | CRUD, optional description, replacement-cost tracking, search, pagination, sorting, filtering, statistics, DTO validation (V5) |
-| Accounts | Student signup; librarian-created faculty/library assistants; role-scoped directory, profile/password management, and deletion |
+| Books | CRUD, optional description, replacement-cost tracking, search, pagination, sorting, filtering, statistics, advisory availability |
+| Accounts | Student signup; librarian-created faculty/library assistants; role-scoped searchable directory, profile/password management, and deletion |
 | Roles in Java and the current schema | STUDENT, FACULTY, ADMINISTRATOR, LIBRARIAN (Flyway V3) |
 | Authentication | Local HS256 JWT login and stateless Bearer validation; issuer/audience are configured, maximum token lifetime is 900 seconds, and clock skew is 30 seconds |
 | Authorization | Book reads for all roles; ADMINISTRATOR/LIBRARIAN book CRUD; librarian creates faculty/library assistants; role-scoped service account checks |
 | Loans | Implemented in application and V4 migration; service/MVC rules, PostgreSQL invariants and concurrent checkout races covered |
 | LIBRARIAN role and target owner/directory rules | Implemented with JWT Bearer authentication |
+| UI backend additions | Stable business error codes, staff build info, audit events (V7), and scoped weekly/top-title loan aggregates |
 
 See the permissions matrix in [Security Roles and JWT Guide](security-roles-and-jwt-guide.md). Administrator means library assistant, not system administrator. The paginated directory and profile/password operations follow role and target-account boundaries; students/faculty may delete their own accounts. Loan policy and build guidance are in [Loan Implementation Guide](../guides/loan.md).
 
@@ -93,10 +94,10 @@ Before changing a migration, establish whether that version has been applied to 
 
 ## Active implementation plans
 
-Three independent plans track the remaining build work. Each is replaced by as-built documentation and removed when finished.
+Independent plans track the remaining build work. Each is replaced by as-built documentation and its plan file is deleted when finished.
 
 - [ ] [UI Implementation Plan](../plans/implementation-plan-ui.md): the web UI.
-- [ ] [Backend Implementation Plan](../plans/implementation-plan-backend.md): availability, error codes, directory filters, build info, and the audit trail the UI needs.
+- [ ] Backend additions for the UI: implemented and the plan file removed; PostgreSQL integration verification (`./mvnw verify -Pintegration`) remains pending.
 - [ ] [OCI Idle-Reclamation Plan](../plans/implementation-plan-oci-idle-reclamation.md): an opt-in keep-alive for the Always Free VM, documented after it is built.
 
 ## Source documents

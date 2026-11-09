@@ -50,6 +50,22 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // Returns a paged directory limited to the account roles visible to staff.
     Page<User> findByUserRoleIn(Collection<UserRole> userRoles, Pageable pageable);
 
+    /** Applies staff scope and optional case-insensitive directory search before pagination. */
+    @Query("""
+            SELECT u FROM User u WHERE u.userRole IN :roles
+              AND (:role IS NULL OR u.userRole = :role)
+              AND (LOCATE(LOWER(:q), LOWER(u.universityId)) > 0
+                OR LOCATE(LOWER(:q), LOWER(u.firstName)) > 0
+                OR LOCATE(LOWER(:q), LOWER(u.lastName)) > 0
+                OR LOCATE(LOWER(:q), LOWER(u.email)) > 0)
+            """)
+    Page<User> searchDirectory(@Param("roles") Collection<UserRole> roles,
+                               @Param("role") UserRole role, @Param("q") String q, Pageable pageable);
+
+    /** Detects preserved borrowing history before an account is deleted. */
+    @Query("SELECT CASE WHEN COUNT(l) > 0 THEN true ELSE false END FROM Loan l WHERE l.borrower.id = :id OR l.lostBy.id = :id")
+    boolean hasLoanHistory(@Param("id") Long id);
+
     // finds users by course
     List<User> findByUserCourse(UserCourse userCourse);
 }

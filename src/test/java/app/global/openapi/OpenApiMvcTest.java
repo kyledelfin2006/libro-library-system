@@ -1,6 +1,10 @@
 package app.global.openapi;
 
 import app.LibraryApplication;
+import app.audit.controller.AuditController;
+import app.audit.service.AuditService;
+import app.info.controller.BuildInfoController;
+import app.info.service.BuildInfoService;
 import app.auth.controller.AuthController;
 import app.auth.service.AuthService;
 import app.book.controller.BookController;
@@ -38,7 +42,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 // API docs are off by default (application.properties); this test checks the document served when they are on.
 @TestPropertySource(properties = "libro.api-docs.enabled=true")
-@WebMvcTest({AuthController.class, BookController.class, UserController.class, LoanController.class})
+@WebMvcTest({AuthController.class, BookController.class, UserController.class, LoanController.class,
+        AuditController.class, BuildInfoController.class})
 @AutoConfigureMockMvc(addFilters = false)
 @Import({OpenApiConfig.class, OpenApiMvcTest.MockBeans.class})
 @ContextConfiguration(classes = LibraryApplication.class)
@@ -71,6 +76,9 @@ class OpenApiMvcTest {
         LoanService loanService() {
             return mock(LoanService.class);
         }
+
+        @Bean AuditService auditService() { return mock(AuditService.class); }
+        @Bean BuildInfoService buildInfoService() { return mock(BuildInfoService.class); }
     }
 
     /** Verifies public schemas, security metadata, endpoint contracts, and loan pagination documentation. */
@@ -136,7 +144,15 @@ class OpenApiMvcTest {
                 .andExpect(jsonPath("$.components.schemas.PasswordChangeRequestDTO.properties.newPassword.writeOnly").value(true))
                 .andExpect(jsonPath("$.components.schemas.UserResponseDTO.properties.password").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.UserResponseDTO.properties.passwordHash").doesNotExist())
-                .andExpect(jsonPath("$.components.schemas.ErrorResponse.properties.fieldErrors").exists());
+                .andExpect(jsonPath("$.components.schemas.ErrorResponse.properties.fieldErrors").exists())
+                .andExpect(jsonPath("$.components.schemas.ErrorResponse.properties.code").exists())
+                .andExpect(jsonPath("$.components.schemas.BookResponseDTO.properties.available").exists())
+                .andExpect(jsonPath("$.paths['/app/books/query'].get.parameters[?(@.name == 'available')]").exists())
+                .andExpect(jsonPath("$.paths['/app/users'].get.parameters[?(@.name == 'q')]").exists())
+                .andExpect(jsonPath("$.paths['/app/loans/activity'].get").exists())
+                .andExpect(jsonPath("$.paths['/app/loans/top-titles'].get").exists())
+                .andExpect(jsonPath("$.paths['/app/info'].get").exists())
+                .andExpect(jsonPath("$.paths['/app/audit'].get").exists());
     }
 
     /** Checks generated client metadata for the gaps found in the browser review. */

@@ -59,6 +59,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ContextConfiguration(classes = LibraryApplication.class)
 class BookControllerMvcTest {
 
+    /** New availability filters bind as typed values and reject malformed booleans. */
+    @Test
+    void queryBindsAvailabilityAndCopyStatus() throws Exception {
+        when(service.queryBooks(any(), any(), any(), any(), any(),
+                eq(app.book.entity.BookCopyStatus.IN_COLLECTION), eq(true), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        mockMvc.perform(get("/app/books/query")
+                        .queryParam("available", "true").queryParam("copyStatus", "IN_COLLECTION"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/app/books/query").queryParam("copyStatus", "BROKEN"))
+                .andExpect(status().isBadRequest());
+    }
+
     @Autowired
     private MockMvc mockMvc;
 

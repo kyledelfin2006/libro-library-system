@@ -1,14 +1,15 @@
 # UI Implementation Plan
 
-Status: proposed; technical decisions confirmed by the project owner on 2026-11-09. This is one of three independent plans:
+> **Lifecycle:** when this plan has been fully executed, delete this file in the same change and drop its links from the other plans, the plans README, and the Roadmap.
+
+Status: proposed; technical decisions confirmed by the project owner on 2026-11-09. This is one of the independent plans:
 
 | Plan | Scope |
 | --- | --- |
 | **This plan** | The web UI. |
-| [Backend Implementation Plan](implementation-plan-backend.md) | The small additive API changes this UI needs (availability, error codes, directory filters, build info, audit trail). |
 | [OCI Idle-Reclamation Plan](implementation-plan-oci-idle-reclamation.md) | Keeping the OCI Always Free VM from being reclaimed. |
 
-Facts about the live API stay in the controllers, OpenAPI, and the [engineering reference](../reference/engineering-reference.md). The loan lifecycle is in the [Loan Implementation Guide](../guides/loan.md). Backend work found while planning is **not** listed here; it lives in the backend plan, and each UI phase below names the backend item it depends on.
+Facts about the live API stay in the controllers, OpenAPI, and the [engineering reference](../reference/engineering-reference.md). The loan lifecycle is in the [Loan Implementation Guide](../guides/loan.md). Backend work found while planning is **not** listed here; it was tracked in the now-executed backend plan, and each UI phase below names the backend item it depends on.
 
 ## 1. Goals and principles
 
@@ -205,7 +206,7 @@ Rules that protect the experience:
 
 Alternatives rejected: a neutral grey placeholder (looks unfinished and repeats), fetching covers from a third-party service in the browser (the model has no ISBN, it breaks the strict CSP, and it would leak patrons' browsing), generated imagery (cost, inconsistency, and it can mislead about a real book), and an initials avatar (not book-like).
 
-**Later, if real covers are wanted.** `BookCover` already takes an optional `coverUrl` and prefers it over the generated cover. Supplying it needs a backend decision (an ISBN or cover field and, if an outside source is used, server-side fetching and caching so patrons' browsers never contact it). That is deferred and listed in the [backend plan](implementation-plan-backend.md#6-deferred).
+**Later, if real covers are wanted.** `BookCover` already takes an optional `coverUrl` and prefers it over the generated cover. Supplying it needs a backend decision (an ISBN or cover field and, if an outside source is used, server-side fetching and caching so patrons' browsers never contact it). That is deferred and recorded as deferred work (the backend plan was executed and removed).
 
 ### 5.8 Dashboards and charts
 

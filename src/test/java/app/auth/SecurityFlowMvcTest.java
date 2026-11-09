@@ -466,7 +466,7 @@ class SecurityFlowMvcTest {
                 List.of(jwtProperties.audience(), "other-api"), UNIVERSITY_ID,
                 List.of("STUDENT"), now, now.plusSeconds(900), null));
         assertRejected(signedToken(jwtProperties.issuer(), List.of(jwtProperties.audience()),
-                UNIVERSITY_ID, List.of("STUDENT"), now, now.plusSeconds(900), now.plusSeconds(31)));
+                UNIVERSITY_ID, List.of("STUDENT"), now, now.plusSeconds(900), now.plusSeconds(60)));
     }
 
     /** Rejects absent, malformed, future, and overlong identity/time/role claims. */

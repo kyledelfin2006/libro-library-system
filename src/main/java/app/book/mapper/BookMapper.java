@@ -20,6 +20,11 @@ public class BookMapper {
      * @return the response DTO, or null if input is null
      */
     public BookResponseDTO toResponseDTO(Book book) {
+        return toResponseDTO(book, book != null && book.getCopyStatus() == app.book.entity.BookCopyStatus.IN_COLLECTION);
+    }
+
+    /** Maps a copy with availability computed from its persisted loan state. */
+    public BookResponseDTO toResponseDTO(Book book, boolean available) {
         if (book == null) {
             return null;
         }
@@ -31,7 +36,8 @@ public class BookMapper {
                 book.getGenre(),
                 book.getDescription(),
                 book.getReplacementCost(),
-                book.getCopyStatus()
+                book.getCopyStatus(),
+                available
         );
     }
 

@@ -31,6 +31,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -115,16 +116,22 @@ public class UserController {
      */
     @GetMapping
     @Operation(summary = "List accounts with pagination",
-            description = "Library assistants may list student and school faculty profiles. The librarian may also list library assistant profiles. Page numbering starts at zero. The default is page 0, size 12, sorted by universityId ascending; the maximum page size is 100. Sort with sort=property,direction using universityId, firstName, lastName, middleInitial, email, userRole, userCourse, or major. Unsupported sort properties return 400.")
+            description = "Library assistants may list student and school faculty profiles. The librarian may also list library assistant profiles. Optional role and q filters stay inside that scope; q matches a case-insensitive literal substring of ID, name, or email. An out-of-scope role returns 403. Page numbering starts at zero. The default is page 0, size 12, sorted by universityId ascending; the maximum page size is 100. Sort with sort=property,direction using universityId, firstName, lastName, middleInitial, email, userRole, userCourse, or major. Unsupported sort properties return 400.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Authorized account page", useReturnTypeSchema = true)
     @ErrorApiResponse(responseCode = "400", description = "Invalid pagination or sort parameter")
     @ErrorApiResponse(responseCode = "403", description = "Only library assistants and the librarian may list accounts")
     public ResponseEntity<ApiResponse<Page<UserResponseDTO>>> getAllUsers(
+            @io.swagger.v3.oas.annotations.Parameter(description = "Optional target role within the caller's staff scope; LIBRARIAN is never listed.")
+            @RequestParam(required = false) app.user.entity.enums.UserRole role,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Case-insensitive literal substring of university ID, first name, last name, or email.")
+            @RequestParam(required = false) String q,
             @ParameterObject @PageableDefault(size = 12, sort = "universityId") Pageable pageable,
             Authentication authentication) {
         // Forward the verified caller identity and roles for the service authorization check.
-        return ResponseEntity.ok(ApiResponse.ok(service.getAllUsers(pageable, authentication.getName(),
-                authentication.getAuthorities())));
+        Page<UserResponseDTO> users = role == null && (q == null || q.isBlank())
+                ? service.getAllUsers(pageable, authentication.getName(), authentication.getAuthorities())
+                : service.getAllUsers(pageable, authentication.getName(), authentication.getAuthorities(), role, q);
+        return ResponseEntity.ok(ApiResponse.ok(users));
     }
 
     /** Returns the authenticated account's current public profile. */

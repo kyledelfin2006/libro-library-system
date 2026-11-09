@@ -62,6 +62,8 @@ jobs:
       - name: Build image
         run: |
           docker build --platform linux/arm64 \
+            --build-arg "LIBRO_COMMIT=${{ steps.revision.outputs.sha }}" \
+            --build-arg "LIBRO_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
             --label "org.opencontainers.image.revision=${{ steps.revision.outputs.sha }}" \
             -t libro-api:release .

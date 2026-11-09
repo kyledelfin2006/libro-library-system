@@ -134,6 +134,8 @@ public class SecurityConfig {
                         .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
                         .requestMatchers(HttpMethod.GET, "/app/loans/users/**")
                         .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
+                        .requestMatchers(HttpMethod.GET, "/app/info", "/app/audit", "/app/loans/activity", "/app/loans/top-titles")
+                        .hasAnyRole("ADMINISTRATOR", "LIBRARIAN")
 
                         .requestMatchers(HttpMethod.GET, "/app/books/**")
                         .hasAnyRole("STUDENT", "FACULTY", "ADMINISTRATOR", "LIBRARIAN")

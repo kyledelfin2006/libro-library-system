@@ -136,7 +136,7 @@ public class Loan {
     private void requireActive() {
         // Keep the transition rule in the entity so every service path follows it.
         if (!isActive()) {
-            throw new LoanConflictException("Loan is no longer active");
+            throw new LoanConflictException("Loan is no longer active", "LOAN_NOT_ACTIVE");
         }
     }
 }

@@ -1,11 +1,14 @@
 package app.book.service;
 
 import app.global.exception.InvalidRequestException;
+import app.audit.service.AuditService;
 import app.book.dto.BookResponseDTO;
 import app.book.dto.LibraryStatisticsDTO;
 import app.book.exception.BookNotFoundException;
 import app.book.exception.BookValidationException;
 import app.book.entity.Book;
+import app.book.entity.BookCopyStatus;
+import app.loan.entity.LoanStatus;
 import app.book.dto.BookRequestDTO;
 import app.book.dto.BookPatchRequestDTO;
 import app.book.mapper.BookMapper;
@@ -15,7 +18,7 @@ import app.book.repository.projection.LibraryAggregate;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -28,6 +31,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -47,7 +51,7 @@ import java.util.stream.Collectors;
  * @see BookMapper
  */
 @Slf4j
-@AllArgsConstructor
+@RequiredArgsConstructor
 @Service
 @Transactional(readOnly = true)
 public class BookService {
@@ -59,6 +63,8 @@ public class BookService {
     /** Explicit entity/DTO conversion. */
     private final BookMapper mapper;
     private final Validator validator;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AuditService audit;
 
 
     /**
@@ -70,7 +76,7 @@ public class BookService {
      */
     public Page<BookResponseDTO> getBooks(Pageable pageable) {
         validateBookSort(pageable);
-        return repository.findAll(pageable).map(mapper::toResponseDTO);
+        return mapPage(repository.findAll(pageable));
     }
 
     /**
@@ -88,8 +94,35 @@ public class BookService {
     public Page<BookResponseDTO> queryBooks(String title, String author, String genre,
                                             BigDecimal minReplacementCost, BigDecimal maxReplacementCost,
                                             Pageable pageable) {
-        return queryBookPage(title, author, genre, minReplacementCost, maxReplacementCost, pageable)
-                .map(mapper::toResponseDTO);
+        return queryBooks(title, author, genre, minReplacementCost, maxReplacementCost, null, null, pageable);
+    }
+
+    /** Filters by physical disposition and current availability in addition to existing catalog fields. */
+    public Page<BookResponseDTO> queryBooks(String title, String author, String genre,
+                                            BigDecimal minReplacementCost, BigDecimal maxReplacementCost,
+                                            BookCopyStatus copyStatus, Boolean available, Pageable pageable) {
+        return mapPage(queryBookPage(title, author, genre, minReplacementCost, maxReplacementCost,
+                copyStatus, available, pageable));
+    }
+
+    /** Resolves active loans once for a page, avoiding one loan lookup per book. */
+    private Page<BookResponseDTO> mapPage(Page<Book> books) {
+        List<Long> ids = books.getContent().stream().map(Book::getId).toList();
+        Set<Long> activeIds = ids.isEmpty() ? Set.of() :
+                Optional.ofNullable(repository.findActiveBookIds(ids, LoanStatus.ACTIVE)).orElse(Set.of());
+        // A lost copy cannot be borrowed even when its loan is terminal.
+        return books.map(book -> mapper.toResponseDTO(book,
+                book.getCopyStatus() == BookCopyStatus.IN_COLLECTION && !activeIds.contains(book.getId())));
+    }
+
+    /** Maps a single copy using its current persisted active-loan state. */
+    private BookResponseDTO mapBook(Book book) {
+        // Newly constructed copies in isolated service tests have no persistence-assigned ID yet.
+        if (book.getId() == null) return mapper.toResponseDTO(book);
+        boolean available = book.getCopyStatus() == BookCopyStatus.IN_COLLECTION
+                && !Optional.ofNullable(repository.findActiveBookIds(List.of(book.getId()), LoanStatus.ACTIVE))
+                .orElse(Set.of()).contains(book.getId());
+        return mapper.toResponseDTO(book, available);
     }
 
     /**
@@ -102,7 +135,8 @@ public class BookService {
      * @return the matching entity page; public callers map it to DTOs before returning
      */
     private Page<Book> queryBookPage(String title, String author, String genre,
-                                     BigDecimal minReplacementCost, BigDecimal maxReplacementCost, Pageable pageable) {
+                                     BigDecimal minReplacementCost, BigDecimal maxReplacementCost,
+                                     BookCopyStatus copyStatus, Boolean available, Pageable pageable) {
         validateBookSort(pageable);
         if (minReplacementCost != null && maxReplacementCost != null
                 && minReplacementCost.compareTo(maxReplacementCost) > 0) {
@@ -113,10 +147,15 @@ public class BookService {
             sort = sort.and(Sort.by("id"));
         }
         Pageable stablePage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
-        return repository.queryBooks(title == null ? "" : title,
-                author == null ? "" : author,
-                genre == null ? "" : genre,
-                minReplacementCost, maxReplacementCost, stablePage);
+        String safeTitle = title == null ? "" : title;
+        String safeAuthor = author == null ? "" : author;
+        String safeGenre = genre == null ? "" : genre;
+        return copyStatus == null && available == null
+                ? repository.queryBooks(safeTitle, safeAuthor, safeGenre,
+                        minReplacementCost, maxReplacementCost, stablePage)
+                : repository.queryBooksFiltered(safeTitle, safeAuthor, safeGenre,
+                        minReplacementCost, maxReplacementCost, copyStatus, available,
+                        BookCopyStatus.IN_COLLECTION, LoanStatus.ACTIVE, stablePage);
     }
 
     private void validateBookSort(Pageable pageable) {
@@ -149,9 +188,10 @@ public class BookService {
         // Validate using validator method
         validateEntity(newBook);
         repository.save(newBook);
+        if (audit != null) audit.record("BOOK_CREATED", "BOOK", newBook.getId().toString(), null);
 
         log.info("Successfully added book '{}' to catalogue with ID: {}", newBook.getTitle(), newBook.getId());
-        return mapper.toResponseDTO(newBook);
+        return mapBook(newBook);
     }
 
     /**
@@ -163,7 +203,7 @@ public class BookService {
      */
     public BookResponseDTO findBookById(Long id) {
         return repository.findById(id)
-                .map(mapper::toResponseDTO)
+                .map(this::mapBook)
                 .orElseThrow(() -> new BookNotFoundException("Couldn't find book of ID: " + id));
     }
 
@@ -195,12 +235,25 @@ public class BookService {
     public void deleteBookById(Long id) {
         log.debug("Attempting to delete book with ID: {}", id);
 
-        int deletedCount = repository.deleteBookById(id); // Returns the amount of rows deleted
+        if (repository.hasLoanHistory(id)) {
+            throw new app.global.exception.ConflictException(
+                    "Book copy has loan history and must be retained", "RESOURCE_HAS_HISTORY");
+        }
+
+        int deletedCount;
+        try {
+            // The foreign key remains the final guard if a loan is created after the history check.
+            deletedCount = repository.deleteBookById(id);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new app.global.exception.ConflictException(
+                    "Book copy has loan history and must be retained", "RESOURCE_HAS_HISTORY");
+        }
 
         if (deletedCount == 0) { // If no row is deleted, it means no id matched that book to delete.
             log.warn("Failed delete operation: Book with ID {} not found", id);
             throw new BookNotFoundException("Couldn't find book of ID: " + id);
         }
+        if (audit != null) audit.record("BOOK_DELETED", "BOOK", id.toString(), null);
     }
 
     /**
@@ -254,8 +307,9 @@ public class BookService {
         }
 
         validateEntity(existingBook);
+        if (audit != null) audit.record("BOOK_CHANGED", "BOOK", id.toString(), null);
         // No repository.save(): the entity is managed, so Hibernate writes the changes when the transaction commits.
-        return mapper.toResponseDTO(existingBook);
+        return mapBook(existingBook);
     }
 
     /** Returns whether a string is non-null and contains a non-whitespace character. */
@@ -304,9 +358,10 @@ public class BookService {
 
         // 4. Validate entity using existing validator method
         validateEntity(existingBook);
+        if (audit != null) audit.record("BOOK_CHANGED", "BOOK", id.toString(), null);
 
         // 5. Dirty checking persists the managed entity at commit; return its API view.
-        return mapper.toResponseDTO(existingBook);
+        return mapBook(existingBook);
     }
 
     /**
@@ -463,7 +518,7 @@ public class BookService {
         Book highestReplacementCost = repository.findTopByOrderByReplacementCostDesc();
 
         BookResponseDTO highestReplacementCostDTO = (highestReplacementCost != null)
-                ? mapper.toResponseDTO(highestReplacementCost) : null;
+                ? mapBook(highestReplacementCost) : null;
 
         return new LibraryStatisticsDTO(
                 aggregate.totalBooks(),

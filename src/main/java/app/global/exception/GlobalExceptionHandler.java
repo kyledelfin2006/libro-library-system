@@ -2,6 +2,7 @@ package app.global.exception;
 
 import app.global.response.ErrorResponse;
 import app.loan.exception.LoanConflictException;
+import app.global.exception.ConflictException;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -70,15 +71,16 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Converts a loan state or availability conflict into HTTP 409.
+     * Converts a business conflict, including loan state and retained history, into HTTP 409.
      *
      * @param ex the client-safe loan conflict
      * @return a standardized conflict response
      */
-    @ExceptionHandler(LoanConflictException.class)
-    public ResponseEntity<ErrorResponse> handleLoanConflict(LoanConflictException ex) {
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ErrorResponse> handleLoanConflict(ConflictException ex) {
         // Loan rules provide a safe explanation without exposing database constraints.
-        ErrorResponse error = new ErrorResponse("Loan conflict", ex.getMessage(), 409);
+        String title = ex instanceof LoanConflictException ? "Loan conflict" : "Resource conflict";
+        ErrorResponse error = new ErrorResponse(title, ex.getMessage(), 409, Map.of(), ex.getCode());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
@@ -173,7 +175,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidRequestException.class)
     public ResponseEntity<ErrorResponse> handleInvalidRequest(InvalidRequestException ex) {
         log.warn("Validation failed: {}", ex.getMessage());
-        return ResponseEntity.badRequest().body(buildValidationErrorResponse(ex.getMessage()));
+        return ResponseEntity.badRequest().body(new ErrorResponse("Validation failed", ex.getMessage(),
+                400, Map.of(), ex.getCode()));
     }
 
     /**

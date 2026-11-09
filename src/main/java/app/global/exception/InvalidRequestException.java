@@ -10,6 +10,7 @@ package app.global.exception;
  * </p>
  */
 public class InvalidRequestException extends IllegalArgumentException {
+    private final String code;
 
     /**
      * Creates a validation failure with a client-safe explanation.
@@ -17,6 +18,17 @@ public class InvalidRequestException extends IllegalArgumentException {
      * @param message explanation returned to the client in the error body
      */
     public InvalidRequestException(String message) {
+        this(message, null);
+    }
+
+    /** Creates a client error with an optional stable machine code. */
+    public InvalidRequestException(String message, String code) {
         super(message);
+        this.code = code;
+    }
+
+    /** Returns the stable client code, when supplied. */
+    public String getCode() {
+        return code;
     }
 }

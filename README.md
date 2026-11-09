@@ -76,7 +76,7 @@ flowchart LR
     Flyway[Flyway migrations] --> Database
 ```
 
-The single-module codebase groups `auth`, `book`, `loan`, and `user` by feature, then by layer. Controllers accept and return DTOs; services own business rules, transactions, and entity-to-DTO mapping; repositories own persistence. Shared responses, errors, request IDs, time handling, and OpenAPI configuration live in `global`. Flyway owns the schema, and Hibernate validates it at startup. [Architecture Overview](docs/architecture.md) shows the request and data flows; its Design Rules section records the package decision.
+The single-module codebase groups `auth`, `book`, `loan`, `user`, `audit`, and `info` by feature, then by layer. Controllers accept and return DTOs; services own business rules, transactions, and entity-to-DTO mapping; repositories own persistence. Shared responses, errors, request IDs, time handling, and OpenAPI configuration live in `global`. Flyway owns the schema, and Hibernate validates it at startup. [Architecture Overview](docs/architecture.md) shows the request and data flows; its Design Rules section records the package decision.
 
 ## Notable code changes
 
@@ -162,6 +162,7 @@ Copy [`.env.example`](.env.example) for the local template. The settings below c
 | `LIBRO_RATE_LIMIT_MAX_TRACKED_CLIENT_ROUTES` | No | `10000` in-memory client/route counters. |
 | `LIBRO_BOOTSTRAP_LIBRARIAN_UNIVERSITY_ID`, `LIBRO_BOOTSTRAP_LIBRARIAN_EMAIL`, `LIBRO_BOOTSTRAP_LIBRARIAN_FIRST_NAME`, `LIBRO_BOOTSTRAP_LIBRARIAN_LAST_NAME`, `LIBRO_BOOTSTRAP_LIBRARIAN_PASSWORD_HASH` | No | Set all five together to create the first librarian once; supply a BCrypt hash. |
 | `LIBRO_API_DOCS_ENABLED` | No | `false`; `true` serves Swagger UI and `/v3/api-docs` publicly. |
+| `LIBRO_ENVIRONMENT_NAME` | No | `local`; staff-visible label returned by `/app/info`. |
 | `LIBRO_DOMAIN` | For the TLS proxy | `localhost` locally; set a real host name for deployment. |
 | `MANAGEMENT_SERVER_PORT` | No | `9091`; private Actuator health and Prometheus port. |
 | `LIBRO_DATA_DIR` | Production deploy only | Block-volume path for database data, backups, and release state. |
@@ -223,11 +224,12 @@ Authorization: Bearer <signed JWT>
 
 | Area | Representative endpoints | Access |
 | --- | --- | --- |
-| Books | `GET /app/books/all`, `GET /app/books/query`, `GET /app/books/{id}`, `POST /app/books/add` | All roles read; library assistants and librarians write. |
-| Users | `POST /app/users/signup`, `GET /app/users/me`, `GET /app/users/{universityId}`, `PUT /app/users/{universityId}/password/reset` | Signup is public; profiles are owner/staff scoped; assistants may reset student/faculty passwords, and librarians may also reset assistant passwords. |
-| Loans | `POST /app/loans/{bookId}`, `PUT /app/loans/{loanId}/return`, `GET /app/loans/me`, `GET /app/loans` | Students/faculty borrow and return their own loans; staff can list loans across permitted borrowers. |
+| Books | `GET /app/books/all`, `GET /app/books/query`, `GET /app/books/{id}`, `POST /app/books/add` | All roles read; library assistants and librarians write. Book responses include advisory `available`; query supports `available` and `copyStatus`. |
+| Users | `POST /app/users/signup`, `GET /app/users`, `GET /app/users/me`, `GET /app/users/{universityId}`, `PUT /app/users/{universityId}/password/reset` | Signup is public; the staff directory supports scoped `role` and text `q` filters. Profiles and resets remain role scoped. |
+| Loans | `POST /app/loans/{bookId}`, `PUT /app/loans/{loanId}/return`, `GET /app/loans/me`, `GET /app/loans`, `GET /app/loans/activity`, `GET /app/loans/top-titles` | Students/faculty borrow and return their own loans; staff get scoped lists and chart aggregates. |
+| Staff | `GET /app/info`, `GET /app/audit` | Staff can see safe build details and role-scoped change history. |
 
-Successful responses use an `ApiResponse` envelope; errors use `ErrorResponse` with a `requestId`. List results are paginated (default size 12, maximum 100). Enable `LIBRO_API_DOCS_ENABLED=true` locally for `/swagger-ui.html` and `/v3/api-docs`; they are off by default. See the [Engineering Reference](docs/reference/engineering-reference.md) for the API inventory and [Roles and JWT Guide](docs/reference/security-roles-and-jwt-guide.md) for permissions.
+Successful responses use an `ApiResponse` envelope; errors use `ErrorResponse` with a `requestId` and optional stable `code`. List results are paginated (default size 12, maximum 100). Enable `LIBRO_API_DOCS_ENABLED=true` locally for `/swagger-ui.html` and `/v3/api-docs`; they are off by default. See the [Engineering Reference](docs/reference/engineering-reference.md) for the API inventory and response contracts, and the [Roles and JWT Guide](docs/reference/security-roles-and-jwt-guide.md) for permissions.
 
 After a staff-assisted reset, login and `GET /app/users/me` return `mustChangePassword: true`. The account owner changes the temporary password through `PUT /app/users/{universityId}/password` with `currentPassword` and `newPassword`; the flag then becomes false. The API reports the flag but does not block other requests while it is true, so the UI must direct the user through that change.
 

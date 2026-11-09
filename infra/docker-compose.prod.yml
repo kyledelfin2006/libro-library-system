@@ -23,6 +23,7 @@ services:
     image: ${LIBRO_IMAGE:?set LIBRO_IMAGE (scripts/deploy.sh does this)}
     environment:
       SERVER_FORWARD_HEADERS_STRATEGY: native
+      LIBRO_ENVIRONMENT_NAME: production
 
   proxy:
     environment:
