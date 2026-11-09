@@ -4,6 +4,7 @@ import app.book.dto.BookRequestDTO;
 import app.book.dto.BookPatchRequestDTO;
 import app.book.dto.BookResponseDTO;
 import app.book.dto.LibraryStatisticsDTO;
+import app.book.entity.BookCopyStatus;
 import app.book.service.BookService;
 import app.global.openapi.ErrorApiResponse;
 import app.global.response.ApiResponse;
@@ -128,7 +129,7 @@ public class BookController {
     /** Validates the replacement-cost bounds and delegates pagination and filtering to the service. */
     @GetMapping("/query")
     @Operation(summary = "Query books with pagination",
-            description = "Optional title, author, and genre filters use case-insensitive substrings and combine with AND. Replacement-cost bounds are inclusive and may be supplied separately. With no filters, returns all books. Pages start at zero; default page 0, size 12, id ascending; maximum size 100. Sort by id, title, author, genre, or replacementCost with sort=property,direction. Invalid ranges or sort fields return 400.")
+            description = "Optional title, author, genre, copyStatus, and advisory available filters combine with AND. Text filters use case-insensitive substrings; replacement-cost bounds are inclusive. With no filters, returns all books. Pages start at zero; default page 0, size 12, id ascending; maximum size 100. Sort by id, title, author, genre, or replacementCost with sort=property,direction. Invalid ranges or sort fields return 400.")
     @Parameters({
             @Parameter(name = "page", description = "Zero-based page index; default 0.", schema = @Schema(type = "integer", defaultValue = "0")),
             @Parameter(name = "size", description = "Page size; default 12, maximum 100.", schema = @Schema(type = "integer", defaultValue = "12", maximum = "100")),
@@ -144,8 +145,16 @@ public class BookController {
             @RequestParam(required = false) BigDecimal minReplacementCost,
             @Parameter(description = "Inclusive maximum replacement cost; may be used without minReplacementCost.", example = "25.00")
             @RequestParam(required = false) BigDecimal maxReplacementCost,
+            @Parameter(description = "Physical copy status: IN_COLLECTION or LOST.")
+            @RequestParam(required = false) BookCopyStatus copyStatus,
+            @Parameter(description = "Current advisory checkout availability.")
+            @RequestParam(required = false) Boolean available,
             @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.ok(service.queryBooks(title, author, genre, minReplacementCost, maxReplacementCost, pageable)));
+        Page<BookResponseDTO> books = copyStatus == null && available == null
+                ? service.queryBooks(title, author, genre, minReplacementCost, maxReplacementCost, pageable)
+                : service.queryBooks(title, author, genre, minReplacementCost, maxReplacementCost,
+                        copyStatus, available, pageable);
+        return ResponseEntity.ok(ApiResponse.ok(books));
     }
 
     @GetMapping("/sorted")

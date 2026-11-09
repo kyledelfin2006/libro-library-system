@@ -8,6 +8,8 @@
 # Stage 1: build
 # ---------------------------------------------------------------------------------------------------------------------
 FROM eclipse-temurin:25-jdk-alpine@sha256:c7c3d0bdf7f2bbc5a05a6712ed334d198360105634ea9adf76fca94f381b1e3f AS build
+ARG LIBRO_COMMIT=unknown
+ARG LIBRO_BUILD_TIME=off
 WORKDIR /build
 
 # Build inputs only: the wrapper, the POM, and the sources. .dockerignore keeps secrets, docs, and target/ out.
@@ -22,7 +24,7 @@ COPY src/ src/
 # becomes its own image layer below, so a code-only change ships a small `application` layer and reuses the rest.
 RUN --mount=type=cache,target=/root/.m2 \
     chmod +x mvnw \
-    && ./mvnw -B -ntp -DskipTests package \
+    && ./mvnw -B -ntp -DskipTests -Dlibro.commit="$LIBRO_COMMIT" -Dlibro.build.time="$LIBRO_BUILD_TIME" package \
     && cp target/library-api-system-*.jar application.jar \
     && java -Djarmode=tools -jar application.jar extract --layers --destination extracted
 

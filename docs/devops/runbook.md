@@ -2,6 +2,8 @@
 
 Step-by-step provisioning, deployment, backup, and recovery for the single-VM demo described in [CI/CD and DevOps](ci-cd.md). The scripts named here live in [`scripts/`](../../scripts/) and were exercised against a local Docker stack; the first run on a real OCI host is the final check, so verify each step against Oracle's current console and documentation.
 
+Audit events introduced in V7 are retained indefinitely. There is no automatic purge job; normal database backups include `audit_event`. Set a retention policy before its storage growth becomes material.
+
 ## 1. Before you start
 
 - **Account.** Confirm Always Free eligibility and your home region. To avoid idle reclaim of the A1 VM, upgrade the tenancy to **Pay As You Go**, stay inside the Always Free limits, and create a **budget alert** (for example at US$1) so an accidental paid resource is noticed. Oracle's reclaim rules and free allowances change, so check [OCI Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).

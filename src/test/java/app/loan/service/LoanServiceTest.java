@@ -129,7 +129,8 @@ class LoanServiceTest {
         copy.markLost();
         stubBorrowerAndCopy(borrower, copy);
 
-        assertThrows(LoanConflictException.class, () -> loanService.borrow(BORROWER_ID, BOOK_ID));
+        assertEquals("LOAN_COPY_UNAVAILABLE", assertThrows(LoanConflictException.class,
+                () -> loanService.borrow(BORROWER_ID, BOOK_ID)).getCode());
 
         verify(loanRepository, never()).saveAndFlush(any());
     }
@@ -142,7 +143,8 @@ class LoanServiceTest {
         when(loanRepository.existsByBook_IdAndStatus(BOOK_ID, LoanStatus.LOST)).thenReturn(false);
         when(loanRepository.existsByBook_IdAndStatus(BOOK_ID, LoanStatus.ACTIVE)).thenReturn(true);
 
-        assertThrows(LoanConflictException.class, () -> loanService.borrow(BORROWER_ID, BOOK_ID));
+        assertEquals("LOAN_COPY_UNAVAILABLE", assertThrows(LoanConflictException.class,
+                () -> loanService.borrow(BORROWER_ID, BOOK_ID)).getCode());
 
         verify(loanRepository, never()).saveAndFlush(any());
     }
@@ -157,7 +159,8 @@ class LoanServiceTest {
         when(loanRepository.existsByBorrower_UniversityIdAndStatusAndDueAtBefore(
                 BORROWER_ID, LoanStatus.ACTIVE, NOW)).thenReturn(true);
 
-        assertThrows(LoanConflictException.class, () -> loanService.borrow(BORROWER_ID, BOOK_ID));
+        assertEquals("LOAN_BORROWER_OVERDUE", assertThrows(LoanConflictException.class,
+                () -> loanService.borrow(BORROWER_ID, BOOK_ID)).getCode());
 
         verify(loanRepository, never()).saveAndFlush(any());
     }
@@ -174,7 +177,8 @@ class LoanServiceTest {
         when(loanRepository.countByBorrower_UniversityIdAndStatus(BORROWER_ID, LoanStatus.ACTIVE))
                 .thenReturn(3L);
 
-        assertThrows(LoanConflictException.class, () -> loanService.borrow(BORROWER_ID, BOOK_ID));
+        assertEquals("LOAN_LIMIT_REACHED", assertThrows(LoanConflictException.class,
+                () -> loanService.borrow(BORROWER_ID, BOOK_ID)).getCode());
 
         verify(loanRepository, never()).saveAndFlush(any());
     }
@@ -213,7 +217,8 @@ class LoanServiceTest {
         loan.markLost(staff, NOW.minusMinutes(1));
         when(loanRepository.findByIdForUpdate(LOAN_ID)).thenReturn(Optional.of(loan));
 
-        assertThrows(LoanConflictException.class, () -> loanService.returnLoan(BORROWER_ID, LOAN_ID));
+        assertEquals("LOAN_NOT_ACTIVE", assertThrows(LoanConflictException.class,
+                () -> loanService.returnLoan(BORROWER_ID, LOAN_ID)).getCode());
 
         assertEquals(LoanStatus.LOST, loan.getStatus());
     }

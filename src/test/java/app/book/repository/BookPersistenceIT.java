@@ -82,7 +82,7 @@ class BookPersistenceIT {
 
     @Test
     void applicationStartupAppliesMigrationsAndValidatesSchema() {
-        assertEquals(6, flyway.info().applied().length);
+        assertEquals(7, flyway.info().applied().length);
         assertEquals(1, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'books'",
                 Integer.class));

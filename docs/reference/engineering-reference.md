@@ -6,7 +6,7 @@ This is the detailed implementation reference for agents and contributors. The r
 
 It documents the repository as it exists, the intended architecture, the contracts between layers, and the checks expected before a contribution is considered complete.
 
-The application is a single-module Spring Boot REST API for managing a library's book collection, user accounts, and loan history. It exposes book CRUD/search/statistics, user/account operations, loan checkout/return/loss/history routes, and health endpoints. PostgreSQL backs persistence.
+The application is a single-module Spring Boot REST API for managing a library's book collection, user accounts, loan history, and fixed-format audit events. It exposes book CRUD/search/statistics, user/account operations, loan checkout/return/loss/history and chart routes, staff build info, audit reads, and health endpoints. PostgreSQL backs persistence.
 
 ## Project Snapshot
 
@@ -78,9 +78,11 @@ library-api-system/
     |   |   |   |-- mapper/                  BookMapper
     |   |   |   |-- repository/              BookRepository, projection/ (GenreCount, LibraryAggregate)
     |   |   |   `-- service/                 BookService
+    |   |   |-- audit/                      V7 event entity, scoped repository, service, DTO, controller
+    |   |   |-- info/                       staff build-info controller, service, DTO
     |   |   |-- loan/
     |   |   |   |-- controller/              LoanController
-    |   |   |   |-- dto/                     LoanResponseDTO
+    |   |   |   |-- dto/                     LoanResponseDTO, WeeklyLoanActivityDTO, TopTitleDTO
     |   |   |   |-- entity/                  Loan, LoanStatus
     |   |   |   |-- exception/               LoanConflictException, LoanNotFoundException
     |   |   |   |-- mapper/                  LoanMapper
@@ -98,14 +100,14 @@ library-api-system/
     |   |   |   |-- service/                 UserService, UserAccessPolicy
     |   |   |   `-- validation/              PasswordPolicy
     |   |   `-- global/                      cross-cutting code shared by every feature
-    |   |       |-- exception/               GlobalExceptionHandler, ResourceNotFoundException, InvalidRequestException
+    |   |       |-- exception/               GlobalExceptionHandler, ResourceNotFoundException, InvalidRequestException, ConflictException
     |   |       |-- logging/                 RequestIdFilter (X-Request-Id)
     |   |       |-- openapi/                 OpenApiConfig, @ErrorApiResponse(s)
     |   |       |-- response/                ApiResponse, ErrorResponse
     |   |       `-- time/                    LibraryTime, LibraryClockConfig (Asia/Manila Clock bean)
     |   `-- resources/
     |       |-- application.properties       every setting and its default
-    |       `-- db/migration/                Flyway V1..V6 (forward-only)
+    |       `-- db/migration/                Flyway V1..V7 (forward-only)
     `-- test/
         |-- java/app/                        mirrors the main packages
         |   |-- **/*Test.java                unit and MVC-slice tests (Surefire, `./mvnw verify`)
@@ -294,14 +296,15 @@ Only `BookService` calls `BookMapper`. Do not expose `Book` from a service or co
 
 `GlobalExceptionHandler` is a `@RestControllerAdvice` shared by all controllers. It maps validation, malformed input, missing resources and routes, unsupported methods, invalid sort properties, database failures, and unexpected exceptions to `ErrorResponse`.
 
-Two base types in `app.global.exception` keep the handler small as features grow:
+The base exception types in `app.global.exception` keep the handler small as features grow:
 
 | Base type | Subclasses | HTTP result |
 | --- | --- | --- |
 | `ResourceNotFoundException` | `BookNotFoundException`, `UserNotFoundException`, `LoanNotFoundException` | 404 with error `"<Resource> not found"` and the service's client-safe detail |
 | `InvalidRequestException` (extends `IllegalArgumentException`) | `BookValidationException` | 400 `"Validation failed"` with the rule's message |
+| `ConflictException` | `LoanConflictException` | 409 with a client-safe conflict detail |
 
-A new resource or rule needs only a subclass, not a new handler method.
+Use these existing exception families for new resource, validation, and conflict failures rather than adding a handler for each case.
 
 `ErrorResponse` contains:
 
@@ -313,7 +316,9 @@ A new resource or rule needs only a subclass, not a new handler method.
   "statusCode": 400,
   "fieldErrors": {
     "replacementCost": "Replacement cost must be greater than 0"
-  }
+  },
+  "requestId": "3f2b8c1e-5a41-4c0e-9a57-0d6f1b7e2c11",
+  "code": null
 }
 ```
 
@@ -321,6 +326,18 @@ Validation responses include `fieldErrors`, a map from DTO/entity field names to
 Clients should use this map for field-level rendering instead of parsing the combined
 `details` string. Constraint violations without a property path use `_global`. Other
 error responses return an empty `fieldErrors` map for a consistent JSON shape.
+
+`code` is a stable upper-snake-case business identifier when one applies; clients can branch
+on it without parsing `details`. The current codes are:
+
+| Code | Status | Condition |
+| --- | --- | --- |
+| `LOAN_COPY_UNAVAILABLE` | 409 | Copy is lost or currently on loan. |
+| `LOAN_BORROWER_OVERDUE` | 409 | Borrower has an overdue active loan. |
+| `LOAN_LIMIT_REACHED` | 409 | Borrower already has three active loans. |
+| `LOAN_NOT_ACTIVE` | 409 | Return or lost resolution targets a terminal loan. |
+| `RESOURCE_HAS_HISTORY` | 409 | Book or account deletion would discard loan history. |
+| `PASSWORD_CURRENT_INCORRECT` | 400 | Owner password change has the wrong current password. |
 
 **Every** successful response uses the generic `ApiResponse<T>` envelope with `success`, `message`, `data`, and `timestamp`; use `ApiResponse.ok(data)` for reads. Pages are returned inside `data` as `ApiResponse<Page<T>>`. Errors always use `ErrorResponse`. Do not return a bare DTO, list, map or `Page` from a controller; changing the envelope shape is an API compatibility change.
 
@@ -336,7 +353,7 @@ Local login uses `AuthenticationManager`, `LibroUserDetailsService`, and BCrypt,
 
 Staff recovery uses `PUT /app/users/{universityId}/password/reset` with a validated temporary password. The service hashes it, sets `must_change_password=true`, and increments `libro.auth.password_resets` without an account label. Login and `GET /app/users/me` expose `mustChangePassword`; an owner change with the current password clears it. The server does not block other operations while the flag is set, and previously issued JWTs remain valid until expiry plus clock skew. A locked-out librarian needs the backed-up operator procedure in the runbook.
 
-For account routes, Spring Security validates the Bearer token and supplies the controller's `Authentication` parameter. The controller passes `authentication.getName()` as `callerId` (the authenticated university ID), the path's `universityId` as `targetId` (the account requested), and `authentication.getAuthorities()` as the caller's granted roles. `UserService` loads the target account before checking its role. `canStaffManage` centralizes the target-role boundary shared by profile access and deletion; deletion checks ownership separately because students/faculty may delete themselves but staff accounts may not. The staff directory passes only permitted roles to `findByUserRoleIn`, so paging and sorting operate on the visible subset. Faculty and assistant creation receive the caller's authorities and select their stored role in the service; the request body's role cannot grant access.
+For account routes, Spring Security validates the Bearer token and supplies the controller's `Authentication` parameter. The controller passes `authentication.getName()` as `callerId` (the authenticated university ID), the path's `universityId` as `targetId` (the account requested), and `authentication.getAuthorities()` as the caller's granted roles. `UserService` loads the target account before checking its role. `canStaffManage` centralizes the target-role boundary shared by profile access and deletion; deletion checks ownership separately because students/faculty may delete themselves but staff accounts may not. The staff directory passes only permitted roles to its repository query, so paging and sorting operate on the visible subset. Faculty and assistant creation receive the caller's authorities and select their stored role in the service; the request body's role cannot grant access.
 
 The current local JWT flow is implemented; deployment still needs a real TLS domain (the `proxy` profile is the reference), alerts on the login and rate-limit metrics, gateway throttling beyond one instance, and a deliberate choice about institutional SSO if it is required. The in-app rate counters are process-local and do not replace gateway limits. Swagger UI and `/v3/api-docs` are disabled by default; `LIBRO_API_DOCS_ENABLED=true` serves them publicly, and when the flag is `false` springdoc is disabled and no permit rule exists. Filter-chain 401/403 responses use the standard JSON error body through `JsonSecurityErrorHandler`. Loan operations must identify the borrower from the authenticated principal rather than a client-supplied user ID.
 
@@ -358,7 +375,7 @@ Authentication routes:
 | GET | `/search?type=...&value=...` | Search by author, title, genre, or exact replacement cost | `ApiResponse<Page<BookResponseDTO>>` |
 | GET | `/budget?maxReplacementCost=...` | Books at or below a maximum replacement cost | `ApiResponse<Page<BookResponseDTO>>` |
 | GET | `/all?page=...&size=...&sort=...` | Paginated collection | `ApiResponse<Page<BookResponseDTO>>` |
-| GET | `/query?title=...&author=...&genre=...&minReplacementCost=...&maxReplacementCost=...` | Paginated book query with optional combined filters and sorting | `ApiResponse<Page<BookResponseDTO>>` |
+| GET | `/query?title=...&author=...&genre=...&minReplacementCost=...&maxReplacementCost=...&copyStatus=...&available=...` | Paginated book query with optional combined filters and sorting; responses include advisory availability | `ApiResponse<Page<BookResponseDTO>>` |
 | GET | `/sorted?category=...` | Ascending sort by an allowed field (`category` decides the order) | `ApiResponse<Page<BookResponseDTO>>` |
 | GET | `/genre` | Count grouped by genre | `ApiResponse<Map<String, Long>>` |
 | GET | `/replacement-cost?minReplacementCost=...&maxReplacementCost=...` | Inclusive replacement cost range | `ApiResponse<Page<BookResponseDTO>>` |
@@ -379,7 +396,7 @@ User routes:
 
 | Method | Path | Purpose | Response shape |
 |---|---|---|---|
-| GET | `/app/users` | Paginated student/faculty directory for administrators; librarian also sees library assistants (default size 12) | `ApiResponse<Page<UserResponseDTO>>` |
+| GET | `/app/users` | Paginated scoped directory with optional `role` and case-insensitive literal substring `q` (default size 12) | `ApiResponse<Page<UserResponseDTO>>` |
 | GET | `/app/users/me` | Current profile for the authenticated account; deleted accounts return 404 | `ApiResponse<UserResponseDTO>` |
 | GET | `/app/users/{universityId}` | Retrieve own profile; staff may read accounts allowed by role | `ApiResponse<UserResponseDTO>` |
 | POST | `/app/users/signup` | Create a user account (public) | `ApiResponse<UserResponseDTO>`, HTTP 201 |
@@ -400,9 +417,26 @@ Loan routes:
 | PUT | `/app/loans/{loanId}/lost` | Authorized library staff resolves an active loan as lost | `ApiResponse<LoanResponseDTO>` |
 | GET | `/app/loans/me` | Caller reads own paged history | `ApiResponse<Page<LoanResponseDTO>>` |
 | GET | `/app/loans` | Staff lists loans across permitted borrower roles; optional status, overdue, and borrower filters | `ApiResponse<Page<LoanResponseDTO>>` |
+| GET | `/app/loans/activity` | Scoped weekly checkout and return counts, zero-filled; `weeks` 1–52 | `ApiResponse<List<WeeklyLoanActivityDTO>>` |
+| GET | `/app/loans/top-titles` | Scoped ranking of checkout counts by title and author; `days` 1–365, `limit` 1–10 | `ApiResponse<List<TopTitleDTO>>` |
 | GET | `/app/loans/users/{universityId}` | Authorized staff reads a permitted user's history | `ApiResponse<Page<LoanResponseDTO>>` |
 
+Staff information routes:
+
+| Method | Path | Purpose | Response shape |
+|---|---|---|---|
+| GET | `/app/info` | Staff-only version, build time, short commit, and environment label | `ApiResponse<BuildInfoDTO>` |
+| GET | `/app/audit` | Staff-only scoped, filtered audit events; assistants cannot see privileged account events | `ApiResponse<Page<AuditEventDTO>>` |
+
 Only students and faculty can borrow or return. All roles can read their own history. Library assistants can view/resolve student and faculty loans; librarians can also view/resolve library-assistant loans. Check `SecurityConfig` and `LoanService` for the enforced policy.
+
+### Filter and staff response contracts
+
+Book responses include advisory `available`: it is true for an `IN_COLLECTION` copy without an `ACTIVE` loan. `GET /app/books/query` combines optional `copyStatus` and `available` filters with its other filters before pagination. Checkout still enforces availability if it changes after a read. The user directory's `q` is a case-insensitive literal substring of university ID, first name, last name, or email; assistants may filter only student/faculty accounts, while librarians may also filter administrator accounts. An out-of-scope `role` filter returns 403.
+
+`GET /app/info` returns only `version`, `buildTime`, a short `commit`, and the configured `environment` label; unavailable local build metadata uses `unknown`. `GET /app/audit` accepts optional `actor`, `entityType`, `actorRole`, `targetRole`, Manila-local `from` and `to`, and page/sort parameters. It defaults to 12 rows, caps pages at 100, and permits sorting by `id`, `occurredAt`, `action`, or `entityType`. Librarians see all events; assistants see student/faculty account events and book/loan events. The visibility predicate applies before filtering and counting. Audit records account creation, profile changes, owner password changes, staff resets, account deletion, book creation/change/deletion, and lost-loan resolution in the same transaction as the change. It stores fixed-format event fields, not passwords, tokens, or request bodies; reads, logins, checkouts, returns, and rate-limit hits are not audit events. Flyway V7 creates `audit_event` and its time/entity indexes; actor IDs are text rather than foreign keys so account deletion preserves history. The [Operations Runbook](../devops/runbook.md) owns retention and backup policy.
+
+The staff chart routes use the same borrower-role scope as the staff loan list. `GET /app/loans/activity` defaults to 12 weeks (1–52), returns oldest-first Manila Monday buckets with checkout and return counts, and fills inactive weeks with zeros. `GET /app/loans/top-titles` defaults to a 90-day window (1–365) and five results (1–10), counting checkouts grouped by title and author across physical copies, with deterministic tie ordering. See the [Loan Implementation Guide](../guides/loan.md) for the loan contract.
 
 When adding an endpoint, update this file and `README.md`, document the operation and public DTO schemas following [API Documentation Guideline](../guides/api-documentation-guideline.md), provide request/response examples where useful, and add tests at the appropriate layer.
 
@@ -438,7 +472,7 @@ Runtime driver used by the datasource to communicate with PostgreSQL. It is not 
 
 `spring-boot-starter-flyway` supplies the Boot 4 migration auto-configuration. Flyway 13.3.0 discovers versioned scripts in `classpath:db/migration`, records applied versions in `flyway_schema_history`, and migrates the database before JPA validation. The PostgreSQL module supplies database-specific Flyway support.
 
-Never edit a migration that may have been applied to a shared or persistent database. Add the next versioned migration (V7 or later for schema changes after the current V6). Migration filenames use Flyway's required double underscore between version and description; verify discovery during startup.
+Never edit a migration that may have been applied to a shared or persistent database. Add the next versioned migration (V8 or later for schema changes after the current V7). Migration filenames use Flyway's required double underscore between version and description; verify discovery during startup.
 
 ### Lombok
 
@@ -490,6 +524,7 @@ The application requires the database variables, the bootstrap hash, and the JWT
 | `SERVER_FORWARD_HEADERS_STRATEGY` | No | `none` (default) or `native`; use `native` only behind a trusted proxy with direct app access blocked | Passed through only when set; Spring default `none` |
 | `MANAGEMENT_SERVER_PORT` | No | Private Actuator/Prometheus port; defaults to `9091`. Do not publish it | Not passed; the Spring default `9091` always applies |
 | `LIBRO_API_DOCS_ENABLED` | No | Serves `/v3/api-docs` and Swagger UI without authentication; defaults to `false` (the `.env.example` template also leaves it `false`; set `true` locally or on the synthetic-data demo) | Passed through only when set; Spring default `false` |
+| `LIBRO_ENVIRONMENT_NAME` | No | Safe staff-visible environment label; defaults to `local` | Passed through only when set; Spring default `local` |
 | `LIBRO_DB_POOL_SIZE` | No | Hikari maximum pool size per instance; defaults to `10` | Passed through only when set |
 | `LOGGING_LEVEL_APP` | No | Log level for the `app` package; defaults to `INFO` | Passed through only when set |
 | `LIBRO_CORS_ALLOWED_ORIGINS` | No | Comma-separated exact UI origins; blank allows none and wildcards are rejected | Passed through only when set |
@@ -531,7 +566,7 @@ These defaults are set in `application.properties` and are intentional:
 
 ## Database Migration Rules
 
-`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` creates `users` with identity, role, course, major, uniqueness, format, and cross-field constraints, then inserts the historical `ADMINISTRATOR` account (library-assistant role) using the configured BCrypt hash. V3 adds the LIBRARIAN role and matching staff academic-field constraints. V4 adds `books.copy_status` and the `loans` table with state checks, foreign-key delete restrictions, borrower-history indexes, and the one-active-loan-per-copy index. V5 adds optional `books.description` and renames `price` to `replacement_cost` while preserving stored amounts. V6 adds `users.must_change_password` as non-null with a false default, preserving existing accounts. No librarian or loan data is seeded. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
+`V1__create_books_table.sql` creates `books` with a `BIGSERIAL` ID, the `created_at` column, and indexes. `V2__create_users_table.sql` creates `users` with identity, role, course, major, uniqueness, format, and cross-field constraints, then inserts the historical `ADMINISTRATOR` account (library-assistant role) using the configured BCrypt hash. V3 adds the LIBRARIAN role and matching staff academic-field constraints. V4 adds `books.copy_status` and the `loans` table with state checks, foreign-key delete restrictions, borrower-history indexes, and the one-active-loan-per-copy index. V5 adds optional `books.description` and renames `price` to `replacement_cost` while preserving stored amounts. V6 adds `users.must_change_password` as non-null with a false default, preserving existing accounts. V7 adds `audit_event` and its time/entity indexes. No librarian or loan data is seeded. V1 was corrected before release while the application had no persistent data; once a migration is deployed to a persistent environment, follow the forward-only rule below instead.
 
 For every schema change:
 
@@ -756,7 +791,7 @@ When a breaking change is intended, document migration guidance and update all e
 - V2 creates the users table and may already be recorded in persistent databases; do not edit it after deployment.
 - Signup always creates a student; librarians create faculty and library assistants; students/faculty may delete themselves, administrators may delete student/faculty accounts, and librarians may also delete library assistant accounts.
 - Loan routes and V4 are implemented. `LoanServiceTest` and `LoanSecurityMvcTest` cover service rules and route gates; `BookPersistenceIT`, `LoanPersistenceIT`, and `LoanConcurrencyIT` cover the current schema, the lost-status/catalog-edit lock interaction, loan history constraints, terminal return persistence, and concurrent checkout limits. User routes have MVC contract, PostgreSQL integration, and JWT security-flow coverage; the security MVC tests mock the user repository.
-- `BookPersistenceIT` verifies a fresh PostgreSQL database migrates through V6 and passes Hibernate schema validation. It also migrates an isolated V4 schema to V5 and checks that stored monetary values remain intact; `UserMigrationIT` checks the V5-to-V6 account upgrade. The integration profile requires Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH`.
+- `BookPersistenceIT` verifies a fresh PostgreSQL database migrates through the current migrations and passes Hibernate schema validation. It also migrates an isolated V4 schema to V5 and checks that stored monetary values remain intact; `UserMigrationIT` checks the V5-to-V6 account upgrade. The integration profile requires Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH`.
 - `LoanMigrationIT` verifies the V3-to-V4 upgrade path against PostgreSQL with V4 Hibernate validation.
 - API envelope and error `timestamp` fields are epoch milliseconds rather than ISO-8601 values. Loan date-time fields use `LocalDateTime` and are serialized without a timezone offset; the loan contract treats them as Asia/Manila local time.
 - Public probes are `/livez` and `/readyz` (details hidden; Docker checks use readiness). Actuator `health` and `prometheus` are served only on the private management port, which must not be published.

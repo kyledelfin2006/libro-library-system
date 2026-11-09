@@ -1,5 +1,7 @@
 # Implementation Plan: OCI Always Free Idle Mitigation
 
+> **Lifecycle:** when this plan has been fully executed, delete this file in the same change and drop its links from the other plans, the plans README, and the Roadmap.
+
 Status: proposed, not built. This plan changes the production Docker Compose stack only. Libro's local stack and application code stay as they are.
 
 ## Goal and limit

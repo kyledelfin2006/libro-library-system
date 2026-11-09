@@ -3,6 +3,9 @@ package app.loan.controller;
 import app.global.openapi.ErrorApiResponse;
 import app.global.response.ApiResponse;
 import app.loan.dto.LoanResponseDTO;
+import app.loan.dto.WeeklyLoanActivityDTO;
+import app.loan.dto.TopTitleDTO;
+import java.util.List;
 import app.loan.entity.LoanStatus;
 import app.loan.service.LoanService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -49,6 +52,29 @@ public class LoanController {
      */
     public LoanController(LoanService loanService) {
         this.loanService = loanService;
+    }
+
+    /** Supplies weekly checkout and return counts to the staff dashboard. */
+    @GetMapping("/activity")
+    @Operation(summary = "Get weekly loan activity", description = "Manila weeks start Monday; missing weeks have zero counts. Staff scope matches the loan directory.")
+    @ErrorApiResponse(responseCode = "400", description = "weeks must be between 1 and 52")
+    public ResponseEntity<ApiResponse<List<WeeklyLoanActivityDTO>>> activity(
+            @Parameter(description = "Number of Monday-start weeks, 1 to 52.", example = "12")
+            @RequestParam(defaultValue = "12") int weeks, Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.ok(loanService.activity(authentication.getName(), weeks)));
+    }
+
+    /** Supplies the most borrowed title and author groups to the staff dashboard. */
+    @GetMapping("/top-titles")
+    @Operation(summary = "Get most borrowed titles", description = "Counts checkouts in a rolling Manila-time window; ties sort by title and author. Staff scope matches the loan directory.")
+    @ErrorApiResponse(responseCode = "400", description = "days must be 1-365 and limit must be 1-10")
+    public ResponseEntity<ApiResponse<List<TopTitleDTO>>> topTitles(
+            @Parameter(description = "Rolling lookback in days, 1 to 365.", example = "90")
+            @RequestParam(defaultValue = "90") int days,
+            @Parameter(description = "Maximum title groups, 1 to 10.", example = "5")
+            @RequestParam(defaultValue = "5") int limit,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.ok(loanService.topTitles(authentication.getName(), days, limit)));
     }
 
     /**

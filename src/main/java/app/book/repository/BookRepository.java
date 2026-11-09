@@ -1,6 +1,7 @@
 package app.book.repository;
 
 import app.book.entity.Book;
+import app.book.entity.BookCopyStatus;
 import app.book.repository.projection.GenreCount;
 import app.book.repository.projection.LibraryAggregate;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,6 +15,8 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
+import java.util.Set;
 import jakarta.persistence.LockModeType;
 
 /** Persistence operations for physical book copies and collection statistics. */
@@ -53,13 +56,39 @@ public interface BookRepository extends JpaRepository<Book, Long> {
               AND LOCATE(LOWER(:genre), LOWER(b.genre)) > 0
               AND b.replacementCost >= COALESCE(:minReplacementCost, b.replacementCost)
               AND b.replacementCost <= COALESCE(:maxReplacementCost, b.replacementCost)
+              AND (:copyStatus IS NULL OR b.copyStatus = :copyStatus)
+              AND (:available IS NULL OR (:available = true AND b.copyStatus = :inCollection AND NOT EXISTS
+                   (SELECT l.id FROM Loan l WHERE l.book = b AND l.status = :activeStatus))
+                   OR (:available = false AND (b.copyStatus <> :inCollection OR EXISTS
+                   (SELECT l.id FROM Loan l WHERE l.book = b AND l.status = :activeStatus))))
             """)
-    Page<Book> queryBooks(@Param("title") String title,
+    Page<Book> queryBooksFiltered(@Param("title") String title,
                           @Param("author") String author,
                           @Param("genre") String genre,
                           @Param("minReplacementCost") BigDecimal minReplacementCost,
                           @Param("maxReplacementCost") BigDecimal maxReplacementCost,
+                          @Param("copyStatus") BookCopyStatus copyStatus,
+                          @Param("available") Boolean available,
+                          @Param("inCollection") BookCopyStatus inCollection,
+                          @Param("activeStatus") app.loan.entity.LoanStatus activeStatus,
                           Pageable pageable);
+
+    /** Preserves the existing unfiltered repository contract for callers and tests. */
+    default Page<Book> queryBooks(String title, String author, String genre,
+            BigDecimal minReplacementCost, BigDecimal maxReplacementCost, Pageable pageable) {
+        return queryBooksFiltered(title, author, genre, minReplacementCost, maxReplacementCost,
+                null, null, BookCopyStatus.IN_COLLECTION, app.loan.entity.LoanStatus.ACTIVE, pageable);
+    }
+
+    /** Returns active-loan copy IDs in one lookup for a complete catalog page. */
+    @Query("SELECT l.book.id FROM Loan l WHERE l.book.id IN :bookIds AND l.status = :status")
+    Set<Long> findActiveBookIds(@Param("bookIds") Collection<Long> bookIds,
+                                @Param("status") app.loan.entity.LoanStatus status);
+
+    /** Detects preserved loan history before a deletion attempt. */
+    @Query("SELECT CASE WHEN COUNT(l) > 0 THEN true ELSE false END FROM Loan l WHERE l.book.id = :id")
+    boolean hasLoanHistory(@Param("id") Long id);
+
 
     /**
      * Retrieves the book with the highest replacement cost.

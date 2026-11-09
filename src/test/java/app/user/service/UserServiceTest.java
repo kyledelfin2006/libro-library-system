@@ -1,4 +1,5 @@
 package app.user.service;
+import app.global.exception.InvalidRequestException;
 
 import app.user.dto.UserPatchRequestDTO;
 import app.user.dto.UserResponseDTO;
@@ -376,7 +377,7 @@ class UserServiceTest {
     @Test
     void updateUser_whenRequestIsNull_shouldReject() {
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidRequestException.class,
                 () -> updateUser("2025-4321", null)
         );
 
@@ -466,13 +467,13 @@ class UserServiceTest {
         existingUser.setPasswordHash("old-hash");
         when(passwordEncoder.matches("Current1!", "old-hash")).thenReturn(false);
 
-        assertThrows(
-                IllegalArgumentException.class,
+        assertEquals("PASSWORD_CURRENT_INCORRECT", assertThrows(
+                InvalidRequestException.class,
                 () -> updatePassword(
                         "2025-4321",
                         new PasswordChangeRequestDTO("Current1!", "NewPassword2@")
                 )
-        );
+        ).getCode());
 
         assertEquals("old-hash", existingUser.getPasswordHash());
         verify(passwordEncoder, never()).encode(anyString());

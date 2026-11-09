@@ -1,6 +1,7 @@
 package app.user.service;
 
 import app.global.exception.InvalidRequestException;
+import app.audit.service.AuditService;
 import app.user.dto.UserCreateRequestDTO;
 import app.user.dto.UserPatchRequestDTO;
 import app.user.dto.UserReplaceRequestDTO;
@@ -19,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -45,7 +46,7 @@ import java.util.Set;
  */
 @Slf4j
 @Service
-@AllArgsConstructor
+@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class UserService {
 
@@ -60,6 +61,8 @@ public class UserService {
     /** Owner and role rules for account access; see {@link UserAccessPolicy}. */
     private final UserAccessPolicy accessPolicy;
     private final MeterRegistry meterRegistry;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AuditService audit;
 
     /**
      * Validates and persists a new user.
@@ -169,6 +172,7 @@ public class UserService {
 
         // save user
         User savedUser = userRepository.save(user);
+        if (audit != null) audit.record("ACCOUNT_CREATED", "USER", savedUser.getUniversityId(), role);
         return userMapper.toResponseDTO(savedUser);
     }
 
@@ -240,6 +244,7 @@ public class UserService {
         user.setLastName(lastName);
         user.setMiddleInitial(middleInitial);
         user.setEmail(email);
+        if (audit != null) audit.record("PROFILE_CHANGED", "USER", user.getUniversityId(), user.getUserRole());
         // Return the public DTO and let transaction commit persist dirty changes.
         return userMapper.toResponseDTO(user);
     }
@@ -331,6 +336,7 @@ public class UserService {
         if (newEmail != null) {
             user.setEmail(newEmail);
         }
+        if (audit != null) audit.record("PROFILE_CHANGED", "USER", user.getUniversityId(), user.getUserRole());
 
         // Return a response DTO; dirty checking persists the managed entity.
         return userMapper.toResponseDTO(user);
@@ -389,7 +395,7 @@ public class UserService {
         accessPolicy.requireAccountAccess(normalizedCallerId, normalizedTargetId, user.getUserRole(), authorities);
         validateRequiredValue(request.getCurrentPassword(), "Current password");
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
-            throw new InvalidRequestException("Current password is incorrect");
+            throw new InvalidRequestException("Current password is incorrect", "PASSWORD_CURRENT_INCORRECT");
         }
 
         // Encode the new password before assigning it to the entity.
@@ -399,6 +405,7 @@ public class UserService {
         // Replace only the stored hash; raw password values never reach the entity.
         user.setPasswordHash(encodedPasswordHash);
         user.setMustChangePassword(false);
+        if (audit != null) audit.record("PASSWORD_CHANGED", "USER", user.getUniversityId(), user.getUserRole());
     }
 
     /** Resets a managed account with a temporary password and records the required follow-up change. */
@@ -421,6 +428,7 @@ public class UserService {
         }
         user.setPasswordHash(passwordEncoder.encode(request.temporaryPassword()));
         user.setMustChangePassword(true);
+        if (audit != null) audit.record("PASSWORD_RESET", "USER", user.getUniversityId(), user.getUserRole());
         // Count successful resets without account identifiers or password data in metric labels.
         meterRegistry.counter("libro.auth.password_resets").increment();
     }
@@ -522,6 +530,13 @@ public class UserService {
             String callerId,
             Collection<? extends GrantedAuthority> authorities
     ) {
+        return getAllUsers(pageable, callerId, authorities, null, null);
+    }
+
+    /** Lists only scoped accounts, rejecting a requested role outside the caller's scope. */
+    @Transactional(readOnly = true)
+    public Page<UserResponseDTO> getAllUsers(Pageable pageable, String callerId,
+            Collection<? extends GrantedAuthority> authorities, UserRole role, String q) {
         // Enforce the directory boundary even if a service caller bypasses SecurityConfig.
         normalizeAndValidateUniversityId(callerId);
         accessPolicy.requireStaff(authorities);
@@ -537,7 +552,13 @@ public class UserService {
         }
 
         // Library assistants see students/faculty; the librarian also sees assistants.
-        return userRepository.findByUserRoleIn(accessPolicy.visibleRoles(authorities), pageable)
+        var visibleRoles = accessPolicy.visibleRoles(authorities);
+        if (role != null && !visibleRoles.contains(role)) {
+            throw new AccessDeniedException("Access denied");
+        }
+        return (role == null && (q == null || q.isBlank())
+                ? userRepository.findByUserRoleIn(visibleRoles, pageable)
+                : userRepository.searchDirectory(visibleRoles, role, q == null ? "" : q.trim(), pageable))
                 .map(userMapper::toResponseDTO);
     }
 
@@ -603,7 +624,19 @@ public class UserService {
         accessPolicy.requireCanDelete(normalizedCallerId, normalizedTargetId, user.getUserRole(), authorities);
 
         // Delete the managed entity within this transaction.
+        if (userRepository.hasLoanHistory(user.getId())) {
+            throw new app.global.exception.ConflictException(
+                    "Account has loan history and must be retained", "RESOURCE_HAS_HISTORY");
+        }
         userRepository.delete(user);
+        try {
+            // Flush within this method so a concurrent loan-history FK conflict receives the same code.
+            userRepository.flush();
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new app.global.exception.ConflictException(
+                    "Account has loan history and must be retained", "RESOURCE_HAS_HISTORY");
+        }
+        if (audit != null) audit.record("ACCOUNT_DELETED", "USER", normalizedTargetId, user.getUserRole());
     }
 
     /**

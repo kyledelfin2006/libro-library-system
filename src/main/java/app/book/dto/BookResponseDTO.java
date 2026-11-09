@@ -30,6 +30,15 @@ public class BookResponseDTO {
             description = "Physical-copy disposition. IN_COLLECTION does not mean available when an active loan exists.",
             example = "IN_COLLECTION")
     private BookCopyStatus copyStatus;
+    @Schema(description = "Advisory availability at read time; checkout still enforces loan rules.")
+    private boolean available;
+
+    /** Preserves the existing constructor for callers building a copy without loan context. */
+    public BookResponseDTO(Long id, String title, String author, String genre, String description,
+                           BigDecimal replacementCost, BookCopyStatus copyStatus) {
+        this(id, title, author, genre, description, replacementCost, copyStatus,
+                copyStatus == BookCopyStatus.IN_COLLECTION);
+    }
 
     /**
      * Keeps response construction concise for copies without a description.

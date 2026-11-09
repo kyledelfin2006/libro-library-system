@@ -40,7 +40,7 @@ Do not copy the same prose into controller comments, annotations, README tables,
 ## Responses and errors
 
 - Every operation must document its success status and response shape. Include non-success statuses that are part of that operation's expected contract, such as validation failure, missing resource, or conflict.
-- Describe the existing `ErrorResponse` contract, including `fieldErrors`, so Swagger users know how to handle validation errors. Do not document exception messages or database details as stable API data.
+- Describe the existing `ErrorResponse` contract, including `fieldErrors` and optional stable `code`, so Swagger users know how to handle validation and business errors. Do not document exception messages or database details as stable API data.
 - Every successful response uses the `ApiResponse<T>` envelope (`success`, `message`, `data`, `timestamp`); pages are returned as `ApiResponse<Page<T>>`. Errors use `ErrorResponse`. Document the `data` type for each operation.
 - Prefer inferred schemas and short response descriptions. Add explicit examples only where they make a non-obvious shape or workflow materially easier to use.
 - Avoid repeating large `@ApiResponses` blocks on every method. Start with concise endpoint-specific response annotations. If the same response definition is genuinely repeated across several operations, introduce one small reusable composed annotation or shared OpenAPI component and use it consistently. Do not build a custom annotation framework or globalizer preemptively.

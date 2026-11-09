@@ -33,7 +33,7 @@ Account boundaries:
 
 - Public `POST /app/users/signup` always creates `STUDENT`; a submitted role must never grant privileges.
 - Only `LIBRARIAN` may create a school faculty account through `POST /app/users/faculty` or a library assistant through `POST /app/users/administrators`.
-- `GET /app/users` lists student and faculty accounts for administrators; the librarian can also list administrator accounts.
+- `GET /app/users` lists student and faculty accounts for administrators; the librarian can also list administrator accounts. Optional `role` and `q` filters stay within that scope; a privileged role filter outside the scope returns 403.
 - `GET /app/users/{universityId}` is available to the owner. Administrators may additionally read student/faculty profiles. Librarians may additionally read student/faculty/administrator profiles, but no staff role may read another librarian's profile.
 - `GET /app/users/me` loads the authenticated account's current public profile using the token subject. It returns 404 if that account has since been deleted.
 - Profile PATCH/PUT are available to owners and staff within their target-role scope. `PUT /app/users/{universityId}/password` is owner-only and requires the current password; it clears `mustChangePassword`. `PUT /app/users/{universityId}/password/reset` is staff-only and sets a temporary password plus `mustChangePassword=true`. Assistants may reset students/faculty; librarians may also reset assistants. No one may reset a librarian or their own account through this route.
@@ -53,7 +53,11 @@ Loans are implemented as a separate feature under `app.loan`, following the exis
 | PUT | `/app/loans/{loanId}/lost` | Staff closes an active loan as lost and marks the copy lost | Library assistants: student/faculty; librarians: student/faculty/library assistants |
 | GET | `/app/loans/me` | View the caller's loan history, including active and terminal loans | All roles |
 | GET | `/app/loans` | Paginated library-wide list, optionally filtered by status, overdue loans, or borrower | Administrators: student/faculty loans; librarians: student/faculty/administrator loans |
+| GET | `/app/loans/activity` | Weekly checkout and return counts for dashboard charts | Same staff borrower-role scope as `/app/loans` |
+| GET | `/app/loans/top-titles` | Most borrowed title/author groups | Same staff borrower-role scope as `/app/loans` |
 | GET | `/app/loans/users/{universityId}` | View a patron's loan history | Administrators: students/faculty; librarians: students/faculty/administrators |
+
+`GET /app/info` and `GET /app/audit` require `ADMINISTRATOR` or `LIBRARIAN`. Audit reads also enforce the stored staff role: assistants see student/faculty account events and book/loan events; librarians see all events. Assistants requesting an `actorRole` or `targetRole` of `ADMINISTRATOR` or `LIBRARIAN` receive 403. Audit filters and paging are specified in the [Engineering Reference](engineering-reference.md#endpoint-inventory).
 
 The borrower is always derived from the authenticated principal. The client supplies a book ID to borrow, never a borrower ID. Loan responses contain a DTO, not JPA entities.
 

@@ -1,11 +1,14 @@
 package app.loan.service;
 
 import app.global.exception.InvalidRequestException;
+import app.audit.service.AuditService;
 import app.book.entity.Book;
 import app.book.entity.BookCopyStatus;
 import app.book.exception.BookNotFoundException;
 import app.book.repository.BookRepository;
 import app.loan.dto.LoanResponseDTO;
+import app.loan.dto.WeeklyLoanActivityDTO;
+import app.loan.dto.TopTitleDTO;
 import app.loan.entity.Loan;
 import app.loan.entity.LoanStatus;
 import app.loan.exception.LoanConflictException;
@@ -27,6 +30,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.DayOfWeek;
+import java.time.temporal.TemporalAdjusters;
+import java.sql.Date;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.List;
 import java.util.Set;
 
@@ -47,6 +56,60 @@ public class LoanService {
     private final BookRepository bookRepository;
     private final LoanMapper loanMapper;
     private final Clock libraryClock;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AuditService audit;
+
+    /** Returns a zero-filled sequence of Manila calendar weeks for authorized staff. */
+    @Transactional(readOnly = true)
+    public List<WeeklyLoanActivityDTO> activity(String callerId, int weeks) {
+        if (weeks < 1 || weeks > 52) {
+            throw new InvalidRequestException("weeks must be between 1 and 52");
+        }
+        boolean librarian = isStaffLibrarian(callerId);
+        LocalDate lastMonday = LocalDate.now(libraryClock).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        LocalDate firstMonday = lastMonday.minusWeeks(weeks - 1L);
+        List<Object[]> rows = loanRepository.weeklyActivity(firstMonday.atStartOfDay(),
+                lastMonday.plusWeeks(1).atStartOfDay(), librarian);
+        Map<LocalDate, Object[]> byWeek = rows.stream().collect(Collectors.toMap(
+                row -> row[0] instanceof LocalDate date ? date : ((Date) row[0]).toLocalDate(), row -> row));
+        // The database returns only active buckets; the dashboard needs explicit zero weeks.
+        return java.util.stream.IntStream.range(0, weeks).mapToObj(i -> {
+            LocalDate week = firstMonday.plusWeeks(i);
+            Object[] row = byWeek.get(week);
+            return new WeeklyLoanActivityDTO(week, row == null ? 0 : ((Number) row[1]).longValue(),
+                    row == null ? 0 : ((Number) row[2]).longValue());
+        }).toList();
+    }
+
+    /** Counts checkouts in a bounded rolling Manila-time window for authorized staff. */
+    @Transactional(readOnly = true)
+    public List<TopTitleDTO> topTitles(String callerId, int days, int limit) {
+        if (days < 1 || days > 365 || limit < 1 || limit > 10) {
+            throw new InvalidRequestException("days must be 1-365 and limit must be 1-10");
+        }
+        boolean librarian = isStaffLibrarian(callerId);
+        LocalDateTime end = LocalDateTime.now(libraryClock);
+        return loanRepository.topTitles(end.minusDays(days), end, librarian, limit).stream()
+                .map(row -> new TopTitleDTO((String) row[0], (String) row[1], ((Number) row[2]).longValue()))
+                .toList();
+    }
+
+    /** Verifies stored staff role before permitting aggregate data access. */
+    private boolean isStaffLibrarian(String callerId) {
+        User staff = userRepository.findByUniversityId(callerId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+        visibleLoanRoles(staff.getUserRole());
+        return staff.getUserRole() == UserRole.LIBRARIAN;
+    }
+
+    /** Shared borrower-role scope for staff lists and aggregate reports. */
+    private List<UserRole> visibleLoanRoles(UserRole staffRole) {
+        return switch (staffRole) {
+            case ADMINISTRATOR -> List.of(UserRole.STUDENT, UserRole.FACULTY);
+            case LIBRARIAN -> List.of(UserRole.STUDENT, UserRole.FACULTY, UserRole.ADMINISTRATOR);
+            default -> throw new AccessDeniedException("Only library staff may list loans");
+        };
+    }
 
     /**
      * Borrows an available physical copy for the authenticated student or faculty member.
@@ -77,26 +140,26 @@ public class LoanService {
         // A lost physical item remains in history and must never be loaned again.
         if (book.getCopyStatus() == BookCopyStatus.LOST
                 || loanRepository.existsByBook_IdAndStatus(bookId, LoanStatus.LOST)) {
-            throw new LoanConflictException("Book copy has been marked lost");
+            throw new LoanConflictException("Book copy has been marked lost", "LOAN_COPY_UNAVAILABLE");
         }
 
         // The partial unique index remains the final guard for one active loan per copy.
         if (loanRepository.existsByBook_IdAndStatus(bookId, LoanStatus.ACTIVE)) {
-            throw new LoanConflictException("Book copy is already borrowed");
+            throw new LoanConflictException("Book copy is already borrowed", "LOAN_COPY_UNAVAILABLE");
         }
 
         // Use one clock reading for the overdue check and the loan's checkout timestamp.
         LocalDateTime borrowedAt = LocalDateTime.now(libraryClock);
         if (loanRepository.existsByBorrower_UniversityIdAndStatusAndDueAtBefore(
                 callerUniversityId, LoanStatus.ACTIVE, borrowedAt)) {
-            throw new LoanConflictException("Return overdue loans before borrowing again");
+            throw new LoanConflictException("Return overdue loans before borrowing again", "LOAN_BORROWER_OVERDUE");
         }
 
         // Returned and lost loans remain historical but do not count toward the active limit.
         long activeLoanCount = loanRepository.countByBorrower_UniversityIdAndStatus(
                 callerUniversityId, LoanStatus.ACTIVE);
         if (activeLoanCount >= MAX_ACTIVE_LOANS) {
-            throw new LoanConflictException("A borrower may have at most three active loans");
+            throw new LoanConflictException("A borrower may have at most three active loans", "LOAN_LIMIT_REACHED");
         }
 
         // The agreed loan period is 14 calendar days with no weekend or holiday extension.
@@ -129,7 +192,7 @@ public class LoanService {
 
         // A returned or lost loan is terminal and cannot be returned a second time.
         if (!loan.isActive()) {
-            throw new LoanConflictException("Loan is no longer active");
+            throw new LoanConflictException("Loan is no longer active", "LOAN_NOT_ACTIVE");
         }
 
         // Record the actual return time; the entity moves from ACTIVE to RETURNED.
@@ -173,7 +236,7 @@ public class LoanService {
 
         // Only active loans can be resolved as lost.
         if (!loan.isActive()) {
-            throw new LoanConflictException("Only active loans can be marked lost");
+            throw new LoanConflictException("Only active loans can be marked lost", "LOAN_NOT_ACTIVE");
         }
 
         // Lock and update the copy in the same transaction so lost inventory cannot be re-loaned.
@@ -182,6 +245,7 @@ public class LoanService {
         LocalDateTime lostAt = LocalDateTime.now(libraryClock);
         loan.markLost(staff, lostAt);
         book.markLost();
+        if (audit != null) audit.record("LOAN_MARKED_LOST", "LOAN", loanId.toString(), null);
 
         // The lost loan remains in history and is no longer overdue or active.
         return loanMapper.toResponse(loan, lostAt);
@@ -250,11 +314,7 @@ public class LoanService {
                                                 boolean overdue, String borrowerId, Pageable pageable) {
         User staff = userRepository.findByUniversityId(callerUniversityId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
-        List<UserRole> visibleRoles = switch (staff.getUserRole()) {
-            case ADMINISTRATOR -> List.of(UserRole.STUDENT, UserRole.FACULTY);
-            case LIBRARIAN -> List.of(UserRole.STUDENT, UserRole.FACULTY, UserRole.ADMINISTRATOR);
-            default -> throw new AccessDeniedException("Only library staff may list loans");
-        };
+        List<UserRole> visibleRoles = visibleLoanRoles(staff.getUserRole());
 
         // An explicit borrower must exist; retain the existing staff-to-target role boundary.
         if (borrowerId != null) {

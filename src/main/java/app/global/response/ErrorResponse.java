@@ -20,12 +20,20 @@ public class ErrorResponse {
     private final Map<String, String> fieldErrors;
     @Schema(description = "Correlation ID, also returned in the X-Request-Id header. Quote it when reporting a problem.", example = "3f2b8c1e-5a41-4c0e-9a57-0d6f1b7e2c11")
     private final String requestId;
+    @Schema(description = "Stable upper snake case business code, or null when no specific code applies.",
+            nullable = true)
+    private final String code;
 
     public ErrorResponse(String error, String details, int statusCode) {
         this(error, details, statusCode, Map.of());
     }
 
     public ErrorResponse(String error, String details, int statusCode, Map<String, String> fieldErrors) {
+        this(error, details, statusCode, fieldErrors, null);
+    }
+
+    /** Builds the standard error while retaining the optional business code. */
+    public ErrorResponse(String error, String details, int statusCode, Map<String, String> fieldErrors, String code) {
         this.error = error;
         this.details = details;
         this.timestamp = System.currentTimeMillis();
@@ -33,6 +41,7 @@ public class ErrorResponse {
         this.fieldErrors = Map.copyOf(fieldErrors);
         // Read from the logging context set by RequestIdFilter; null outside an HTTP request (for example in unit tests).
         this.requestId = org.slf4j.MDC.get("requestId");
+        this.code = code;
     }
 
 }

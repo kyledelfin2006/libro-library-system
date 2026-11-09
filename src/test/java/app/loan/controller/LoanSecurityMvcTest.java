@@ -170,6 +170,22 @@ class LoanSecurityMvcTest {
         verifyNoInteractions(loanService);
     }
 
+    /** The chart routes are staff-only even though their paths share the loan prefix. */
+    @Test
+    void chartRoutesRequireStaffAndValidateWeeks() throws Exception {
+        mockMvc.perform(get("/app/loans/activity"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/app/loans/activity").with(user(BORROWER_ID).roles("STUDENT")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/app/loans/top-titles").with(user(BORROWER_ID).roles("FACULTY")))
+                .andExpect(status().isForbidden());
+        when(loanService.activity("2025-8765", 12)).thenReturn(java.util.List.of());
+        mockMvc.perform(get("/app/loans/activity").with(user("2025-8765").roles("ADMINISTRATOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray());
+        verify(loanService).activity("2025-8765", 12);
+    }
+
     /** Staff can list library-wide loans using the authenticated identity and query filters. */
     @Test
     void assistantCanListFilteredLoans() throws Exception {
