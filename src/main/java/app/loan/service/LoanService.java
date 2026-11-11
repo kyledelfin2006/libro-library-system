@@ -15,6 +15,7 @@ import app.loan.exception.LoanConflictException;
 import app.loan.exception.LoanNotFoundException;
 import app.loan.mapper.LoanMapper;
 import app.loan.repository.LoanRepository;
+import app.loan.repository.projection.WeeklyLoanActivityProjection;
 import app.user.entity.User;
 import app.user.entity.enums.UserRole;
 import app.user.exception.UserNotFoundException;
@@ -33,7 +34,6 @@ import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.time.DayOfWeek;
 import java.time.temporal.TemporalAdjusters;
-import java.sql.Date;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.List;
@@ -68,16 +68,16 @@ public class LoanService {
         boolean librarian = isStaffLibrarian(callerId);
         LocalDate lastMonday = LocalDate.now(libraryClock).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate firstMonday = lastMonday.minusWeeks(weeks - 1L);
-        List<Object[]> rows = loanRepository.weeklyActivity(firstMonday.atStartOfDay(),
+        List<WeeklyLoanActivityProjection> rows = loanRepository.weeklyActivity(firstMonday.atStartOfDay(),
                 lastMonday.plusWeeks(1).atStartOfDay(), librarian);
-        Map<LocalDate, Object[]> byWeek = rows.stream().collect(Collectors.toMap(
-                row -> row[0] instanceof LocalDate date ? date : ((Date) row[0]).toLocalDate(), row -> row));
+        Map<LocalDate, WeeklyLoanActivityProjection> byWeek = rows.stream().collect(Collectors.toMap(
+                WeeklyLoanActivityProjection::getWeekStart, row -> row));
         // The database returns only active buckets; the dashboard needs explicit zero weeks.
         return java.util.stream.IntStream.range(0, weeks).mapToObj(i -> {
             LocalDate week = firstMonday.plusWeeks(i);
-            Object[] row = byWeek.get(week);
-            return new WeeklyLoanActivityDTO(week, row == null ? 0 : ((Number) row[1]).longValue(),
-                    row == null ? 0 : ((Number) row[2]).longValue());
+            WeeklyLoanActivityProjection row = byWeek.get(week);
+            return new WeeklyLoanActivityDTO(week, row == null ? 0 : row.getCheckouts(),
+                    row == null ? 0 : row.getReturns());
         }).toList();
     }
 
@@ -90,7 +90,7 @@ public class LoanService {
         boolean librarian = isStaffLibrarian(callerId);
         LocalDateTime end = LocalDateTime.now(libraryClock);
         return loanRepository.topTitles(end.minusDays(days), end, librarian, limit).stream()
-                .map(row -> new TopTitleDTO((String) row[0], (String) row[1], ((Number) row[2]).longValue()))
+                .map(row -> new TopTitleDTO(row.getTitle(), row.getAuthor(), row.getCheckouts()))
                 .toList();
     }
 

@@ -1,12 +1,10 @@
-# UI Implementation Plan
+# UI Execution Plan
 
 > **Lifecycle:** when this plan has been fully executed, delete this file in the same change and drop its links from the other plans, the plans README, and the Roadmap.
 
-Status: proposed; technical decisions confirmed by the project owner on 2026-11-09. This plan owns the web UI implementation.
+Status: proposed; technical decisions confirmed by the project owner on 2026-11-09. This is the single execution plan for the web UI MVP.
 
-Facts about the live API stay in the controllers, OpenAPI, and the [engineering reference](../reference/engineering-reference.md). The loan lifecycle is in the [Loan Implementation Guide](../guides/loan.md). Backend work found while planning is **not** listed here; it was tracked in the now-executed backend plan, and each UI phase below names the backend item it depends on.
-
-The [MVP UX Improvements Plan](implementation-plan-mvp-ux.md) adds small client-side usability improvements to these phases. It uses existing endpoints and components and does not create a separate release phase.
+Facts about the live API stay in the controllers, OpenAPI, and the [engineering reference](../reference/engineering-reference.md). The loan lifecycle is in the [Loan Implementation Guide](../guides/loan.md). Backend additions required by the UI are already implemented; each UI step names any dependency.
 
 ## 1. Goals and principles
 
@@ -16,7 +14,16 @@ The [MVP UX Improvements Plan](implementation-plan-mvp-ux.md) adds small client-
 4. **The UI is not a security boundary.** It hides what a role cannot do; the server's route gates and `UserAccessPolicy` stay authoritative.
 5. **Academic, dark-first and accessible**: the Libro logo and its greens drive a calm reading-room design (section 5), dark by default, and every color pair meets WCAG 2.2 AA.
 
-The MVP also includes the client-side improvements in the [MVP UX Improvements Plan](implementation-plan-mvp-ux.md): smoother catalog search, easier filter recovery, clearer form feedback, and accessible action status.
+### MVP usability additions
+
+These small client-side improvements are built into Steps 2 and 3. They use existing endpoints, components, and browser behavior; they add no API, database, deployment, or dependency work.
+
+- Debounce catalog text search by 300 ms. Keep search, filters, sort, and page in the URL; reset to page one when search or filters change.
+- Show result count and active-filter chips with a clear-all action. Empty results offer clear filters; failed catalog reads offer manual retry. Do not retry mutations automatically.
+- Add a keyboard-accessible show/hide password control. After invalid form submission, focus the first invalid field and retain server field errors.
+- Announce action success and failure to assistive technology, and use the planned toast and error components.
+
+Saved searches, favorites, notifications, real-time updates, and personalized recommendations are outside this MVP.
 
 ## 2. Confirmed technical decisions
 
@@ -121,7 +128,7 @@ The asset is [assets/LIBRO_LOGO.png](../../assets/LIBRO_LOGO.png): 1292 by 1218 
 
 Dominant colors measured from the file: deep green near `#008040`, bright green near `#4DB82A`, and white. The palette in 5.4 derives from these. The bookmark in the logo is reused as the "On loan" ribbon on covers (5.7).
 
-Asset pipeline (done in Phase 0, committed under `ui/public/brand/`, source file left untouched):
+Asset pipeline (done in Step 1, committed under `ui/public/brand/`, source file left untouched):
 - Generate optimized PNG or WebP at 48, 96 and 192 px wide for the header, 256 px for the sign-in panel, and 512 px for the document icon. The original is too large to ship in a page.
 - Favicon set: crop to the **book glyph only** (the wordmark is unreadable at 16 px); export 16, 32, 180 (apple-touch) and 512 px, plus `favicon.ico`. Cropping a derivative is allowed; do not recolor, stretch, or redraw it.
 - A 1200 by 630 social image for link previews.
@@ -244,7 +251,7 @@ Rules:
 | Most borrowed titles (top 5 bars) | Needs an aggregate | **BE-6** |
 | Needs attention (table of the 5 longest-overdue loans) | `GET /app/loans?overdue=true&sort=dueAt,asc&size=5` | None |
 
-All counts respect the caller's role scope automatically, because the server applies it. The dashboard issues about eight small requests in parallel; measure it in Phase 4.
+All counts respect the caller's role scope automatically, because the server applies it. The dashboard issues about eight small requests in parallel; measure it in Step 5.
 
 **Patron visuals** (My Loans): the loan-slot diagram and due-date bars in 5.9. No charts for patrons.
 
@@ -449,24 +456,24 @@ A two-column page: Profile (read view with an Edit button that turns the fields 
 
 ## 7. Pages, access, and endpoints
 
-| Page | Roles | Endpoints | Backend dependency | Phase |
+| Page | Roles | Endpoints | Backend dependency | Step |
 | --- | --- | --- | --- | --- |
-| Sign in | Public | `POST /app/auth/login`, then `GET /app/users/me` | None (better messages with BE-2) | 1 |
-| Register (student) | Public | `POST /app/users/signup` | None | 1 |
-| Forced password change | Any, when `mustChangePassword` | `PUT /app/users/{id}/password` | None | 1 |
-| Catalog search and browse | All | `GET /app/books/query`, `/app/books/genre` | BE-1 for "available only" | 2 |
-| Book detail with Borrow | All; Borrow for STUDENT and FACULTY | `GET /app/books/{id}`, `POST /app/loans/{bookId}` | BE-1, BE-2 | 2 |
-| My Account | All | `GET /app/users/me`, `PATCH /app/users/{id}`, password change, `DELETE /app/users/{id}` (STUDENT and FACULTY only) | None | 3 |
-| My Loans and history | All | `GET /app/loans/me` | None | 3 |
-| Return | STUDENT, FACULTY | `PUT /app/loans/{loanId}/return` | BE-2 | 3 |
-| Staff dashboard | ADMINISTRATOR, LIBRARIAN | `GET /app/loans` (overdue, status, `size=1` counts), `/app/books/stats`, `/app/books/genre` | BE-6 for the weekly-loans and most-borrowed charts only | 4 |
-| Loan management | ADMINISTRATOR, LIBRARIAN | `GET /app/loans`, `GET /app/loans/users/{id}`, `PUT /app/loans/{id}/lost` | BE-2 | 4 |
-| Inventory | ADMINISTRATOR, LIBRARIAN | `POST /app/books/add`, `PATCH`, `PUT`, `DELETE /app/books/{id}` | BE-1 | 4 |
-| Accounts | ADMINISTRATOR (students, faculty), LIBRARIAN (also assistants) | `GET /app/users`, `POST /app/users/faculty`, `POST /app/users/administrators` (LIBRARIAN), `PATCH`/`PUT`, password reset, `DELETE` | BE-3 | 5 |
-| Status | Public | `GET /livez`, `GET /readyz` | None | 6 |
-| Version | ADMINISTRATOR, LIBRARIAN | `GET /app/info` | BE-4 | 6 |
-| API docs link | Staff | Swagger UI when `LIBRO_API_DOCS_ENABLED=true` | None | 6 |
-| Audit log | ADMINISTRATOR (scoped to student, faculty, book and loan events) and LIBRARIAN (all events) | `GET /app/audit` | BE-5 | 7 |
+| Sign in | Public | `POST /app/auth/login`, then `GET /app/users/me` | None (better messages with BE-2) | 2 |
+| Register (student) | Public | `POST /app/users/signup` | None | 2 |
+| Forced password change | Any, when `mustChangePassword` | `PUT /app/users/{id}/password` | None | 2 |
+| Catalog search and browse | All | `GET /app/books/query`, `/app/books/genre` | BE-1 for "available only" | 3 |
+| Book detail with Borrow | All; Borrow for STUDENT and FACULTY | `GET /app/books/{id}`, `POST /app/loans/{bookId}` | BE-1, BE-2 | 3 |
+| My Account | All | `GET /app/users/me`, `PATCH /app/users/{id}`, password change, `DELETE /app/users/{id}` (STUDENT and FACULTY only) | None | 4 |
+| My Loans and history | All | `GET /app/loans/me` | None | 4 |
+| Return | STUDENT, FACULTY | `PUT /app/loans/{loanId}/return` | BE-2 | 4 |
+| Staff dashboard | ADMINISTRATOR, LIBRARIAN | `GET /app/loans` (overdue, status, `size=1` counts), `/app/books/stats`, `/app/books/genre` | BE-6 for the weekly-loans and most-borrowed charts only | 5 |
+| Loan management | ADMINISTRATOR, LIBRARIAN | `GET /app/loans`, `GET /app/loans/users/{id}`, `PUT /app/loans/{id}/lost` | BE-2 | 5 |
+| Inventory | ADMINISTRATOR, LIBRARIAN | `POST /app/books/add`, `PATCH`, `PUT`, `DELETE /app/books/{id}` | BE-1 | 5 |
+| Accounts | ADMINISTRATOR (students, faculty), LIBRARIAN (also assistants) | `GET /app/users`, `POST /app/users/faculty`, `POST /app/users/administrators` (LIBRARIAN), `PATCH`/`PUT`, password reset, `DELETE` | BE-3 | 6 |
+| Status | Public | `GET /livez`, `GET /readyz` | None | 7 |
+| Version | ADMINISTRATOR, LIBRARIAN | `GET /app/info` | BE-4 | 7 |
+| API docs link | Staff | Swagger UI when `LIBRO_API_DOCS_ENABLED=true` | None | 7 |
+| Audit log | ADMINISTRATOR (scoped to student, faculty, book and loan events) and LIBRARIAN (all events) | `GET /app/audit` | BE-5 | 8 |
 
 The book form fields and limits: title max 100, author max 50, genre max 50, description max 2000 and optional, replacement cost a positive decimal.
 
@@ -478,11 +485,11 @@ The book form fields and limits: title max 100, author max 50, genre max 50, des
 - **No secrets in the browser**: never store tokens or passwords in web storage, URLs, logs, or analytics. Never put a university ID or token in a query string that is not already part of an API contract.
 - **Idempotent buttons**: disable a submit button while its request is in flight so a double click cannot double-borrow; the server stays the authority.
 
-## 9. Phased delivery
+## 9. Execution steps
 
-Each phase ends in a mergeable PR with tests and a working demo against `seed-demo.sh` data.
+Complete Steps 1 through 8 in order. Each step ends in a mergeable PR with tests and a working demo against `seed-demo.sh` data.
 
-### Phase 0: Foundations
+### Step 1: Foundations
 - Scaffold `ui/`; strict TypeScript, lint, formatter.
 - Generate API types from OpenAPI; build the client with envelope unwrapping, `ErrorResponse` normalization and 401 handling.
 - Token file with dark as the default theme and a theme switch (dark, light, system), fonts, brand asset pipeline (5.3), `BookCover` (5.7), chart and diagram primitives (5.8, 5.9), shared components, layout shell, `permissions.ts`.
@@ -490,34 +497,34 @@ Each phase ends in a mergeable PR with tests and a working demo against `seed-de
 - Caddy serves `ui/dist` and proxies `/app/*`; the CD pipeline builds the UI into the deployment.
 - Done when: an empty authenticated shell with the logo, both themes, the `BookCover` snapshot set and a passing axe check loads through Caddy.
 
-### Phase 1: Authentication (no backend change needed)
-- Sign in, register with the course and major logic and live password hints, a show/hide password control, forced password change, sign out, and focus the first invalid field after submission.
+### Step 2: Authentication (no backend change needed)
+- Sign in, register with the course and major logic and live password hints, a keyboard-accessible show/hide password control, forced password change, sign out, and focus the first invalid field after submission.
 - Tests: wrong password, 429 countdown, expired-token redirect, forced-change guard, field-error mapping.
 
-### Phase 2: Catalog and book detail (needs BE-1 and BE-2 for the full experience)
-- Catalog grid and list views with generated covers, 300 ms debounced text search, filters drawer, sort and pagination with URL-synced state, visible result count, active-filter chips and a clear-all action; changing filters resets to page one. Book detail uses the catalog card and loan-slot diagram; Borrow explains each rule failure from its error code. Run the 5-second cover scan test (5.7) before finishing the phase.
+### Step 3: Catalog and book detail (needs BE-1 and BE-2 for the full experience)
+- Catalog grid and list views with generated covers, 300 ms debounced text search, filters drawer, sort and pagination with URL-synced state, visible result count, active-filter chips and a clear-all action; changing filters resets to page one. Book detail uses the catalog card and loan-slot diagram; Borrow explains each rule failure from its error code. Run the 5-second cover scan test (5.7) before finishing the step.
 - Offer a manual retry for failed catalog reads and a clear-filters action for empty results; never automatically retry a borrow or other mutation.
 - Ship first with copy status only if BE-1 is not ready; add availability when it lands.
 
-### Phase 3: My account and loans
+### Step 4: My account and loans
 - Profile view and edit, password change, self-delete with confirmation (STUDENT and FACULTY only).
 - My Loans with the loan-slot diagram, due-date bars, history, return action, and the lifecycle diagram disclosure.
 
-### Phase 4: Staff tools
+### Step 5: Staff tools
 - Dashboard per 6.6: KPI tiles, loan status mix, genre bars, overdue-by-days-late and the needs-attention table from existing endpoints, each chart with a "View as table" toggle. Add the weekly-loans line and most-borrowed bars when BE-6 ships; measure the request count first.
 - Loan management with status, overdue and borrower filters; mark-lost with confirmation.
 - Inventory CRUD with field errors mapped; handle 409 on delete.
 
-### Phase 5: Accounts (needs BE-3)
+### Step 6: Accounts (needs BE-3)
 - Role-scoped directory with search and role filter; create faculty and assistants (LIBRARIAN only); staff password reset with the one-time generator; delete with scope rules.
 
-### Phase 6: Operations pages (Version needs BE-4)
+### Step 7: Operations pages (Version needs BE-4)
 1. **Status**: poll `/readyz` and draw the request-path diagram (5.9); show only what the probes expose. Do not fake per-service checks.
 2. **Version**: version, build time, commit, environment.
 3. **Metrics**: add Prometheus and Grafana as an optional Compose profile scraping the private management port, and link to it. This replaces Spring Boot Admin, which would need broader Actuator exposure.
 4. **Release history** (optional): a static page generated at build time from GitHub Releases and workflow runs.
 
-### Phase 7: Audit log (needs BE-5)
+### Step 8: Audit log (needs BE-5)
 - Filter by actor, entity and date. The server scopes results by role, so the UI shows no filter option for events an assistant cannot see and treats a 403 on a filter as a normal denial.
 
 ## 10. Explicitly out of scope
@@ -531,7 +538,10 @@ Each phase ends in a mergeable PR with tests and a working demo against `seed-de
 ## 11. Definition of done
 
 - Each page works for exactly the roles in section 7, follows its wireframe in section 6, and has loading, empty, error, 401, 403, 404, 409 and 429 states.
-- Complete the catalog, form, and accessible feedback items in the [MVP UX Improvements Plan](implementation-plan-mvp-ux.md) within their respective UI phases.
+- Catalog search waits 300 ms after typing, filter changes reset pagination, URL state restores the catalog view, and result count, active filters, and clear-all work on mobile.
+- Empty and failed catalog states offer the correct recovery action; mutations are never automatically retried.
+- Password visibility, first-invalid-field focus, and status announcements work with keyboard navigation and screen readers.
+- Tests cover catalog debounce/reset/restore, manual retry, and accessible form feedback.
 - Component tests cover role gating and error mapping; one Playwright journey covers register, sign in, search, borrow, return, and a staff lost-resolution.
 - `permissions.ts` has a test asserting it matches the backend matrix for every listed route.
 - The contrast test and axe checks pass in both themes, and the `BookCover` snapshot test covers every cloth color and pattern.
@@ -548,7 +558,7 @@ Each phase ends in a mergeable PR with tests and a working demo against `seed-de
 | Memory-only token annoys users on reload | Accepted; revisit only with a threat-model decision, not ad hoc. |
 | Logo raster is large and has no vector source | Derived, sized variants; the original stays untouched; a vector version is the owner's call. |
 | Dark theme looks different on real screens than the computed ratios suggest | Contrast test and axe in both themes, plus a manual review on a laptop and a phone before merge. |
-| Generated covers hurt scanning or look gimmicky | The 5-second scan test (5.7) gates Phase 2; fall back to spine-only covers in the grid. |
+| Generated covers hurt scanning or look gimmicky | The 5-second scan test (5.7) gates Step 3; fall back to spine-only covers in the grid. |
 | Chart scope grows past what in-house SVG handles | Revisit with a separate decision before adopting a chart library (5.8). |
 | Replacement-cost currency is unknown | Show bare decimals until the owner chooses a currency. |
-| Scope creep from operations pages | Phase 6 uses existing tools; Phase 7 is gated on earlier phases. |
+| Scope creep from operations pages | Step 7 uses existing tools; Step 8 is gated on earlier steps. |

@@ -86,7 +86,7 @@ library-api-system/
     |   |   |   |-- entity/                  Loan, LoanStatus
     |   |   |   |-- exception/               LoanConflictException, LoanNotFoundException
     |   |   |   |-- mapper/                  LoanMapper
-    |   |   |   |-- repository/              LoanRepository
+    |   |   |   |-- repository/              LoanRepository, projection/ (WeeklyLoanActivityProjection, TopTitleProjection)
     |   |   |   `-- service/                 LoanService
     |   |   |-- user/
     |   |   |   |-- config/                  LibrarianBootstrapProperties, LibrarianBootstrapRunner
@@ -245,6 +245,8 @@ Read methods handle pagination, field-restricted sorting, searches, replacement 
 `deleteBookById` uses `@Modifying(clearAutomatically = true)` because bulk JPQL bypasses normal entity lifecycle synchronization. If more bulk updates are introduced, account for stale persistence-context state in the same way.
 
 The count-and-total-replacement-cost aggregate uses the typed `LibraryAggregate` constructor projection under `app.book.repository.projection`; the service maps that internal projection into the public `LibraryStatisticsDTO`. Genre distribution follows the same pattern through the typed `GenreCount` constructor projection, which the service maps into the existing `Map<String, Long>` response. These records are internal persistence projections, not public DTOs. Prefer typed projections for future complex aggregations when they improve safety without adding unnecessary abstraction.
+
+The loan dashboard's native weekly-activity and top-title aggregates use typed `WeeklyLoanActivityProjection` and `TopTitleProjection` interfaces under `app.loan.repository.projection`; `LoanService` maps them into the existing public response DTOs.
 
 ### User-domain status
 

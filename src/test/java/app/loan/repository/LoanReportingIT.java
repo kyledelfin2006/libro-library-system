@@ -53,15 +53,17 @@ class LoanReportingIT {
         var assistantWeeks = loans.weeklyActivity(LocalDateTime.of(2026, 10, 12, 0, 0),
                 LocalDateTime.of(2026, 10, 26, 0, 0), false);
         assertEquals(2, assistantWeeks.size());
-        assertEquals(1, ((Number) assistantWeeks.get(0)[1]).longValue());
-        assertEquals(1, ((Number) assistantWeeks.get(1)[1]).longValue());
-        assertEquals(1, ((Number) assistantWeeks.get(1)[2]).longValue());
+        assertEquals(1L, assistantWeeks.get(0).getCheckouts());
+        assertEquals(1L, assistantWeeks.get(1).getCheckouts());
+        assertEquals(1L, assistantWeeks.get(1).getReturns());
         var titles = loans.topTitles(LocalDateTime.of(2026, 10, 1, 0, 0),
                 LocalDateTime.of(2026, 10, 26, 0, 0), false, 5);
-        assertEquals(2, ((Number) titles.get(0)[2]).longValue());
+        assertEquals("Reporting Probe", titles.get(0).getTitle());
+        assertEquals("Synthetic Author", titles.get(0).getAuthor());
+        assertEquals(2L, titles.get(0).getCheckouts());
         var librarianTitles = loans.topTitles(LocalDateTime.of(2026, 10, 1, 0, 0),
                 LocalDateTime.of(2026, 10, 26, 0, 0), true, 5);
-        assertEquals(3, ((Number) librarianTitles.get(0)[2]).longValue());
+        assertEquals(3L, librarianTitles.get(0).getCheckouts());
     }
 
     /** Inserts synthetic account data for a transaction-scoped reporting fixture. */

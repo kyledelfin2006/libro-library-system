@@ -96,9 +96,8 @@ Before changing a migration, establish whether that version has been applied to 
 
 Independent plans track the remaining build work. Each is replaced by as-built documentation and its plan file is deleted when finished.
 
-- [ ] [UI Implementation Plan](../plans/implementation-plan-ui.md): the web UI.
-- [ ] [MVP UX Improvements Plan](../plans/implementation-plan-mvp-ux.md): small client-side usability additions implemented within the UI phases.
-- [ ] Backend additions for the UI: implemented and the plan file removed; PostgreSQL integration verification (`./mvnw verify -Pintegration`) remains pending.
+- [ ] [UI Execution Plan](../plans/implementation-plan-ui-execution.md): numbered implementation steps for the web UI MVP, including usability improvements.
+- [ ] [Backend Improvements Plan](../plans/implementation-plan-backend-improvements.md): replace raw aggregate query rows with typed projections; verification pending.
 
 ## Source documents
 

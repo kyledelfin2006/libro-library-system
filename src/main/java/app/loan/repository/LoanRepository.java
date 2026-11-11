@@ -2,6 +2,8 @@ package app.loan.repository;
 
 import app.loan.entity.Loan;
 import app.loan.entity.LoanStatus;
+import app.loan.repository.projection.TopTitleProjection;
+import app.loan.repository.projection.WeeklyLoanActivityProjection;
 import app.user.entity.enums.UserRole;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
@@ -94,11 +96,11 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
     @Query("SELECT l FROM Loan l WHERE l.id = :id")
     Optional<Loan> findByIdForUpdate(@Param("id") Long id);
 
-    /** Groups in-scope checkout and return events by stored Manila calendar week. */
+    /** Groups in-scope checkout and return events by stored Manila calendar week into typed rows. */
     @Query(value = """
-            SELECT CAST(date_trunc('week', e.occurred_at) AS date) AS week_start,
+            SELECT CAST(date_trunc('week', e.occurred_at) AS date) AS "weekStart",
                    SUM(CASE WHEN e.kind = 1 THEN 1 ELSE 0 END) AS checkouts,
-                   SUM(CASE WHEN e.kind = 2 THEN 1 ELSE 0 END) AS returns
+                   SUM(CASE WHEN e.kind = 2 THEN 1 ELSE 0 END) AS "returns"
             FROM (SELECT l.user_id, l.borrowed_at AS occurred_at, 1 AS kind FROM loans l
                   UNION ALL
                   SELECT l.user_id, l.returned_at AS occurred_at, 2 AS kind FROM loans l
@@ -107,12 +109,13 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
             WHERE e.occurred_at >= :start AND e.occurred_at < :end
               AND (u.user_role IN ('STUDENT', 'FACULTY')
                    OR (:librarian = true AND u.user_role = 'ADMINISTRATOR'))
-            GROUP BY week_start ORDER BY week_start
+            GROUP BY "weekStart" ORDER BY "weekStart"
             """, nativeQuery = true)
-    List<Object[]> weeklyActivity(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end,
-                                  @Param("librarian") boolean librarian);
+    List<WeeklyLoanActivityProjection> weeklyActivity(@Param("start") LocalDateTime start,
+                                                       @Param("end") LocalDateTime end,
+                                                       @Param("librarian") boolean librarian);
 
-    /** Ranks title and author groups by checkout count with deterministic ties. */
+    /** Ranks typed title and author groups by checkout count with deterministic ties. */
     @Query(value = """
             SELECT b.title, b.author, COUNT(*) AS checkouts FROM loans l
             JOIN books b ON b.id = l.book_id JOIN users u ON u.id = l.user_id
@@ -121,6 +124,6 @@ public interface LoanRepository extends JpaRepository<Loan, Long> {
                    OR (:librarian = true AND u.user_role = 'ADMINISTRATOR'))
             GROUP BY b.title, b.author ORDER BY checkouts DESC, b.title, b.author LIMIT :limit
             """, nativeQuery = true)
-    List<Object[]> topTitles(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end,
-                             @Param("librarian") boolean librarian, @Param("limit") int limit);
+    List<TopTitleProjection> topTitles(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end,
+                                       @Param("librarian") boolean librarian, @Param("limit") int limit);
 }
