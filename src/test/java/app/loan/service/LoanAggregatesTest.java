@@ -69,7 +69,7 @@ class LoanAggregatesTest {
         assertEquals("The Library Book", result.get(0).title());
         assertEquals("Susan Orlean", result.get(0).author());
         assertEquals(4, result.get(0).checkouts());
-        verify(loans).topTitles(eq(LocalDate.parse("2026-07-21").atStartOfDay()),
+        verify(loans).topTitles(eq(LocalDateTime.parse("2026-07-21T10:30:00")),
                 eq(LocalDateTime.parse("2026-10-19T10:30:00")), eq(true), eq(5));
     }
 }
