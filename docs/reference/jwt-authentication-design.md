@@ -36,7 +36,7 @@ Login request:
 
 For login and signup, Spring Security first permits the public route. Spring MVC then matches the route and calls `PublicRouteRateLimitInterceptor` before binding or validating the request body. If the client IP is over that route's quota, the interceptor returns HTTP 429 with `Retry-After` and the normal `ErrorResponse` body; it does not invoke the controller or service. Requests within quota continue through normal body validation and endpoint handling.
 
-The limiter keys on the servlet container's `getRemoteAddr()`. `SERVER_FORWARD_HEADERS_STRATEGY` accepts `none` (default) or `native`; use `native` only when the app port is reachable exclusively through the trusted OCI load balancer/proxy. Tomcat then resolves the forwarded client address before MVC. The interceptor does not parse `X-Forwarded-For` directly, so unprocessed client-supplied headers cannot rotate the quota. Gateway throttling remains necessary because in-memory counters are per process.
+The limiter keys on the servlet container's `getRemoteAddr()`. `SERVER_FORWARD_HEADERS_STRATEGY` accepts `none` (default) or `native`; use `native` only when the app port is reachable exclusively through the trusted load balancer or reverse proxy. Tomcat then resolves the forwarded client address before MVC. The interceptor does not parse `X-Forwarded-For` directly, so unprocessed client-supplied headers cannot rotate the quota. Gateway throttling remains necessary because in-memory counters are per process.
 
 Successful response:
 

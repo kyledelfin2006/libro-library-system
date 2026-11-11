@@ -1,26 +1,26 @@
-# Operations Runbook: OCI Always Free VM
+# Operations Runbook: Single-VM Deployment
 
-Step-by-step provisioning, deployment, backup, and recovery for the single-VM demo described in [CI/CD and DevOps](ci-cd.md). The scripts named here live in [`scripts/`](../../scripts/) and were exercised against a local Docker stack; the first run on a real OCI host is the final check, so verify each step against Oracle's current console and documentation.
+Step-by-step provisioning, deployment, backup, and recovery for the single-VM demo described in [CI/CD and DevOps](ci-cd.md). The scripts named here live in [`scripts/`](../../scripts/) and were exercised against a local Docker stack. Adapt the provider-specific VM and network steps to the host you provision.
 
 Audit events introduced in V7 are retained indefinitely. There is no automatic purge job; normal database backups include `audit_event`. Set a retention policy before its storage growth becomes material.
 
 ## 1. Before you start
 
-- **Account.** Confirm Always Free eligibility and your home region. To avoid idle reclaim of the A1 VM, upgrade the tenancy to **Pay As You Go**, stay inside the Always Free limits, and create a **budget alert** (for example at US$1) so an accidental paid resource is noticed. Oracle's reclaim rules and free allowances change, so check [OCI Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).
-- **Capacity.** A1 instances sometimes report "out of host capacity". Retry later or in another availability domain of the same region.
+- **Cost and availability.** Check the selected VM plan's current pricing, limits, and availability. Configure a budget alert if the provider offers one, and do not assume promotional capacity is persistent.
+- **Capacity.** Select a Linux ARM64 VM with enough CPU, memory, and persistent storage for the API, PostgreSQL, backups, and demo data.
 - **Host name.** The proxy needs a DNS name that resolves to the VM's public IP. A free option is a dynamic DNS name (for example DuckDNS) or a wildcard-IP name such as `203-0-113-10.sslip.io`. Use the same value for `LIBRO_DOMAIN`.
 
 ## 2. Provision the VM
 
-1. Create a **VM.Standard.A1.Flex** instance (2 OCPUs, 12 GB RAM) with an ARM64 Ubuntu LTS image and a reserved public IP.
-2. Attach a **block volume** (50 GB is plenty) and mount it at `/mnt/libro` (format ext4, add it to `/etc/fstab` with `nofail`). Then create the data directory for PostgreSQL's Alpine user:
+1. Create an ARM64 Linux VM with a stable public IP and an Ubuntu LTS image.
+2. Attach persistent storage for database data and backups, mount it at `/mnt/libro` (for example, format it as ext4 and add it to `/etc/fstab` with `nofail`). Then create the data directory for PostgreSQL's Alpine user:
 
    ```bash
    sudo mkdir -p /mnt/libro/postgres /mnt/libro/backups
    sudo chown 70:70 /mnt/libro/postgres
    ```
 
-3. **Network.** In the subnet's security list allow ingress TCP **80** and **443** from `0.0.0.0/0` and TCP **22 from your own IP only**. Do not open 5432, 8080, or 9091. Ubuntu images on OCI also ship host firewall rules that reject other ports; allow 80 and 443 there too and persist the rules.
+3. **Network.** In the provider firewall or security group, allow ingress TCP **80** and **443** from `0.0.0.0/0` and TCP **22 from your own IP only**. Do not open 5432, 8080, or 9091. Configure and persist the host firewall to allow only the required ports.
 4. Install Docker Engine with the Compose plugin (**Compose 2.24 or newer**), `git`, and `curl`, and add your deploy user to the `docker` group.
 
 ## 3. Configure secrets
@@ -42,7 +42,7 @@ chmod 600 .env
 | `LIBRO_DOMAIN` | The public host name from step 1 |
 | `LIBRO_DATA_DIR` | `/mnt/libro` |
 | `LIBRO_API_DOCS_ENABLED` | `true` for the synthetic-data demo (Swagger UI), otherwise `false` |
-| `LIBRO_BACKUP_BUCKET` | Optional Object Storage bucket name for off-host backups |
+| `LIBRO_BACKUP_BUCKET` | Optional bucket name for off-host backups; see section 5 before enabling |
 
 Generate a BCrypt hash without storing the password. The command prompts for it, and the `sed` turns the `$2y$` prefix into the `$2a$` form Spring and the Flyway check accept. **Single-quote the result in `.env`**, because hashes contain `$`:
 
@@ -75,7 +75,7 @@ Schedule a nightly backup and keep the dump count small (the volume is shared wi
 0 3 * * * cd /opt/libro && scripts/backup.sh >> /mnt/libro/backups/backup.log 2>&1
 ```
 
-To keep copies off the host, create an Object Storage bucket, a dynamic group for the VM, and a policy that lets that group manage objects in the bucket, then set `LIBRO_BACKUP_BUCKET` and install the OCI CLI. Objects are encrypted at rest; add a lifecycle rule to delete old objects, because the Always Free allowance is small.
+The optional off-host upload path in `scripts/backup.sh` depends on a provider-specific command-line tool and instance identity. This runbook covers local backups only. Before setting `LIBRO_BACKUP_BUCKET`, confirm that the upload tool and identity are configured for the target host and set a lifecycle rule to control storage growth.
 
 **Rehearse a restore before relying on it:**
 
@@ -99,11 +99,11 @@ The restore asks you to type the database name, takes a safety backup, replaces 
 1. **Make the package pullable.** After the first publish, open the `libro-api` package on GitHub and set its visibility to **public**, because the VM pulls the image without credentials. The image contains no secrets.
 2. **Create a deploy key.** On your machine run `ssh-keygen -t ed25519 -N "" -f libro_deploy`, append `libro_deploy.pub` to `~/.ssh/authorized_keys` of the deploy user on the VM, and keep the private key only for the next step. The user must be in the `docker` group, and the repository must be cloned at `/opt/libro` with its `.env` in place.
 3. **Pin the host key.** Run `ssh-keyscan -t ed25519 <host>` and compare the fingerprint with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` run on the VM before trusting it.
-4. **Create the environment.** In the repository settings add a `production` environment with **required reviewers** (yourself), and add the environment secrets `OCI_HOST`, `OCI_USER`, `OCI_SSH_KEY` (the private key), and `OCI_SSH_KNOWN_HOSTS` (the verified line from step 3). Delete the local key files afterwards.
-5. **Turn it on.** Add the repository variable `OCI_DEPLOY_ENABLED` with the value `true`. Each successful `main` build then waits for your approval before deploying.
+4. **Create the environment.** In the repository settings add a `production` environment with **required reviewers** (yourself), and configure the four SSH secrets the workflow reads: VM host, deploy user, private key, and verified host key. Delete the local key files afterwards.
+5. **Turn it on.** Set the deployment-enable repository variable used by the workflow to `true`. Each successful `main` build then waits for your approval before deploying.
 6. **Protect `main`.** Add a branch ruleset that requires the `unit-test`, `integration-test`, and `security-scan` checks, so only validated commits can be released.
 
-Keep manual approval until you have rehearsed a restore and a rollback on the VM. To pause deployments, set `OCI_DEPLOY_ENABLED` to anything other than `true`; image publishing continues.
+Keep manual approval until you have rehearsed a restore and a rollback on the VM. To pause deployments, disable the deployment-enable repository variable; image publishing continues.
 
 ## 8. Troubleshooting
 
@@ -139,6 +139,6 @@ Have the librarian log in with the temporary password and change it through `PUT
 | --- | --- |
 | Deploy stops at preflight | The message names the missing variable, file mode, or directory |
 | `db` restarts with a permissions error | `/mnt/libro/postgres` must be owned by UID 70 |
-| Caddy cannot get a certificate | DNS must point at the VM and ports 80/443 must be reachable (security list and host firewall) |
+| Caddy cannot get a certificate | DNS must point at the VM and ports 80/443 must be reachable (provider firewall and host firewall) |
 | Rate limits hit every visitor | Confirm the app sees real client addresses; the override sets `native` forwarded headers and the app port must stay on loopback |
 | Smoke test fails at login | Run `scripts/seed-demo.sh --patrons-only`, then check `docker compose logs app` |

@@ -1,6 +1,6 @@
 # Demo Accounts
 
-The planned public demo uses patron accounts with synthetic data. Staff credentials are private. The OCI demo instance is not deployed yet.
+The planned public demo uses patron accounts with synthetic data. Staff credentials are private. The public demo instance is not deployed yet.
 
 ## Public demo patrons (planned)
 

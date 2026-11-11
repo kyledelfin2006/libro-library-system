@@ -7,7 +7,7 @@ Status: proposed; technical decisions confirmed by the project owner on 2026-11-
 | Plan | Scope |
 | --- | --- |
 | **This plan** | The web UI. |
-| [OCI Idle-Reclamation Plan](implementation-plan-oci-idle-reclamation.md) | Keeping the OCI Always Free VM from being reclaimed. |
+| [VM Idle-Reclamation Plan](implementation-plan-vm-idle-reclamation.md) | Reviewing idle-reclamation behavior for the planned VM. |
 
 Facts about the live API stay in the controllers, OpenAPI, and the [engineering reference](../reference/engineering-reference.md). The loan lifecycle is in the [Loan Implementation Guide](../guides/loan.md). Backend work found while planning is **not** listed here; it was tracked in the now-executed backend plan, and each UI phase below names the backend item it depends on.
 

@@ -2,13 +2,13 @@
 #
 #   image   after CI passes on main: build ONE linux/arm64 image, scan it, publish it to GitHub Container Registry
 #           tagged with the commit SHA, and output its immutable digest
-#   deploy  (only when enabled and approved) SSH to the OCI VM and run scripts/deploy.sh with that digest.
+#   deploy  (only when enabled and approved) SSH to the production VM and run scripts/deploy.sh with that digest.
 #           The server never rebuilds the release, so what was scanned is exactly what runs.
 #
 # Pull requests that change this workflow, the Dockerfile, or the scan script run `image` without publishing, so
 # edits to the release path are exercised before they reach main.
 #
-# One-time setup (the `production` environment, its secrets, OCI_DEPLOY_ENABLED): docs/devops/runbook.md.
+# One-time setup (the `production` environment, its secrets, and deployment enable variable): docs/devops/runbook.md.
 name: CD
 
 on:
@@ -58,7 +58,7 @@ jobs:
         with:
           ref: ${{ steps.revision.outputs.sha }}
           persist-credentials: false # The job never pushes to git, so do not leave a token in .git/config.
-      # OCI labels: `source` links the GHCR package to this repository; `revision` records the exact commit.
+      # Container image labels: `source` links the GHCR package to this repository; `revision` records the exact commit.
       - name: Build image
         run: |
           docker build --platform linux/arm64 \
@@ -91,7 +91,7 @@ jobs:
   deploy:
     name: deploy
     needs: image
-    # Off until the repository variable OCI_DEPLOY_ENABLED is 'true'. The `production` environment's required
+    # Off until the repository deployment-enable variable is 'true'. The `production` environment's required
     # reviewers then hold the job until someone approves it.
     if: >-
       github.event_name != 'pull_request'

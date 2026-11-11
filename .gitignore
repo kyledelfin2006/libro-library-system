@@ -73,7 +73,7 @@ logs/
 .env.*
 !.env.example
 
-# Keys and infrastructure credentials (OCI API keys, deploy keys, Terraform vars)
+# Cloud infrastructure credentials, deploy keys, and Terraform variables
 *.pem
 *.key
 *.tfvars

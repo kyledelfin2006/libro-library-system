@@ -98,7 +98,7 @@ Independent plans track the remaining build work. Each is replaced by as-built d
 
 - [ ] [UI Implementation Plan](../plans/implementation-plan-ui.md): the web UI.
 - [ ] Backend additions for the UI: implemented and the plan file removed; PostgreSQL integration verification (`./mvnw verify -Pintegration`) remains pending.
-- [ ] [OCI Idle-Reclamation Plan](../plans/implementation-plan-oci-idle-reclamation.md): an opt-in keep-alive for the Always Free VM, documented after it is built.
+- [ ] [VM Idle-Reclamation Plan](../plans/implementation-plan-vm-idle-reclamation.md): an opt-in keep-alive for the production VM, documented after it is built.
 
 ## Source documents
 

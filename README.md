@@ -101,7 +101,7 @@ The [Development Problems Solved](docs/guides/development-problems-solved.md) gu
 
 ## Demo Accounts
 
-> **Try Libro:** [Demo patron accounts](#demo-accounts) are documented below. The public OCI instance is not deployed yet; seed them locally to use the API now. Staff credentials stay private.
+> **Try Libro:** [Demo patron accounts](#demo-accounts) are documented below. The public demo instance is not deployed yet; seed them locally to use the API now. Staff credentials stay private.
 
 These **public patron-only accounts** use synthetic data. They can browse and borrow under the normal loan rules, but cannot manage books or other accounts. Their shared password is published on purpose; do not reuse it elsewhere.
 
@@ -166,18 +166,13 @@ Copy [`.env.example`](.env.example) for the local template. The settings below c
 | `LIBRO_DOMAIN` | For the TLS proxy | `localhost` locally; set a real host name for deployment. |
 | `MANAGEMENT_SERVER_PORT` | No | `9091`; private Actuator health and Prometheus port. |
 | `LIBRO_DATA_DIR` | Production deploy only | Block-volume path for database data, backups, and release state. |
-| `LIBRO_BACKUP_BUCKET` | No | Optional OCI Object Storage bucket for off-host backups. |
+| `LIBRO_BACKUP_BUCKET` | No | Optional object-storage bucket for off-host backups; see the runbook before enabling uploads. |
 
 ### CI/CD Secrets
 
-The deploy job needs four **GitHub `production` environment secrets**; application secrets stay in the private host `.env`:
+The deploy job needs four **GitHub `production` environment secrets** for the SSH target, deploy user, private key, and pinned host key; application secrets stay in the private host `.env`:
 
-| Secret | Purpose |
-| --- | --- |
-| `OCI_HOST`, `OCI_USER` | SSH target and deploy user. |
-| `OCI_SSH_KEY`, `OCI_SSH_KNOWN_HOSTS` | Deploy private key and verified host key. |
-
-Image publishing uses GitHub's built-in `GITHUB_TOKEN`. The [runbook setup](docs/devops/runbook.md#7-enable-automated-deployment) explains the environment, repository variable `OCI_DEPLOY_ENABLED`, and branch checks.
+Image publishing uses GitHub's built-in `GITHUB_TOKEN`. The [runbook setup](docs/devops/runbook.md#7-enable-automated-deployment) explains the environment, deployment-enable variable, and branch checks.
 
 ### Security Policy
 
@@ -250,7 +245,7 @@ flowchart LR
     Pass -->|main push| Image[CD: build and scan ARM64 image]
     Image --> GHCR[Publish commit-SHA image to GHCR]
     GHCR --> Gate{Deploy enabled and approved?}
-    Gate -->|Yes| OCI[Deploy digest to OCI VM]
+    Gate -->|Yes| Deploy[Deploy digest to production VM]
 ```
 
 ### Workflow Breakdown
@@ -265,13 +260,13 @@ Every pull request and every push to `main` runs three parallel checks in [`.git
 
 ### Triggers & Quality Gates
 
-After CI passes on a `main` push, [`.github/workflows/cd.yml`](.github/workflows/cd.yml) builds and scans one immutable ARM64 image on a native ARM runner and publishes it to GitHub Container Registry by commit SHA. A manual `workflow_dispatch` can also build and publish; pull requests that change the CD workflow or Dockerfile get a build-and-scan dry run without publishing. The deploy job runs only when the repository variable `OCI_DEPLOY_ENABLED=true` and the `production` environment's required reviewers approve it.
+After CI passes on a `main` push, [`.github/workflows/cd.yml`](.github/workflows/cd.yml) builds and scans one immutable ARM64 image on a native ARM runner and publishes it to GitHub Container Registry by commit SHA. A manual `workflow_dispatch` can also build and publish; pull requests that change the CD workflow or Dockerfile get a build-and-scan dry run without publishing. The deploy job runs only when its repository enable flag is `true` and the `production` environment's required reviewers approve it.
 
 ## Deployment
 
 ### Environments
 
-Local development uses Docker Compose; CI uses ephemeral GitHub runners. The planned production demo target is a single **OCI Always Free Ampere A1 VM** running the API, PostgreSQL, and a Caddy TLS proxy under Docker Compose. There is no separate staging environment.
+Local development uses Docker Compose; CI uses ephemeral GitHub runners. The planned production demo target is a single ARM64 Linux VM running the API, PostgreSQL, and a Caddy TLS proxy under Docker Compose. It is a single-instance design without high availability or autoscaling, and there is no separate staging environment.
 
 ### Deployment Process
 
@@ -293,7 +288,7 @@ Run `./mvnw verify` for unit/MVC tests and the 80% line-coverage gate. Run `./mv
 | --- | --- |
 | System design, flows, and data model | [Architecture](docs/architecture.md) |
 | Current repository map, API inventory, configuration, and tests | [Engineering Reference](docs/reference/engineering-reference.md) |
-| Proposed UI, backend, and OCI implementation work | [Implementation Plans](docs/plans/README.md) and [Development Roadmap](docs/reference/ROADMAP.md) |
+| Proposed UI, backend, and deployment implementation work | [Implementation Plans](docs/plans/README.md) and [Development Roadmap](docs/reference/ROADMAP.md) |
 | Running and configuring a local stack | [Local Setup](docs/guides/local-setup.md) |
 | Public patron logins and private staff-account policy | [Demo Accounts](docs/guides/demo-accounts.md) |
 | Physical-copy and loan decisions | [Domain Decisions](docs/guides/domain-decisions.md) and [Loan Implementation Guide](docs/guides/loan.md) |
@@ -335,7 +330,7 @@ Read the [Agent and Contributor Guide](AGENTS.md) before changing code or docume
 | Container image and Compose stack | Implemented, with health checks |
 | Deploy, rollback, backup, and smoke-test scripts; runbook | Implemented and rehearsed locally |
 | CD workflow (ARM64 build, scan, publish, gated deploy) | Implemented; deploy job off until the VM exists |
-| OCI VM | Not provisioned; see the [Operations Runbook](docs/devops/runbook.md) and [Roadmap](docs/reference/ROADMAP.md) |
+| Production VM | Not provisioned; see the [Operations Runbook](docs/devops/runbook.md) and [Roadmap](docs/reference/ROADMAP.md) |
 | Open items | TLS with a real domain, login-failure and rate-limit alerts, and an independent security review before public exposure |
 
 The [Development Roadmap](docs/reference/ROADMAP.md) tracks the detail.

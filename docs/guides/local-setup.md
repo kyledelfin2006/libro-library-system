@@ -24,7 +24,7 @@ Docker is the preferred way to run the project because it brings up both Postgre
     To terminate TLS in front of the API, add the optional Caddy proxy profile, set `LIBRO_DOMAIN` and `SERVER_FORWARD_HEADERS_STRATEGY=native` in `.env`, and start with `docker compose --profile proxy up --build`. The proxy listens on ports 80 and 443 and is the only public entry point; the app and database stay on `127.0.0.1`. See [`infra/caddy/Caddyfile`](../../infra/caddy/Caddyfile).
 3. Check `http://localhost:8080/readyz` without a token. Log in through `POST /app/auth/login`, then send the returned token as a Bearer credential on protected API requests. Swagger UI and `/v3/api-docs` are served only when `LIBRO_API_DOCS_ENABLED=true`; the `.env.example` template leaves it `false`, so set it to `true` in your local `.env` to use Swagger UI.
 
-Set `LIBRO_CORS_ALLOWED_ORIGINS` to a comma-separated list of exact UI origins to enable browser access; it defaults to blank and wildcards are rejected. Set `SERVER_FORWARD_HEADERS_STRATEGY=native` only when the app port is reachable exclusively from the trusted OCI load balancer or proxy. The default is `none`.
+Set `LIBRO_CORS_ALLOWED_ORIGINS` to a comma-separated list of exact UI origins to enable browser access; it defaults to blank and wildcards are rejected. Set `SERVER_FORWARD_HEADERS_STRATEGY=native` only when the app port is reachable exclusively from the trusted load balancer or reverse proxy. The default is `none`.
 
 ## Local development
 

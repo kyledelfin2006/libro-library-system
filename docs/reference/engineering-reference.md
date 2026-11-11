@@ -47,7 +47,7 @@ library-api-system/
 |       |-- ci.yml                           unit-test, integration-test, security-scan
 |       `-- cd.yml                           ARM64 image build/scan/publish, gated SSH deploy
 |-- infra/
-|   |-- docker-compose.prod.yml              production override for the OCI VM
+|   |-- docker-compose.prod.yml              production override for a single VM
 |   `-- caddy/Caddyfile                      TLS reverse proxy
 |-- scripts/
 |   |-- common.sh, deploy.sh, smoke.sh       operations (see docs/devops/runbook.md)

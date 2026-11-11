@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Back up the PostgreSQL database to a compressed custom-format dump, optionally upload it to OCI Object Storage,
+# Back up the PostgreSQL database to a compressed custom-format dump, optionally upload it to object storage,
 # and prune old local copies.
 #
 # Usage: scripts/backup.sh
 # Environment (from the private .env):
 #   LIBRO_DATA_DIR       block-volume mount; dumps go to $LIBRO_DATA_DIR/backups unless LIBRO_BACKUP_DIR is set
 #   LIBRO_BACKUP_KEEP    number of local dumps to keep (default 7)
-#   LIBRO_BACKUP_BUCKET  optional Object Storage bucket; uploads need the OCI CLI and an instance principal
-#                        (Object Storage encrypts objects at rest; set an object lifecycle rule for retention)
+#   LIBRO_BACKUP_BUCKET  optional object-storage bucket; uploads need the configured provider CLI and identity
+#                        (set an object lifecycle rule for retention)
 set -euo pipefail
 # shellcheck disable=SC1091
 . "$(dirname "${BASH_SOURCE[0]}")/common.sh"

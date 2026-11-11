@@ -1,4 +1,4 @@
-# Production override for the OCI Always Free VM. Always layered on top of the base file:
+# Production override for a single ARM64 Linux VM. Always layered on top of the base file:
 #   docker compose -f docker-compose.yml -f infra/docker-compose.prod.yml --profile proxy up -d
 # scripts/deploy.sh runs this for you. Requires Docker Compose 2.24 or newer (for `!reset`).
 #
