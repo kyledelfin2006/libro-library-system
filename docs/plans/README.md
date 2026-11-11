@@ -5,7 +5,7 @@ Active proposals and their execution steps are kept here. The [Roadmap](../refer
 | Plan | Scope | Status |
 | --- | --- | --- |
 | [UI implementation](implementation-plan-ui.md) | Web interface | Proposed |
-| [VM idle reclamation](implementation-plan-vm-idle-reclamation.md) | Production VM idle mitigation | Proposed |
+| [MVP UX improvements](implementation-plan-mvp-ux.md) | Small client-side usability additions included in the UI phases | Proposed |
 
 **Rule:** when a plan is fully executed, delete its file and its links in the same change; executed plans stay in Git history.
 

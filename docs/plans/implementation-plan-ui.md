@@ -2,14 +2,11 @@
 
 > **Lifecycle:** when this plan has been fully executed, delete this file in the same change and drop its links from the other plans, the plans README, and the Roadmap.
 
-Status: proposed; technical decisions confirmed by the project owner on 2026-11-09. This is one of the independent plans:
-
-| Plan | Scope |
-| --- | --- |
-| **This plan** | The web UI. |
-| [VM Idle-Reclamation Plan](implementation-plan-vm-idle-reclamation.md) | Reviewing idle-reclamation behavior for the planned VM. |
+Status: proposed; technical decisions confirmed by the project owner on 2026-11-09. This plan owns the web UI implementation.
 
 Facts about the live API stay in the controllers, OpenAPI, and the [engineering reference](../reference/engineering-reference.md). The loan lifecycle is in the [Loan Implementation Guide](../guides/loan.md). Backend work found while planning is **not** listed here; it was tracked in the now-executed backend plan, and each UI phase below names the backend item it depends on.
+
+The [MVP UX Improvements Plan](implementation-plan-mvp-ux.md) adds small client-side usability improvements to these phases. It uses existing endpoints and components and does not create a separate release phase.
 
 ## 1. Goals and principles
 
@@ -18,6 +15,8 @@ Facts about the live API stay in the controllers, OpenAPI, and the [engineering 
 3. **Use standard tools for operations** (Prometheus/Grafana, Swagger UI). Build custom pages only where no standard tool fits.
 4. **The UI is not a security boundary.** It hides what a role cannot do; the server's route gates and `UserAccessPolicy` stay authoritative.
 5. **Academic, dark-first and accessible**: the Libro logo and its greens drive a calm reading-room design (section 5), dark by default, and every color pair meets WCAG 2.2 AA.
+
+The MVP also includes the client-side improvements in the [MVP UX Improvements Plan](implementation-plan-mvp-ux.md): smoother catalog search, easier filter recovery, clearer form feedback, and accessible action status.
 
 ## 2. Confirmed technical decisions
 
@@ -474,6 +473,7 @@ The book form fields and limits: title max 100, author max 50, genre max 50, des
 ## 8. Cross-cutting behavior
 
 - **Stale permissions**: a role change or account deletion does not revoke an issued token for about 15 minutes. Treat an unexpected 403 on a previously allowed action as a reason to refresh `/me`, and a 404 on `/me` as a sign-out.
+- **Action feedback**: announce success and failure messages to assistive technology, show a concise success toast after completed actions, and preserve the server's field errors. Keep mutation buttons disabled while requests are in flight; never retry mutations automatically.
 - **Security headers**: set a strict CSP (no inline scripts, self-hosted fonts), `frame-ancestors 'none'`, `Referrer-Policy: no-referrer` and `X-Content-Type-Options` in `infra/caddy/Caddyfile` for the UI.
 - **No secrets in the browser**: never store tokens or passwords in web storage, URLs, logs, or analytics. Never put a university ID or token in a query string that is not already part of an API contract.
 - **Idempotent buttons**: disable a submit button while its request is in flight so a double click cannot double-borrow; the server stays the authority.
@@ -491,11 +491,12 @@ Each phase ends in a mergeable PR with tests and a working demo against `seed-de
 - Done when: an empty authenticated shell with the logo, both themes, the `BookCover` snapshot set and a passing axe check loads through Caddy.
 
 ### Phase 1: Authentication (no backend change needed)
-- Sign in, register with the course and major logic and live password hints, forced password change, sign out.
+- Sign in, register with the course and major logic and live password hints, a show/hide password control, forced password change, sign out, and focus the first invalid field after submission.
 - Tests: wrong password, 429 countdown, expired-token redirect, forced-change guard, field-error mapping.
 
 ### Phase 2: Catalog and book detail (needs BE-1 and BE-2 for the full experience)
-- Catalog grid and list views with generated covers, filters drawer, sort and pagination with URL-synced state; book detail with the catalog card and loan-slot diagram; Borrow with each rule failure explained from its error code. Run the 5-second cover scan test (5.7) before finishing the phase.
+- Catalog grid and list views with generated covers, 300 ms debounced text search, filters drawer, sort and pagination with URL-synced state, visible result count, active-filter chips and a clear-all action; changing filters resets to page one. Book detail uses the catalog card and loan-slot diagram; Borrow explains each rule failure from its error code. Run the 5-second cover scan test (5.7) before finishing the phase.
+- Offer a manual retry for failed catalog reads and a clear-filters action for empty results; never automatically retry a borrow or other mutation.
 - Ship first with copy status only if BE-1 is not ready; add availability when it lands.
 
 ### Phase 3: My account and loans
@@ -530,6 +531,7 @@ Each phase ends in a mergeable PR with tests and a working demo against `seed-de
 ## 11. Definition of done
 
 - Each page works for exactly the roles in section 7, follows its wireframe in section 6, and has loading, empty, error, 401, 403, 404, 409 and 429 states.
+- Complete the catalog, form, and accessible feedback items in the [MVP UX Improvements Plan](implementation-plan-mvp-ux.md) within their respective UI phases.
 - Component tests cover role gating and error mapping; one Playwright journey covers register, sign in, search, borrow, return, and a staff lost-resolution.
 - `permissions.ts` has a test asserting it matches the backend matrix for every listed route.
 - The contrast test and axe checks pass in both themes, and the `BookCover` snapshot test covers every cloth color and pattern.
