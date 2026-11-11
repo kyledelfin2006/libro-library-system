@@ -685,6 +685,7 @@ Test sources mirror the main packages under `src/test/java/app/`: a test lives i
 
 - `UserServiceTest`: Mockito-based service unit tests for partial-update normalization, validation, password verification and encoding, the BCrypt 72 UTF-8 byte boundary, unchanged-email handling, duplicate-email rejection, missing-user handling, and dirty-checking expectations.
 - `LoanServiceTest`: Mockito-based service tests for student/faculty checkout, overdue and three-active-loan limits, copy availability, return ownership and terminal state, staff lost-resolution scope, history access, sorting, and page-size bounds.
+- `LoanAggregatesTest`: Mockito-based tests for staff chart aggregates: typed-projection mapping, zero-filled Manila weeks, the rolling top-title window, bounds validation, and librarian versus assistant scope.
 
 - `BookServiceTest`: Mockito-based service unit tests for CRUD rules, text normalization, entity-validation enforcement, replacement-cost range validation, dirty-checking expectations, search, sorting, replacement-cost statistics, typed projections, genre distribution, and other aggregate behavior.
 - `BookTest`: entity-construction, lifecycle, and direct Jakarta Validator tests for request DTO and entity constraints.
@@ -692,6 +693,7 @@ Test sources mirror the main packages under `src/test/java/app/`: a test lives i
 - `GlobalExceptionHandlerTest`: direct unit tests for exception handlers, including status/error contracts, DTO/entity/service validation handling, and non-leakage of internal parser, database, constraint, and fallback exception details.
 - `BookPersistenceIT`: PostgreSQL 18 integration tests for Flyway migrations, Hibernate schema validation, repository queries and projections, committed service updates, and a catalog edit waiting for lost-loan resolution while preserving the committed `LOST` copy status.
 - `LoanPersistenceIT`: PostgreSQL integration tests for staff loan query counts and filters, committed return history, the one-active-loan-per-copy index, and foreign-key deletion restrictions.
+- `LoanReportingIT`: PostgreSQL integration test that the native weekly-activity and top-title queries map their aliased columns to the typed projections, with role scope and aggregation checks.
 - `LoanMigrationIT`: isolated PostgreSQL V3-to-V4 upgrade with retained user/book rows, loan indexes and constraints, and V4 Hibernate schema validation.
 - `UserPersistenceIT`: PostgreSQL integration tests for normalized creation, stored hashes, committed updates, and uniqueness/format constraints.
 - `UserMigrationIT`: PostgreSQL V5-to-V6 upgrade with an existing account, the false default, and Hibernate validation of the new column.
