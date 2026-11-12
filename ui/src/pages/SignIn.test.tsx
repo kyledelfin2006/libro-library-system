@@ -1,29 +1,15 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
 import { afterEach, vi } from 'vitest';
-import { App } from '../App';
 import { setAccessToken } from '../api/client';
-import { AuthProvider } from '../auth/AuthProvider';
-import { ToastProvider } from '../components/Toast';
-import { ThemeProvider } from '../theme/ThemeProvider';
+import { renderAt } from '../test/render';
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), { status, headers });
 }
 
 function renderApp(path = '/signin') {
-  return render(
-    <ThemeProvider>
-      <MemoryRouter initialEntries={[path]}>
-        <ToastProvider>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
-        </ToastProvider>
-      </MemoryRouter>
-    </ThemeProvider>,
-  );
+  return renderAt(path, null);
 }
 
 const me = (over: Record<string, unknown> = {}) => ({
@@ -81,17 +67,21 @@ describe('sign in', () => {
 
   it('loads the profile after login and lands on the role home', async () => {
     const user = userEvent.setup();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json(200, { success: true, data: { accessToken: 't', tokenType: 'Bearer', expiresIn: 900, mustChangePassword: false } }))
-      .mockResolvedValueOnce(json(200, { success: true, data: me() }));
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/app/auth/login') {
+        return Promise.resolve(json(200, { success: true, data: { accessToken: 't', tokenType: 'Bearer', expiresIn: 900, mustChangePassword: false } }));
+      }
+      if (url === '/app/users/me') return Promise.resolve(json(200, { success: true, data: me() }));
+      if (url.startsWith('/app/books/genre')) return Promise.resolve(json(200, { success: true, data: {} }));
+      return Promise.resolve(json(200, { success: true, data: { content: [], number: 0, size: 12, totalElements: 0, totalPages: 0 } }));
+    });
     vi.stubGlobal('fetch', fetchMock);
     renderApp();
     await user.type(screen.getByLabelText('University ID'), '2025-4321');
     await user.type(screen.getByLabelText('Password'), 'Library#2026');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(await screen.findByRole('heading', { name: 'Catalog' })).toBeInTheDocument();
-    expect((fetchMock.mock.calls[1] as [string])[0]).toBe('/app/users/me');
+    expect(fetchMock.mock.calls.map((c) => c[0])).toContain('/app/users/me');
   });
 
   it('keeps a user with a reset password on the change-password screen', async () => {

@@ -18,4 +18,15 @@ export type SignupRequest = Omit<Schemas['UserCreateRequestDTO'], 'userRole' | '
 export type LoginRequest = Schemas['LoginRequestDTO'];
 export type PasswordChangeRequest = Schemas['PasswordChangeRequestDTO'];
 export type BookResponse = RequiredFields<Schemas['BookResponseDTO'], 'id' | 'title' | 'author' | 'genre'>;
+export type LoanResponse = RequiredFields<Schemas['LoanResponseDTO'],
+  'loanId' | 'bookId' | 'bookTitle' | 'borrowedAt' | 'dueAt' | 'status' | 'overdue'>;
 export type ErrorBody = Schemas['ErrorResponse'];
+
+/** Spring Data page as the API serializes it, with the fields the UI reads made required. */
+export interface Page<T> {
+  content: T[];
+  number: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}

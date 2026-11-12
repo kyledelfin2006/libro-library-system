@@ -19,8 +19,9 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  * Holds the signed-in user in memory only. The profile (and its role) comes from GET /app/users/me, never from the
  * token. A reload means signing in again by design (no refresh tokens).
  */
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<UserResponse | null>(null);
+export function AuthProvider({ children, initialUser = null }: { children: ReactNode; initialUser?: UserResponse | null }) {
+  // initialUser is a seam for tests; production always starts signed out.
+  const [user, setUser] = useState<UserResponse | null>(initialUser);
   const [sessionExpired, setSessionExpired] = useState(false);
 
   const clear = useCallback(() => {

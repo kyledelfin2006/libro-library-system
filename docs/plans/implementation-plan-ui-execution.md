@@ -8,7 +8,7 @@ Facts about the live API stay in the controllers, OpenAPI, and the [engineering 
 
 ## Progress
 
-Built in `ui/` (typecheck, lint, 85 Vitest tests, and the production build pass; CI job `ui-test` runs them):
+Built in `ui/` (typecheck, lint, 123 Vitest tests, and the production build pass; CI job `ui-test` runs them):
 - **Step 1:** Vite/React 19/strict TypeScript scaffold; dark-first tokens (text, chart, and status colors) with a WCAG contrast test in both themes; theme switch; typed API client (envelope unwrapping, `ErrorResponse` normalization, in-memory token, 401 handler, `Retry-After`); DTO types generated from the live OpenAPI document and checked for drift by CI; `permissions.ts` with a matrix test; brand pipeline (`npm run build:brand`: lockup sizes, favicon set from the book glyph, social image); `BookCover`; shared components (Button, TextField, Chip, Skeleton, EmptyState, ErrorState, Pagination, Dialog, Toast, `<Can>`); in-house SVG bar, stacked-bar, and line charts with "View as table"; loan-slot and lifecycle diagrams; authenticated shell; Caddy serves `ui/dist` with SPA fallback, a strict CSP, and proxies `/app/*`, probes, and API docs; axe checks on the public pages in both themes.
 - **Step 2:** sign in (profile loaded from `/me`, 429 countdown, show/hide password, first-invalid-field focus), student registration with course/major logic and live password checklist, forced password change guard.
 
@@ -17,7 +17,9 @@ Still open in Step 1:
 - **Deployment.** CD does not yet build `ui/dist` into the deployed Caddy; only the local `proxy` Compose profile mounts it. `style-src` allows `'unsafe-inline'` because React sets inline styles on covers and charts.
 - Page-level skeletons, `BookCover` visual snapshots, and the Request-path and Who-can-do-what diagrams arrive with the steps that use them.
 
-Steps 3 to 8 are not started; pages for them are placeholders.
+- **Step 3 (built):** catalog grid and list views with generated covers; title search debounced 300 ms; filters panel (author, genre, cost range, available only); sort and pagination; all state in the URL; result count, removable filter chips and clear-all; empty state with clear filters; manual retry on a failed read; replacement cost on cards for staff only. Book detail has the catalog card, Borrow for STUDENT and FACULTY only (disabled with the reason for overdue, limit, on-loan, and no action for a lost copy), the loan-slot diagram, and error copy chosen by stable `code`. Search matches titles only, because the query endpoint ANDs the title, author, and genre filters, so one box cannot match any of them. Staff Edit and Delete on book detail arrive with Inventory in Step 5. Not done: the 5-second cover scan user test, and record cards for the list view below 640 px.
+
+Steps 4 to 8 are not started; pages for them are placeholders.
 
 ## 1. Goals and principles
 
