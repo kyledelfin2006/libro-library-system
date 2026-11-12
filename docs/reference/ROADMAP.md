@@ -90,7 +90,7 @@ Before changing a migration, establish whether that version has been applied to 
 - [x] Layer a `test` profile over the real configuration instead of shadowing it.
 - [x] Keep configuration defaults in one place; simplify the Compose environment and `.env.example`.
 - [x] Layered Docker image with a single health check; one shared Trivy script for CI and CD; CI jobs `unit-test`, `integration-test`, `security-scan`, and `ui-test`, with backend unit tests running once.
-- [ ] Protect `main`: require PRs and all four CI checks, including `ui-test`; block force-pushes and deletion; administrators may bypass (see [CI/CD and DevOps](../devops/ci-cd.md#branch-protection)). Verify the live GitHub rule after the UI job first runs.
+- [x] Protect `main`: require PRs and all four CI checks, including `ui-test`; block force-pushes and deletion; administrators may bypass (see [CI/CD and DevOps](../devops/ci-cd.md#branch-protection)).
 
 ## Active implementation plans
 
