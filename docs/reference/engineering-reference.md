@@ -38,13 +38,14 @@ library-api-system/
 |-- AGENTS.md, README.md, LICENSE
 |-- pom.xml, mvnw, mvnw.cmd, .mvn/wrapper/   Maven Wrapper; always build with ./mvnw
 |-- Dockerfile                               multi-stage, layered runtime image
+|-- ui/                                      React/Vite frontend; generated OpenAPI types and Vitest checks
 |-- docker-compose.yml                       local stack: db + app (+ optional `proxy` profile)
 |-- .env.example                             environment template (required vs optional values)
 |-- .editorconfig, .gitattributes, .dockerignore, .trivyignore
 |-- .github/
 |   |-- dependabot.yml
 |   `-- workflows/
-|       |-- ci.yml                           unit-test, integration-test, security-scan
+|       |-- ci.yml                           unit-test, integration-test, security-scan, ui-test
 |       `-- cd.yml                           ARM64 image build/scan/publish, gated SSH deploy
 |-- infra/
 |   |-- docker-compose.prod.yml              production override for a single VM
@@ -584,6 +585,8 @@ Docker Compose does not mount migrations into `/docker-entrypoint-initdb.d`; Fly
 
 ### Local build and tests
 
+The in-progress web UI lives in `ui/`. After starting the API, run `npm ci` and `npm run dev` there. Vite proxies `/app`, `/livez`, and `/readyz` to the API. With `LIBRO_API_DOCS_ENABLED=true` on the API, `npm run gen:api` regenerates `ui/src/api/schema.d.ts` (set `LIBRO_OPENAPI_URL` for another host or port). Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build`; CI runs the same checks and fails if regeneration changes the committed schema. The local Caddy profile mounts `ui/dist`; production CD does not yet build or ship that directory.
+
 ```powershell
 .\mvnw.cmd clean test
 .\mvnw.cmd clean verify
@@ -622,8 +625,9 @@ Persistent data lives in the `postgres_data` Docker volume. `docker compose down
 | `unit-test` | `./mvnw -B -ntp verify` | Docker-free unit and MVC suite with the 80% JaCoCo gate; uploads reports. |
 | `integration-test` | `./mvnw -B -ntp -Pintegration -DskipUTs -Djacoco.haltOnFailure=false verify` | Only the PostgreSQL suite through Testcontainers, including `LoanConcurrencyIT`. Unit tests already ran in `unit-test`. |
 | `security-scan` | `scripts/ci/trivy-scan.sh fs`, then `image` | Fails on HIGH/CRITICAL findings with a fix available, in dependencies and in the built image. Accepted findings go in `.trivyignore` with an expiry note; the same script gates the CD image. |
+| `ui-test` | `npm ci`, `npm run gen:api`, typecheck, lint, tests, build | Starts a disposable PostgreSQL service and test-profile API, rejects generated type drift, then validates the UI. |
 
-Require all three checks in branch protection for `main`. `.github/dependabot.yml` opens weekly update pull requests for Maven, Docker and GitHub Actions; raise Spring Boot-managed libraries through the parent version, not individually.
+Require all four checks in branch protection for `main`. `.github/dependabot.yml` opens weekly update pull requests for Maven, Docker and GitHub Actions; raise Spring Boot-managed libraries through the parent version, not individually.
 
 ## Design Patterns and Rationale
 

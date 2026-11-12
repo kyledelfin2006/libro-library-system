@@ -1,0 +1,76 @@
+/* Design tokens from UI plan section 5.4. Dark is the default theme; light ("paper") is opt-in. */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #0c1611;
+  --color-surface: #121f17;
+  --color-surface-raised: #192a20;
+  --color-text: #ede9dc;
+  --color-text-muted: #b4bfb4;
+  --color-primary: #4db82a;
+  --color-primary-hover: #6fd04a;
+  --color-on-primary: #0b1a10;
+  --color-primary-subtle: #1b3324;
+  --color-brass: #d2ae63;
+  --color-border: #27392e;
+  --color-border-input: #7f9486;
+  --color-danger: #ff8a80;
+  --color-warning: #ffd27a;
+  --color-warning-bg: #2a2310;
+  --color-info: #8ab8f0;
+  --focus-ring: #6fd04a;
+  --chart-1: #4db82a;
+  --chart-2: #d2ae63;
+  --chart-3: #6fa8dc;
+  --chart-4: #b59ce6;
+  --chart-5: #45c2b0;
+  --status-active: #4db82a;
+  --status-overdue: #ffb84d;
+  --status-returned: #8fa597;
+  --status-lost: #ff8a80;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --color-bg: #f7f4ec;
+  --color-surface: #fffdf8;
+  --color-surface-raised: #ffffff;
+  --color-text: #1a241d;
+  --color-text-muted: #4d5a50;
+  --color-primary: #008040;
+  --color-primary-hover: #006b36;
+  --color-on-primary: #ffffff;
+  --color-primary-subtle: #e3f3e8;
+  --color-brass: #7a5a12;
+  --color-border: #d9d3c3;
+  --color-border-input: #6b7b70;
+  --color-danger: #b3261e;
+  --color-warning: #7a4f00;
+  --color-warning-bg: #fff3d6;
+  --color-info: #1f5fa8;
+  --focus-ring: #008040;
+  --chart-1: #008040;
+  --chart-2: #7a5a12;
+  --chart-3: #1f5fa8;
+  --chart-4: #6a4bb5;
+  --chart-5: #0e7a6b;
+  --status-active: #008040;
+  --status-overdue: #7a4f00;
+  --status-returned: #566b5e;
+  --status-lost: #b3261e;
+}
+
+:root {
+  --font-serif: 'Source Serif 4 Variable', Georgia, 'Times New Roman', serif;
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --radius-control: 6px;
+  --radius-panel: 10px;
+}

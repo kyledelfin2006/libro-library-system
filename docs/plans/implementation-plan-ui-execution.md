@@ -2,9 +2,22 @@
 
 > **Lifecycle:** when this plan has been fully executed, delete this file in the same change and drop its links from the other plans, the plans README, and the Roadmap.
 
-Status: proposed; technical decisions confirmed by the project owner on 2026-11-09. This is the single execution plan for the web UI MVP.
+Status: in progress (Step 1 partly and Step 2 built in `ui/`; see "Progress" below); technical decisions confirmed by the project owner on 2026-11-09. This is the single execution plan for the web UI MVP.
 
 Facts about the live API stay in the controllers, OpenAPI, and the [engineering reference](../reference/engineering-reference.md). The loan lifecycle is in the [Loan Implementation Guide](../guides/loan.md). Backend additions required by the UI are already implemented; each UI step names any dependency.
+
+## Progress
+
+Built in `ui/` (typecheck, lint, 85 Vitest tests, and the production build pass; CI job `ui-test` runs them):
+- **Step 1:** Vite/React 19/strict TypeScript scaffold; dark-first tokens (text, chart, and status colors) with a WCAG contrast test in both themes; theme switch; typed API client (envelope unwrapping, `ErrorResponse` normalization, in-memory token, 401 handler, `Retry-After`); DTO types generated from the live OpenAPI document and checked for drift by CI; `permissions.ts` with a matrix test; brand pipeline (`npm run build:brand`: lockup sizes, favicon set from the book glyph, social image); `BookCover`; shared components (Button, TextField, Chip, Skeleton, EmptyState, ErrorState, Pagination, Dialog, Toast, `<Can>`); in-house SVG bar, stacked-bar, and line charts with "View as table"; loan-slot and lifecycle diagrams; authenticated shell; Caddy serves `ui/dist` with SPA fallback, a strict CSP, and proxies `/app/*`, probes, and API docs; axe checks on the public pages in both themes.
+- **Step 2:** sign in (profile loaded from `/me`, 429 countdown, show/hide password, first-invalid-field focus), student registration with course/major logic and live password checklist, forced password change guard.
+
+Still open in Step 1:
+- **Playwright and the in-browser axe run.** jsdom axe skips color contrast (the token test covers it); the Playwright smoke journey is not set up.
+- **Deployment.** CD does not yet build `ui/dist` into the deployed Caddy; only the local `proxy` Compose profile mounts it. `style-src` allows `'unsafe-inline'` because React sets inline styles on covers and charts.
+- Page-level skeletons, `BookCover` visual snapshots, and the Request-path and Who-can-do-what diagrams arrive with the steps that use them.
+
+Steps 3 to 8 are not started; pages for them are placeholders.
 
 ## 1. Goals and principles
 
@@ -194,7 +207,7 @@ Rules:
 
 | Element | Derived from | Detail |
 | --- | --- | --- |
-| Cloth color | `genre` | A stable hash of the lowercased genre picks one of eight muted cloth colors: `#1F4D3A`, `#2E4A62`, `#5A2E3A`, `#4A3B6B`, `#6B4A1F`, `#3A4A22`, `#1F5560`, `#5C3A2A`. Each holds ivory text (`#F4EFE0`) at 7.0:1 or better. Same genre, same color, so a shelf of one genre reads as a set. |
+| Cloth color | `genre` | A stable hash of the lowercased genre picks one of eight muted cloth colors: `#1F4D3A`, `#2E4A62`, `#5A2E3A`, `#4A3B6B`, `#674619`, `#3A4A22`, `#1F5560`, `#5C3A2A`. Each holds ivory text (`#F4EFE0`) at 7.0:1 or better. Same genre, same color, so a shelf of one genre reads as a set. |
 | Pattern | `id` | The copy ID picks one of four quiet brass-on-cloth treatments (plain, double border, ruled lines, corner ornaments), so duplicate titles and neighbors look different without noise. |
 | Title | `title` | Source Serif 4, centered, up to four lines with an ellipsis; the full title is always in the card text below, so nothing is lost by clamping. |
 | Author | `author` | Surname in brass small caps near the foot. |

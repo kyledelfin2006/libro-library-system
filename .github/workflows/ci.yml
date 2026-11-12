@@ -1,11 +1,12 @@
 # CI for the Libro Library API (GitHub Actions).
 #
-# Three independent jobs run in parallel; any failure fails the workflow:
+# Four independent jobs run in parallel; any failure fails the workflow:
 #   unit-test         unit + MVC tests and the 80% JaCoCo line-coverage gate (fast, no Docker)
 #   integration-test  only the PostgreSQL *IT suite, via Testcontainers (unit tests are skipped here; see below)
 #   security-scan     Trivy: dependency manifests, then the built container image
+#   ui-test           web UI (ui/): generated API type drift, typecheck, lint, unit tests, production build
 #
-# Branch protection should require exactly these three check names before merging to main.
+# Branch protection should require all four check names before merging to main.
 name: CI
 
 on:
@@ -100,3 +101,71 @@ jobs:
         run: docker build -t libro-api:ci .
       - name: Scan image
         run: scripts/ci/trivy-scan.sh image libro-api:ci
+
+  ui-test:
+    name: ui-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395
+        env:
+          POSTGRES_DB: libro_contract
+          POSTGRES_USER: libro_contract
+          POSTGRES_PASSWORD: contract_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U libro_contract -d libro_contract"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Set up Java 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Install dependencies
+        run: npm ci
+      - name: Check generated API types against the test API
+        working-directory: .
+        env:
+          SPRING_PROFILES_ACTIVE: test
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/libro_contract
+          SPRING_DATASOURCE_USERNAME: libro_contract
+          SPRING_DATASOURCE_PASSWORD: contract_only
+          LIBRO_API_DOCS_ENABLED: 'true'
+        run: |
+          export LIBRO_ADMIN_PASSWORD_HASH="$(sed -n 's/^spring.flyway.placeholders.adminPasswordHash=//p' src/test/resources/application-test.properties)"
+          export LIBRO_JWT_SECRET_BASE64="$(sed -n 's/^libro.security.jwt.secret-base64=//p' src/test/resources/application-test.properties)"
+          ./mvnw -B -ntp -DskipTests -Dspring-boot.run.useTestClasspath=true spring-boot:run > "$RUNNER_TEMP/libro-api.log" 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for attempt in {1..90}; do
+            if curl --fail --silent --output /dev/null http://localhost:8080/v3/api-docs; then ready=true; break; fi
+            sleep 2
+          done
+          if [ "$ready" != true ]; then cat "$RUNNER_TEMP/libro-api.log"; exit 1; fi
+          cd ui
+          npm run gen:api
+          git diff --exit-code -- src/api/schema.d.ts
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit, contrast and accessibility tests
+        run: npm test
+      - name: Build
+        run: npm run build

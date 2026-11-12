@@ -119,6 +119,8 @@ services:
       - "443:443"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # The static UI build (`cd ui && npm ci && npm run build`). Without it the proxy still serves the API.
+      - ./ui/dist:/srv/ui:ro
       # Persists issued certificates so restarts do not request new ones.
       - caddy_data:/data
     mem_limit: 128m
