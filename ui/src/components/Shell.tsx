@@ -22,7 +22,7 @@ export function Shell() {
         <nav aria-label="Primary">
           {staff && <NavLink to="/dashboard">Dashboard</NavLink>}
           <NavLink to="/catalog">Catalog</NavLink>
-          {!staff && <NavLink to="/loans">My Loans</NavLink>}
+          <NavLink to="/loans">My Loans</NavLink>
           <NavLink to="/account">My Account</NavLink>
         </nav>
         <div className="shell-tools">

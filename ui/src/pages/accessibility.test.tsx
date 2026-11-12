@@ -7,7 +7,7 @@ function stubCatalog() {
     '/app/books/query': () => ok(pageOf([book(), book({ id: 2, title: 'Emma', available: false })])),
     '/app/books/genre': () => ok({ 'Sci-fi': 1 }),
     '/app/books/1': () => ok(book()),
-    '/app/loans/me': () => ok(pageOf([])),
+    '/app/loans/me': () => ok(pageOf([{ loanId: 5, bookId: 9, bookTitle: 'Emma', borrowedAt: '2026-11-01T10:00:00', dueAt: '2099-01-15T10:00:00', status: 'ACTIVE', overdue: false }])),
   });
 }
 
@@ -20,11 +20,11 @@ describe.each(['dark', 'light'])('axe (%s theme)', (theme) => {
     expect(await seriousViolations(container)).toEqual([]);
   });
 
-  it.each(['/catalog', '/catalog/1'])('%s has no serious or critical violations', async (path) => {
+  it.each(['/catalog', '/catalog/1', '/loans', '/account'])('%s has no serious or critical violations', async (path) => {
     document.documentElement.dataset.theme = theme;
     stubCatalog();
     const { container, findAllByText } = renderAt(path);
-    await findAllByText(/Dune/);
+    await findAllByText(/Dune|Emma|My account/);
     expect(await seriousViolations(container)).toEqual([]);
   });
 });

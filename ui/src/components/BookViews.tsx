@@ -31,16 +31,16 @@ export function BookCard({ book, showCost }: { book: BookResponse; showCost: boo
 export function BookRow({ book, showCost }: { book: BookResponse; showCost: boolean }) {
   return (
     <tr>
-      <td>
+      <td className="cell-cover">
         <BookCover book={cover(book)} size="sm" />
       </td>
-      <th scope="row">
+      <th scope="row" data-label="Title">
         <Link to={`/catalog/${book.id}`}>{book.title}</Link>
       </th>
-      <td>{book.author}</td>
-      <td>{book.genre}</td>
-      {showCost && <td>{formatCost(book.replacementCost)}</td>}
-      <td>
+      <td data-label="Author">{book.author}</td>
+      <td data-label="Genre">{book.genre}</td>
+      {showCost && <td data-label="Cost">{formatCost(book.replacementCost)}</td>}
+      <td data-label="Status">
         <BookBadge book={book} />
       </td>
     </tr>

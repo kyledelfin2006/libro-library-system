@@ -126,3 +126,27 @@
 .catalog-card dt { color: var(--color-brass); font-variant: small-caps; letter-spacing: 0.08em; text-transform: lowercase; }
 .catalog-card dd { margin: 0; }
 .borrow { margin: var(--space-4) 0; }
+
+/* Tabs, panels, account */
+.tabs { display: flex; gap: var(--space-2); border-bottom: 1px solid var(--color-border); margin: var(--space-5) 0 var(--space-4); }
+.tab { min-height: 44px; padding: 0 var(--space-4); background: none; border: 0; border-bottom: 2px solid transparent; color: var(--color-text-muted); font: inherit; font-weight: 600; cursor: pointer; }
+.tab[aria-selected='true'] { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+.loan-table { width: 100%; border-collapse: collapse; }
+.loan-table th, .loan-table td { text-align: left; padding: var(--space-3); border-bottom: 1px solid var(--color-border); vertical-align: middle; }
+.how-it-works { margin-top: var(--space-6); }
+.how-it-works summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.account-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-5); }
+@media (min-width: 1024px) { .account-grid { grid-template-columns: 1fr 1fr; } }
+.panel { padding: var(--space-5); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-panel); }
+.danger-zone { margin-top: var(--space-6); border-color: var(--color-danger); }
+.form-actions { display: flex; gap: var(--space-3); }
+
+/* Below 640 px a table becomes record cards: each row is a card of label and value pairs. */
+@media (max-width: 639px) {
+  .record-cards thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .record-cards, .record-cards tbody, .record-cards tr, .record-cards th, .record-cards td { display: block; width: 100%; }
+  .record-cards tr { padding: var(--space-3); margin-bottom: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); }
+  .record-cards th, .record-cards td { border: 0; padding: var(--space-1) 0; }
+  .record-cards [data-label]::before { content: attr(data-label); display: inline-block; min-width: 96px; color: var(--color-brass); font-variant: small-caps; letter-spacing: 0.06em; }
+  .record-cards .cell-cover { display: none; }
+}

@@ -22,6 +22,11 @@ export function formatDate(local: string): string {
   return `${weekday} ${p.d} ${MONTHS[p.m - 1]} ${p.y}`;
 }
 
+/** "Sat 14 Nov 2026, 15:30" for a Manila local date-time string (the page footer says times are Manila time). */
+export function formatDateTime(local: string): string {
+  return `${formatDate(local)}, ${local.slice(11, 16)}`;
+}
+
 /** Today's calendar date in Manila, whatever the browser's time zone. */
 export function manilaToday(now: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(now); // YYYY-MM-DD

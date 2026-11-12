@@ -1,9 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { PublicOnly, RequireAuth } from './auth/RouteGuards';
 import { Shell } from './components/Shell';
+import { Account } from './pages/Account';
 import { BookDetail } from './pages/BookDetail';
 import { Catalog } from './pages/Catalog';
 import { ChangePassword } from './pages/ChangePassword';
+import { MyLoans } from './pages/MyLoans';
 import { Placeholder } from './pages/Placeholder';
 import { Register } from './pages/Register';
 import { SignIn } from './pages/SignIn';
@@ -21,8 +23,8 @@ export function App() {
         <Route element={<Shell />}>
           <Route path="/catalog" element={<Catalog />} />
           <Route path="/catalog/:id" element={<BookDetail />} />
-          <Route path="/loans" element={<Placeholder title="My Loans" step={4} />} />
-          <Route path="/account" element={<Placeholder title="My Account" step={4} />} />
+          <Route path="/loans" element={<MyLoans />} />
+          <Route path="/account" element={<Account />} />
           <Route element={<RequireAuth capability="staffDashboard" />}>
             <Route path="/dashboard" element={<Placeholder title="Dashboard" step={5} />} />
           </Route>

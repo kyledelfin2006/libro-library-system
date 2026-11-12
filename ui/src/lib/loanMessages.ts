@@ -29,7 +29,20 @@ export function borrowSuccessMessage(loan: LoanResponse): string {
   return `Borrowed. Due ${formatDate(loan.dueAt)}, ${daysUntil(loan.dueAt)} days from today.`;
 }
 
-export type BorrowBlock = 'overdue' | 'limit' | null;
+/** Failed return: another borrower's loan is a 404 by design, so the copy says "not found" and never confirms it exists. */
+export function returnErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.code === 'LOAN_NOT_ACTIVE') return LOAN_COPY.LOAN_NOT_ACTIVE!;
+    if (error.status === 404) return 'This loan could not be found.';
+    if (error.status === 0) return error.message;
+    if (error.status >= 500) {
+      return `Something went wrong on our side.${error.requestId ? ` Reference: ${error.requestId.slice(0, 8)}.` : ''}`;
+    }
+  }
+  return 'The book could not be returned. Try again.';
+}
+
+export type BorrowBlock ='overdue' | 'limit' | null;
 
 /** The same rules the server enforces, used only to explain a disabled Borrow button; the server still decides. */
 export function borrowBlock(loans: Pick<LoanResponse, 'status' | 'overdue'>[]): BorrowBlock {

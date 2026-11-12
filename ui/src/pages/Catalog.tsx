@@ -171,7 +171,7 @@ export function Catalog() {
               ))}
             </ul>
           ) : (
-            <table className="book-table">
+            <table className="book-table record-cards">
               <thead>
                 <tr>
                   <th scope="col"><span className="visually-hidden">Cover</span></th>
