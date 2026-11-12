@@ -4,7 +4,7 @@ Libro is validated by an implemented GitHub Actions pipeline and packaged as a c
 
 | Area | Status |
 | --- | --- |
-| Continuous integration (`unit-test`, `integration-test`, `security-scan`) | Implemented in [`ci.yml`](../../.github/workflows/ci.yml) |
+| Continuous integration (`unit-test`, `integration-test`, `security-scan`, `ui-test`) | Implemented in [`ci.yml`](../../.github/workflows/ci.yml) |
 | Container image and Compose stack with health checks | Implemented ([Dockerfile](../../Dockerfile), [docker-compose.yml](../../docker-compose.yml)) |
 | TLS reverse proxy (Caddy) | Implemented as an opt-in Compose profile |
 | Operations scripts: deploy with rollback, smoke test, backup and restore, demo seed ([`scripts/`](../../scripts/)) | Implemented; rehearsed against a local Docker stack, not yet on a VM |
@@ -18,7 +18,7 @@ Libro is validated by an implemented GitHub Actions pipeline and packaged as a c
 
 ```mermaid
 flowchart LR
-    PR[Pull request] --> CI[unit-test, integration-test, security-scan]
+    PR[Pull request] --> CI[unit-test, integration-test, security-scan, ui-test]
     Main[Push to main] --> CI
     CI --> Image[Build and scan ARM64 image]
     Image --> Registry[Publish immutable commit-SHA image]
@@ -44,15 +44,16 @@ Design decisions and the reasons for them:
 
 ### Continuous integration (implemented)
 
-The workflow runs on GitHub-hosted Ubuntu runners for every pull request (any base branch) and every push to `main`. A newer run cancels a stale in-progress run for the same ref. The three jobs run in parallel and any failure fails the workflow.
+The workflow runs on GitHub-hosted Ubuntu runners for every pull request (any base branch) and every push to `main`. A newer run cancels a stale in-progress run for the same ref. The four jobs run in parallel and any failure fails the workflow.
 
 | Job | Timeout | What it checks |
 | --- | ---: | --- |
 | `unit-test` | 15 min | `./mvnw -B -ntp verify`: unit and MVC suite plus the JaCoCo 80% line-coverage floor. |
 | `integration-test` | 25 min | `./mvnw -B -ntp -Pintegration -DskipUTs -Djacoco.haltOnFailure=false verify`: only the PostgreSQL 18 suite through Testcontainers (`-DskipUTs` turns off Surefire, so unit tests do not run twice), covering Flyway migrations, Hibernate schema validation, and concurrent-checkout races. |
 | `security-scan` | 20 min | [`scripts/ci/trivy-scan.sh`](../../scripts/ci/trivy-scan.sh) scans dependency manifests and the built Docker image; it fails on fixable HIGH or CRITICAL findings. Accepted exceptions live in [`.trivyignore`](../../.trivyignore) with expiry comments. |
+| `ui-test` | 15 min | Starts a test-profile API with disposable PostgreSQL, regenerates UI types from OpenAPI and checks for drift, then runs typecheck, lint, Vitest, and the production build. |
 
-Controls: workflow permissions are `contents: read`, no deployment credentials exist in CI, third-party actions are pinned to commit SHAs, Trivy runs from its official image pinned by digest, and test reports are kept for 14 days. The scan policy (severity, `--ignore-unfixed`, `.trivyignore`) lives in one script that CI and CD both call, so the merge gate and the release gate cannot drift apart. Requiring all three checks before merging is a GitHub branch-protection setting, separate from the workflow file; see [Branch protection](#branch-protection).
+Controls: workflow permissions are `contents: read`, no deployment credentials exist in CI, third-party actions are pinned to commit SHAs, Trivy runs from its official image pinned by digest, and test reports are kept for 14 days. The scan policy (severity, `--ignore-unfixed`, `.trivyignore`) lives in one script that CI and CD both call, so the merge gate and the release gate cannot drift apart. Requiring all four checks before merging is a GitHub branch-protection setting, separate from the workflow file; see [Branch protection](#branch-protection).
 
 ### Branch protection
 
@@ -60,7 +61,7 @@ Controls: workflow permissions are `contents: read`, no deployment credentials e
 
 | Setting | Value | Why |
 | --- | --- | --- |
-| Required status checks | `unit-test`, `integration-test`, `security-scan` | Nothing merges unless the same three jobs this workflow runs have passed. |
+| Required status checks | `unit-test`, `integration-test`, `security-scan`, `ui-test` | Nothing merges unless the same four jobs this workflow runs have passed. |
 | Require a pull request | Yes, 0 required approvals | Direct pushes to `main` are rejected so every change passes CI first; no approval is required because the project has a single maintainer. |
 | Require branches to be up to date | No | Avoids forcing a rebase and a full CI rerun after each unrelated merge. |
 | Force pushes and branch deletion | Blocked | Protects `main` history. |

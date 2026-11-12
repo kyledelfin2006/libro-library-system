@@ -4,7 +4,7 @@ Active proposals and their execution steps are kept here. The [Roadmap](../refer
 
 | Plan | Scope | Status |
 | --- | --- | --- |
-| [UI execution](implementation-plan-ui-execution.md) | Numbered web UI MVP steps, including small usability improvements | Proposed |
+| [UI execution](implementation-plan-ui-execution.md) | Numbered web UI MVP steps, including small usability improvements | In progress (Steps 1-2 partly built) |
 
 **Rule:** when a plan is fully executed, delete its file and its links in the same change; executed plans stay in Git history.
 

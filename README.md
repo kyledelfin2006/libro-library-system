@@ -282,6 +282,8 @@ On a provisioned VM, use `scripts/deploy.sh` for a manual release or [the runboo
 
 Run `./mvnw verify` for unit/MVC tests and the 80% line-coverage gate. Run `./mvnw -Pintegration -DskipUTs -Djacoco.haltOnFailure=false verify` for the PostgreSQL suite (unit tests run once, in the first command); it needs Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH` in the shell environment, because Maven does not load Compose's `.env`. On Windows, use `mvnw.cmd`. The [Engineering Reference](docs/reference/engineering-reference.md#testing-strategy) explains test scope and where to add coverage.
 
+The web UI under `ui/` currently covers sign-in, student registration, and forced password changes. Start the API, then run `npm ci` and `npm run dev` from `ui/`; Vite proxies `/app`, `/livez`, and `/readyz` to the API. Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` for its local checks. With API docs enabled, `npm run gen:api` refreshes the checked-in TypeScript contract. Catalog, loan, account, and dashboard pages remain on the [UI execution plan](docs/plans/implementation-plan-ui-execution.md).
+
 ## Documentation
 
 | Start here for | Document |
@@ -302,6 +304,7 @@ Run `./mvnw verify` for unit/MVC tests and the 80% line-coverage gate. Run `./mv
 
 ```text
 src/             Spring Boot application (controllers, services, repositories, Flyway migrations) and tests
+ui/              React/Vite UI, generated API types, and frontend tests
 infra/           Production Compose override and the Caddy reverse-proxy configuration
 scripts/         Deploy, rollback, smoke-test, backup, restore, and demo-seed scripts
 docs/plans/      Proposed implementation plans; status is in the roadmap
@@ -326,7 +329,7 @@ Read the [Agent and Contributor Guide](AGENTS.md) before changing code or docume
 | Area | State |
 | --- | --- |
 | Catalog, accounts, roles, JWT authentication, loans | Implemented and covered by unit, MVC, and PostgreSQL tests |
-| CI (`unit-test`, `integration-test`, `security-scan`) | Running on every pull request and push to `main`; required by branch protection on `main` |
+| CI (`unit-test`, `integration-test`, `security-scan`, `ui-test`) | Running on every pull request and push to `main`; all four checks are required by branch protection on `main` |
 | Container image and Compose stack | Implemented, with health checks |
 | Deploy, rollback, backup, and smoke-test scripts; runbook | Implemented and rehearsed locally |
 | CD workflow (ARM64 build, scan, publish, gated deploy) | Implemented; deploy job off until the VM exists |

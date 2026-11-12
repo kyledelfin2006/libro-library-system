@@ -16,8 +16,29 @@
 		-Server
 	}
 
-	# Forward everything to the application over the private Compose network. Caddy sets X-Forwarded-For/-Proto,
-	# which the app trusts only when SERVER_FORWARD_HEADERS_STRATEGY=native (safe here because the app port is not
-	# published beyond loopback). The Actuator/Prometheus management port is never proxied.
-	reverse_proxy app:8080
+	# Browser security headers for the single-page UI. The CSP allows only same-origin scripts, styles, fonts and
+	# images (no inline scripts), so a missing hash or third-party host fails loudly instead of loading silently.
+	header {
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+		Referrer-Policy "no-referrer"
+	}
+
+	# API, probes, and (when enabled) API docs go to the application over the private Compose network. Caddy sets
+	# X-Forwarded-For/-Proto, which the app trusts only when SERVER_FORWARD_HEADERS_STRATEGY=native (safe here because
+	# the app port is not published beyond loopback). The Actuator/Prometheus management port is never proxied.
+	@api path /app/* /livez /readyz /v3/api-docs* /swagger-ui*
+	handle @api {
+		reverse_proxy app:8080
+	}
+
+	# Everything else is the static UI build (ui/dist, mounted at /srv/ui). Unknown paths fall back to index.html so
+	# client-side routes such as /catalog survive a reload; hashed assets are cached, index.html is not.
+	handle {
+		root * /srv/ui
+		@assets path /assets/* /brand/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		header /index.html Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
 }

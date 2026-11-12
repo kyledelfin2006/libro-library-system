@@ -1,0 +1,21 @@
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: 16px/1.4 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+h1, h2, h3 { font-family: var(--font-serif); font-weight: 700; line-height: 1.2; margin: 0 0 var(--space-3); }
+h1 { font-size: 28px; }
+h2 { font-size: 22px; }
+a { color: var(--color-primary); }
+a:hover { color: var(--color-primary-hover); }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
