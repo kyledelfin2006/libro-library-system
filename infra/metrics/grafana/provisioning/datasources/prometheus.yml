@@ -1,0 +1,10 @@
+# Grafana reads from the Prometheus container over the Compose network. Provisioned, so nothing is clicked together.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

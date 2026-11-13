@@ -4,6 +4,7 @@
 #   cp .env.example .env            (PowerShell: Copy-Item .env.example .env), then fill the required values
 #   docker compose up --build       builds the image from source and starts db + app
 #   docker compose --profile proxy up --build   also starts the TLS proxy
+#   docker compose --profile metrics up --build  also starts Prometheus and Grafana (loopback only)
 #
 # Compose reads .env automatically. Production layers infra/docker-compose.prod.yml on top of this file
 # (scripts/deploy.sh does that for you).
@@ -129,6 +130,59 @@ services:
     logging: *default-logging
     restart: unless-stopped
 
+  # Optional metrics: `docker compose --profile metrics up`. Prometheus scrapes the API's private management port
+  # (app:9091, never published) and Grafana shows the provisioned dashboard. Both listen on loopback only; reach them
+  # from another machine through an SSH tunnel. Grafana has no admin user and allows anonymous read-only viewing
+  # (GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION), so there is no password to manage and nothing to change in the UI.
+  prometheus:
+    image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+    container_name: library-prometheus
+    profiles: ["metrics"]
+    depends_on:
+      app:
+        condition: service_healthy
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./infra/metrics/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.2.0@sha256:74144189b38447facf737dfd0f3906e42e0776212bf575dc3334c3609183adf7
+    container_name: library-grafana
+    profiles: ["metrics"]
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./infra/metrics/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/metrics/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   caddy_data:
+  prometheus_data:
+  grafana_data:

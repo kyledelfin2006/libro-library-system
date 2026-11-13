@@ -1,0 +1,12 @@
+# Prometheus scrape configuration for the optional `metrics` Compose profile.
+# The API serves /actuator/prometheus on its private management port (9091), which is reachable only on the Compose
+# network and is never published to the host. Prometheus is the only thing that scrapes it.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: libro-api
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["app:9091"]

@@ -1,0 +1,9 @@
+# Loads every dashboard JSON file mounted under /var/lib/grafana/dashboards.
+apiVersion: 1
+providers:
+  - name: libro
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
