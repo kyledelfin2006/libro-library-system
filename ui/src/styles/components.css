@@ -168,3 +168,10 @@ a.tile:hover { border-color: var(--color-primary); }
 .row-selected { background: var(--color-primary-subtle); }
 .row-actions { display: flex; gap: var(--space-2); }
 .field textarea { padding: var(--space-3); font: inherit; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border-input); border-radius: var(--radius-control); resize: vertical; }
+
+/* Accounts page */
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.help-disclosure { margin: var(--space-3) 0; }
+.help-disclosure summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.permission-matrix { width: 100%; border-collapse: collapse; }
+.permission-matrix th, .permission-matrix td { text-align: left; padding: var(--space-2); border-bottom: 1px solid var(--color-border); }

@@ -17,7 +17,7 @@ export const staffUser: UserResponse = { ...patron, universityId: '2020-0001', u
 /** Renders the real App at a path with a signed-in user, a fresh query client, and no automatic retries. */
 export function renderAt(path: string, user: UserResponse | null = patron) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(
+  const result = render(
     <ThemeProvider>
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[path]}>
@@ -30,6 +30,7 @@ export function renderAt(path: string, user: UserResponse | null = patron) {
       </QueryClientProvider>
     </ThemeProvider>,
   );
+  return { ...result, client };
 }
 
 export const ok = (data: unknown) => new Response(JSON.stringify({ success: true, message: 'Success', data, timestamp: 1 }));

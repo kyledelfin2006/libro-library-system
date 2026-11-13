@@ -2,17 +2,17 @@ import { useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { changePassword } from '../api/auth';
 import { ApiError } from '../api/client';
-import { deleteUser, patchUser, type ProfilePatch } from '../api/users';
+import { deleteUser } from '../api/users';
 import { useAuth } from '../auth/AuthProvider';
-import { can } from '../auth/permissions';
+import { ROLE_LABEL, can } from '../auth/permissions';
 import { PasswordChecklist } from '../components/PasswordChecklist';
+import { ProfileForm } from '../components/ProfileForm';
 import { PasswordField, TextField } from '../components/TextField';
 import { useToast } from '../components/Toast';
 import { Button, Dialog } from '../components/ui';
 import { describeError, useFocusFirstInvalid } from '../lib/forms';
 import { isPasswordValid } from '../lib/password';
 
-const ROLE_LABEL = { STUDENT: 'Student', FACULTY: 'Faculty', ADMINISTRATOR: 'Library assistant', LIBRARIAN: 'Librarian' } as const;
 
 /** My Account: profile (read, then edit), password change, and a danger zone for students and faculty only. */
 export function Account() {
@@ -33,67 +33,8 @@ export function Account() {
 function Profile() {
   const { user, refreshUser } = useAuth();
   const { notify } = useToast();
-  const form = useRef<HTMLFormElement>(null);
   const [editing, setEditing] = useState(false);
-  const [values, setValues] = useState({ firstName: '', lastName: '', middleInitial: '', email: '' });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [formError, setFormError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  useFocusFirstInvalid(form, attempt);
   if (!user) return null;
-
-  const startEdit = () => {
-    setValues({ firstName: user.firstName, lastName: user.lastName, middleInitial: user.middleInitial ?? '', email: user.email });
-    setErrors({});
-    setFormError(null);
-    setEditing(true);
-  };
-  const set = (k: keyof typeof values) => (e: { target: { value: string } }) => setValues((v) => ({ ...v, [k]: e.target.value }));
-
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    if (saving || !user) return;
-    // Client checks mirror the DTO; only changed fields are sent.
-    const found: Record<string, string> = {};
-    if (!values.firstName.trim()) found.firstName = 'First name is required.';
-    if (!values.lastName.trim()) found.lastName = 'Last name is required.';
-    if (values.middleInitial && !/^[A-Za-z]$/.test(values.middleInitial)) found.middleInitial = 'Use one letter.';
-    if (!/^\S+@\S+\.\S+$/.test(values.email)) found.email = 'Enter a valid email address.';
-    setErrors(found);
-    setFormError(null);
-    if (Object.keys(found).length > 0) {
-      setAttempt((n) => n + 1);
-      return;
-    }
-    const patch: ProfilePatch = {};
-    if (values.firstName.trim() !== user.firstName) patch.firstName = values.firstName.trim();
-    if (values.lastName.trim() !== user.lastName) patch.lastName = values.lastName.trim();
-    if (values.middleInitial !== (user.middleInitial ?? '')) patch.middleInitial = values.middleInitial;
-    if (values.email.trim() !== user.email) patch.email = values.email.trim();
-    if (Object.keys(patch).length === 0) {
-      setEditing(false);
-      return;
-    }
-    setSaving(true);
-    try {
-      await patchUser(user.universityId, patch);
-      await refreshUser();
-      notify('Profile saved.');
-      setEditing(false);
-    } catch (err) {
-      if (err instanceof ApiError && Object.keys(err.fieldErrors).length > 0) {
-        const { _global, ...fields } = err.fieldErrors;
-        setErrors(fields);
-        if (_global) setFormError(_global);
-        setAttempt((n) => n + 1);
-      } else {
-        setFormError(describeError(err));
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <div className="panel">
@@ -107,20 +48,20 @@ function Profile() {
             <div><dt>Role</dt><dd>{ROLE_LABEL[user.userRole]}</dd></div>
             {user.userCourse && <div><dt>Course</dt><dd>{user.userCourse}{user.major ? ` / ${user.major}` : ''}</dd></div>}
           </dl>
-          <Button variant="secondary" onClick={startEdit}>Edit profile</Button>
+          <Button variant="secondary" onClick={() => setEditing(true)}>Edit profile</Button>
         </>
       ) : (
-        <form ref={form} onSubmit={save} noValidate>
-          {formError && <p className="form-error" role="alert">{formError}</p>}
-          <TextField label="First name" value={values.firstName} onChange={set('firstName')} error={errors.firstName} maxLength={50} />
-          <TextField label="Last name" value={values.lastName} onChange={set('lastName')} error={errors.lastName} maxLength={50} />
-          <TextField label="Middle initial (optional)" value={values.middleInitial} onChange={set('middleInitial')} error={errors.middleInitial} maxLength={1} />
-          <TextField label="Email" type="email" value={values.email} onChange={set('email')} error={errors.email} maxLength={150} />
-          <div className="form-actions">
-            <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save profile'}</Button>
-            <Button variant="secondary" onClick={() => setEditing(false)} disabled={saving}>Cancel</Button>
-          </div>
-        </form>
+        <ProfileForm
+          target={user}
+          onCancel={() => setEditing(false)}
+          onSaved={async (saved) => {
+            if (saved) {
+              await refreshUser();
+              notify('Profile saved.');
+            }
+            setEditing(false);
+          }}
+        />
       )}
     </div>
   );

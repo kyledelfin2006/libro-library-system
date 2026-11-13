@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { PublicOnly, RequireAuth } from './auth/RouteGuards';
 import { Shell } from './components/Shell';
 import { Account } from './pages/Account';
+import { Accounts } from './pages/Accounts';
 import { BookDetail } from './pages/BookDetail';
 import { Catalog } from './pages/Catalog';
 import { ChangePassword } from './pages/ChangePassword';
@@ -31,6 +32,9 @@ export function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/staff/loans" element={<Loans />} />
             <Route path="/inventory" element={<Inventory />} />
+          </Route>
+          <Route element={<RequireAuth capability="listAccounts" />}>
+            <Route path="/accounts" element={<Accounts />} />
           </Route>
         </Route>
       </Route>

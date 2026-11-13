@@ -24,6 +24,7 @@ export function Shell() {
           <NavLink to="/catalog">Catalog</NavLink>
           {staff && <NavLink to="/staff/loans">Loans</NavLink>}
           {staff && <NavLink to="/inventory">Inventory</NavLink>}
+          {can(user.userRole, 'listAccounts') && <NavLink to="/accounts">Accounts</NavLink>}
           <NavLink to="/loans">My Loans</NavLink>
           <NavLink to="/account">My Account</NavLink>
         </nav>
