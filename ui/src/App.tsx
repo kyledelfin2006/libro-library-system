@@ -3,6 +3,7 @@ import { PublicOnly, RequireAuth } from './auth/RouteGuards';
 import { Shell } from './components/Shell';
 import { Account } from './pages/Account';
 import { Accounts } from './pages/Accounts';
+import { Audit } from './pages/Audit';
 import { BookDetail } from './pages/BookDetail';
 import { Catalog } from './pages/Catalog';
 import { ChangePassword } from './pages/ChangePassword';
@@ -39,6 +40,9 @@ export function App() {
           </Route>
           <Route element={<RequireAuth capability="listAccounts" />}>
             <Route path="/accounts" element={<Accounts />} />
+          </Route>
+          <Route element={<RequireAuth capability="audit" />}>
+            <Route path="/audit" element={<Audit />} />
           </Route>
           <Route element={<RequireAuth capability="buildInfo" />}>
             <Route path="/version" element={<Version />} />

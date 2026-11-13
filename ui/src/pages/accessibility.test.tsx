@@ -49,6 +49,23 @@ describe.each(['dark', 'light'])('axe (%s theme)', (theme) => {
     expect(await seriousViolations(container)).toEqual([]);
   });
 
+  it('/audit has no serious or critical violations, with the detail panel open', async () => {
+    document.documentElement.dataset.theme = theme;
+    routeFetch({
+      '/app/audit': () => ok(pageOf([{
+        id: 7, occurredAt: '2026-11-13T09:30:00', actorUniversityId: '2020-0001', actorRole: 'LIBRARIAN', targetRole: null,
+        action: 'BOOK_CREATED', entityType: 'BOOK', entityId: '42', summary: 'book created',
+      }])),
+    });
+    const user = userEvent.setup();
+    const { container, findByRole, findByText } = renderAt('/audit', staffUser);
+    await findByText('Book added');
+    expect(await seriousViolations(container)).toEqual([]);
+    await user.click(await findByRole('button', { name: /Details for event 7/ }));
+    await findByRole('complementary', { name: /Event 7/ });
+    expect(await seriousViolations(container)).toEqual([]);
+  });
+
   it.each(['ready', 'not-ready'])('/status (%s) has no serious or critical violations', async (mode) => {
     document.documentElement.dataset.theme = theme;
     const probe = (up: boolean) => new Response('{}', { status: up ? 200 : 503 });
