@@ -35,9 +35,12 @@ public class AuditService {
         String actor = anonymous
                 ? ("ACCOUNT_CREATED".equals(action) && targetRole == UserRole.STUDENT ? entityId : "system")
                 : auth.getName();
+        // Spring Security can add non-role authorities such as FACTOR_BEARER, so take the ROLE_ one explicitly;
+        // the first authority is not always the role.
         String actorRole = anonymous
-                ? (auth == null ? "SYSTEM" : "ANONYMOUS") : auth.getAuthorities().stream().findFirst()
-                .map(a -> a.getAuthority().replaceFirst("^ROLE_", "")).orElse("UNKNOWN");
+                ? (auth == null ? "SYSTEM" : "ANONYMOUS") : auth.getAuthorities().stream()
+                .map(a -> a.getAuthority()).filter(a -> a.startsWith("ROLE_"))
+                .map(a -> a.substring("ROLE_".length())).findFirst().orElse("UNKNOWN");
         // Summary comes only from a fixed action token, never from user-controlled content.
         repository.save(new AuditEvent(LibraryTime.now(), actor, actorRole, targetRole,
                 action, entityType, entityId, action.replace('_', ' ').toLowerCase(java.util.Locale.ROOT)));

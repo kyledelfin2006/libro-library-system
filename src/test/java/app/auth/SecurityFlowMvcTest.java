@@ -92,7 +92,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         SecurityFlowMvcTest.HealthProbeController.class
 })
 @ContextConfiguration(classes = LibraryApplication.class)
-@TestPropertySource(properties = {"libro.security.cors.allowed-origins=https://ui.example.edu", "libro.api-docs.enabled=true"})
+@TestPropertySource(properties = {"libro.security.cors.allowed-origins=https://ui.example.edu", "libro.api-docs.enabled=true",
+        "management.server.port=9091"})
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SecurityFlowMvcTest {
 
@@ -193,6 +194,27 @@ class SecurityFlowMvcTest {
                 .andExpect(jsonPath("$.data.universityId").value(UNIVERSITY_ID));
 
         verify(userService).createUser(any());
+    }
+
+    /**
+     * Confirms the Prometheus scrape path is open only on the private management port: the same path on the public
+     * port stays protected, and a request header cannot make a public-port request look private.
+     */
+    @Test
+    void prometheusScrapeIsOpenOnlyOnTheManagementPort() throws Exception {
+        // No scrape handler exists in this slice, so "allowed through security" shows as 404 rather than 401.
+        mockMvc.perform(get("/actuator/prometheus").with(request -> { request.setLocalPort(9091); return request; }))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/actuator/prometheus").with(request -> { request.setLocalPort(8080); return request; }))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/actuator/prometheus").header("X-Forwarded-Port", "9091")
+                        .with(request -> { request.setLocalPort(8080); return request; }))
+                .andExpect(status().isUnauthorized());
+        // Only reads of the scrape and health paths are open, even on the management port.
+        mockMvc.perform(post("/actuator/prometheus").with(request -> { request.setLocalPort(9091); return request; }))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/actuator/env").with(request -> { request.setLocalPort(9091); return request; }))
+                .andExpect(status().isUnauthorized());
     }
 
     /** Confirms protected routes reject an absent token before invoking feature code. */

@@ -89,6 +89,8 @@ The restore asks you to type the database name, takes a safety backup, replaces 
 ## 6. Updating and rolling back
 
 - **Update.** `git pull`, then `scripts/deploy.sh`. It backs up first, records the previous image, and rolls back on a failed health check or smoke test.
+- **Web UI.** Automated deployment installs the UI for you. By hand, build it on any machine with Node 24 (`cd ui && npm ci && npm run build`) and run `tar -C ui/dist -czf - . | ssh <deploy-user>@<host> 'cd /opt/libro && scripts/install-ui.sh'`, or build in `/opt/libro/ui` directly. Caddy serves `ui/dist` from its bind mount, so no restart is needed.
+- **Metrics (optional).** `docker compose -f docker-compose.yml -f infra/docker-compose.prod.yml --env-file .env --profile metrics up -d prometheus grafana` starts Prometheus and Grafana, both on loopback. View Grafana through an SSH tunnel (`ssh -L 3000:127.0.0.1:3000 <deploy-user>@<host>`, then open `http://localhost:3000`). Grafana has no login (anonymous read-only, no admin user), which is why it must stay on loopback; never publish its port.
 - **Manual rollback.** The previous image tag is in `/mnt/libro/state/previous-image`. A script rollback restarts it; if the failed release applied a Flyway migration, restore the pre-deploy backup instead, because migrations are forward-only.
 - **Never** run `docker compose down -v`; it deletes the database volume.
 
@@ -101,7 +103,7 @@ The restore asks you to type the database name, takes a safety backup, replaces 
 3. **Pin the host key.** Run `ssh-keyscan -t ed25519 <host>` and compare the fingerprint with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` run on the VM before trusting it.
 4. **Create the environment.** In the repository settings add a `production` environment with **required reviewers** (yourself), and configure the four SSH secrets the workflow reads: VM host, deploy user, private key, and verified host key. Delete the local key files afterwards.
 5. **Turn it on.** Set the deployment-enable repository variable used by the workflow to `true`. Each successful `main` build then waits for your approval before deploying.
-6. **Protect `main`.** Require the `unit-test`, `integration-test`, `security-scan`, and `ui-test` checks in the branch rule, so only validated API and UI commits can be released.
+6. **Protect `main`.** Require the `unit-test`, `integration-test`, `security-scan`, `ui-test`, and `e2e-test` checks in the branch rule, so only validated API and UI commits can be released.
 
 Keep manual approval until you have rehearsed a restore and a rollback on the VM. To pause deployments, disable the deployment-enable repository variable; image publishing continues.
 

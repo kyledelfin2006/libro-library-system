@@ -1,2 +1,6 @@
 node_modules
 dist
+# Generated at build time by scripts/build-release-history.mjs
+public/release-history.json
+playwright-report
+test-results

@@ -4,7 +4,7 @@ The planned public demo uses patron accounts with synthetic data. Staff credenti
 
 ## Public demo patrons (planned)
 
-`scripts/seed-demo.sh` will create these accounts for the public demo after deployment. They are patrons only: they can browse the catalog and borrow within the normal loan rules, and they cannot manage books or accounts. Their data is synthetic and the demo can be reset from a backup. The password is published on purpose.
+`scripts/seed-demo.sh` will create these accounts for the public demo after deployment. They are patrons only: they can browse the catalog and borrow within the normal loan rules, and they cannot manage books or accounts. Their data is synthetic and the demo can be reset from a backup. The password is published on purpose. Because the librarian create endpoint requires a first-sign-in password change, the script then signs in as the demo faculty and sets the same password as its owner to clear that flag, so the published login goes straight to the catalog.
 
 | Role | University ID | Password | Created by |
 | --- | --- | --- | --- |

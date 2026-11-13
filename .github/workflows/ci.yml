@@ -1,12 +1,13 @@
 # CI for the Libro Library API (GitHub Actions).
 #
-# Four independent jobs run in parallel; any failure fails the workflow:
+# Five independent jobs run in parallel; any failure fails the workflow:
 #   unit-test         unit + MVC tests and the 80% JaCoCo line-coverage gate (fast, no Docker)
 #   integration-test  only the PostgreSQL *IT suite, via Testcontainers (unit tests are skipped here; see below)
 #   security-scan     Trivy: dependency manifests, then the built container image
 #   ui-test           web UI (ui/): generated API type drift, typecheck, lint, unit tests, production build
+#   e2e-test          one Playwright journey through the UI against the real API and PostgreSQL
 #
-# Branch protection should require all four check names before merging to main.
+# Branch protection should require all five check names before merging to main.
 name: CI
 
 on:
@@ -169,3 +170,93 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+
+  # The end-to-end journey: register, sign in, search, borrow, return, and a staff lost-resolution, in a real browser
+  # (also with axe in both themes) against the running API and a PostgreSQL service container.
+  e2e-test:
+    name: e2e-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395
+        env:
+          POSTGRES_DB: libro_e2e
+          POSTGRES_USER: libro_e2e
+          POSTGRES_PASSWORD: e2e_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U libro_e2e -d libro_e2e"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Set up Java 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Install UI dependencies and the browser
+        working-directory: ui
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      # Starts the API on the test profile with a librarian created by the startup bootstrap. The password exists
+      # only for this run: it is random, never printed, and the BCrypt hash comes from the pinned Caddy image
+      # that Compose already uses, so no extra tool or action is needed.
+      - name: Start the API
+        env:
+          SPRING_PROFILES_ACTIVE: test
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/libro_e2e
+          SPRING_DATASOURCE_USERNAME: libro_e2e
+          SPRING_DATASOURCE_PASSWORD: e2e_only
+          LIBRO_API_DOCS_ENABLED: 'true'
+        run: |
+          staff_password="E2e$(openssl rand -hex 8)!aA9"
+          echo "::add-mask::$staff_password"
+          {
+            echo "E2E_STAFF_ID=9999-0001"
+            echo "E2E_STAFF_PASSWORD=$staff_password"
+          } >> "$GITHUB_ENV"
+          export LIBRO_BOOTSTRAP_LIBRARIAN_UNIVERSITY_ID=9999-0001
+          export LIBRO_BOOTSTRAP_LIBRARIAN_EMAIL=e2e.librarian@example.test
+          export LIBRO_BOOTSTRAP_LIBRARIAN_FIRST_NAME=E2E
+          export LIBRO_BOOTSTRAP_LIBRARIAN_LAST_NAME=Librarian
+          LIBRO_BOOTSTRAP_LIBRARIAN_PASSWORD_HASH="$(docker run --rm caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17 caddy hash-password --plaintext "$staff_password")"
+          export LIBRO_BOOTSTRAP_LIBRARIAN_PASSWORD_HASH
+          export LIBRO_ADMIN_PASSWORD_HASH="$(sed -n 's/^spring.flyway.placeholders.adminPasswordHash=//p' src/test/resources/application-test.properties)"
+          export LIBRO_JWT_SECRET_BASE64="$(sed -n 's/^libro.security.jwt.secret-base64=//p' src/test/resources/application-test.properties)"
+          ./mvnw -B -ntp -DskipTests -Dspring-boot.run.useTestClasspath=true spring-boot:run > "$RUNNER_TEMP/libro-api.log" 2>&1 &
+          echo "API_PID=$!" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if curl --fail --silent --output /dev/null http://localhost:8080/v3/api-docs; then exit 0; fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/libro-api.log"
+          exit 1
+      # Playwright starts Vite itself; the dev server proxies the API routes to localhost:8080.
+      - name: Run the journey
+        working-directory: ui
+        run: npm run test:e2e
+      - name: Stop the API
+        if: always()
+        run: kill "$API_PID" 2>/dev/null || true
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: |
+            ui/playwright-report
+            ui/test-results
+            ${{ runner.temp }}/libro-api.log
+          if-no-files-found: ignore
+          retention-days: 14

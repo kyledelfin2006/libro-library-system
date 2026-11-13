@@ -89,14 +89,16 @@ Before changing a migration, establish whether that version has been applied to 
 - [x] Move account owner/role checks into `UserAccessPolicy` with a matrix test.
 - [x] Layer a `test` profile over the real configuration instead of shadowing it.
 - [x] Keep configuration defaults in one place; simplify the Compose environment and `.env.example`.
-- [x] Layered Docker image with a single health check; one shared Trivy script for CI and CD; CI jobs `unit-test`, `integration-test`, `security-scan`, and `ui-test`, with backend unit tests running once.
-- [x] Protect `main`: require PRs and all four CI checks, including `ui-test`; block force-pushes and deletion; administrators may bypass (see [CI/CD and DevOps](../devops/ci-cd.md#branch-protection)).
+- [x] Layered Docker image with a single health check; one shared Trivy script for CI and CD; CI jobs `unit-test`, `integration-test`, `security-scan`, `ui-test`, and `e2e-test`, with backend unit tests running once.
+- [x] Protect `main`: require PRs and all five CI checks, including `ui-test` and `e2e-test`; block force-pushes and deletion; administrators may bypass (see [CI/CD and DevOps](../devops/ci-cd.md#branch-protection)).
 
-## Active implementation plans
+## Web UI
 
-Independent plans track the remaining build work. Each is replaced by as-built documentation and its plan file is deleted when finished.
+The web UI MVP is built and documented in the [Web UI guide](../guides/web-ui.md); its execution plan has been replaced by that guide.
 
-- [ ] [UI Execution Plan](../plans/implementation-plan-ui-execution.md): numbered implementation steps for the web UI MVP, including usability improvements.
+- [x] Sign-in, registration, catalog, borrow and return, My Account, staff dashboard, loans, inventory, accounts, audit log, status, version, and release history.
+- [x] CD builds and ships `ui/dist`; the Playwright journey runs in CI; the optional `metrics` Compose profile adds Prometheus and Grafana.
+- [ ] Run the 5-second cover scan test with real people (see the guide's open items).
 
 ## Source documents
 

@@ -4,12 +4,12 @@ Libro is validated by an implemented GitHub Actions pipeline and packaged as a c
 
 | Area | Status |
 | --- | --- |
-| Continuous integration (`unit-test`, `integration-test`, `security-scan`, `ui-test`) | Implemented in [`ci.yml`](../../.github/workflows/ci.yml) |
+| Continuous integration (`unit-test`, `integration-test`, `security-scan`, `ui-test`, `e2e-test`) | Implemented in [`ci.yml`](../../.github/workflows/ci.yml) |
 | Container image and Compose stack with health checks | Implemented ([Dockerfile](../../Dockerfile), [docker-compose.yml](../../docker-compose.yml)) |
 | TLS reverse proxy (Caddy) | Implemented as an opt-in Compose profile |
 | Operations scripts: deploy with rollback, smoke test, backup and restore, demo seed ([`scripts/`](../../scripts/)) | Implemented; rehearsed against a local Docker stack, not yet on a VM |
 | Production Compose override and [runbook](runbook.md) | Implemented |
-| Continuous delivery workflow ([`cd.yml`](../../.github/workflows/cd.yml)): ARM64 build, scan, publish, gated deploy | Implemented; the deploy job stays off until the VM exists and deployment is enabled |
+| Continuous delivery workflow ([`cd.yml`](../../.github/workflows/cd.yml)): ARM64 image build, scan, publish; UI build; gated deploy of both | Implemented; the deploy job stays off until the VM exists and deployment is enabled |
 | Production VM | Not provisioned |
 
 ## Target environment
@@ -18,7 +18,7 @@ Libro is validated by an implemented GitHub Actions pipeline and packaged as a c
 
 ```mermaid
 flowchart LR
-    PR[Pull request] --> CI[unit-test, integration-test, security-scan, ui-test]
+    PR[Pull request] --> CI[unit-test, integration-test, security-scan, ui-test, e2e-test]
     Main[Push to main] --> CI
     CI --> Image[Build and scan ARM64 image]
     Image --> Registry[Publish immutable commit-SHA image]
@@ -44,7 +44,7 @@ Design decisions and the reasons for them:
 
 ### Continuous integration (implemented)
 
-The workflow runs on GitHub-hosted Ubuntu runners for every pull request (any base branch) and every push to `main`. A newer run cancels a stale in-progress run for the same ref. The four jobs run in parallel and any failure fails the workflow.
+The workflow runs on GitHub-hosted Ubuntu runners for every pull request (any base branch) and every push to `main`. A newer run cancels a stale in-progress run for the same ref. The five jobs run in parallel and any failure fails the workflow.
 
 | Job | Timeout | What it checks |
 | --- | ---: | --- |
@@ -52,8 +52,9 @@ The workflow runs on GitHub-hosted Ubuntu runners for every pull request (any ba
 | `integration-test` | 25 min | `./mvnw -B -ntp -Pintegration -DskipUTs -Djacoco.haltOnFailure=false verify`: only the PostgreSQL 18 suite through Testcontainers (`-DskipUTs` turns off Surefire, so unit tests do not run twice), covering Flyway migrations, Hibernate schema validation, and concurrent-checkout races. |
 | `security-scan` | 20 min | [`scripts/ci/trivy-scan.sh`](../../scripts/ci/trivy-scan.sh) scans dependency manifests and the built Docker image; it fails on fixable HIGH or CRITICAL findings. Accepted exceptions live in [`.trivyignore`](../../.trivyignore) with expiry comments. |
 | `ui-test` | 15 min | Starts a test-profile API with disposable PostgreSQL, regenerates UI types from OpenAPI and checks for drift, then runs typecheck, lint, Vitest, and the production build. |
+| `e2e-test` | 20 min | Starts PostgreSQL and the test-profile API (with a librarian created by the startup bootstrap and a random one-run password), then runs the Playwright journey in Chromium: register, sign in, search, borrow, return, and a staff lost-resolution, with axe in both themes. Reports upload on failure. |
 
-Controls: workflow permissions are `contents: read`, no deployment credentials exist in CI, third-party actions are pinned to commit SHAs, Trivy runs from its official image pinned by digest, and test reports are kept for 14 days. The scan policy (severity, `--ignore-unfixed`, `.trivyignore`) lives in one script that CI and CD both call, so the merge gate and the release gate cannot drift apart. Requiring all four checks before merging is a GitHub branch-protection setting, separate from the workflow file; see [Branch protection](#branch-protection).
+Controls: workflow permissions are `contents: read`, no deployment credentials exist in CI, third-party actions are pinned to commit SHAs, Trivy runs from its official image pinned by digest, and test reports are kept for 14 days. The scan policy (severity, `--ignore-unfixed`, `.trivyignore`) lives in one script that CI and CD both call, so the merge gate and the release gate cannot drift apart. Requiring all five checks before merging is a GitHub branch-protection setting, separate from the workflow file; see [Branch protection](#branch-protection).
 
 ### Branch protection
 
@@ -61,7 +62,7 @@ Controls: workflow permissions are `contents: read`, no deployment credentials e
 
 | Setting | Value | Why |
 | --- | --- | --- |
-| Required status checks | `unit-test`, `integration-test`, `security-scan`, `ui-test` | Nothing merges unless the same four jobs this workflow runs have passed. |
+| Required status checks | `unit-test`, `integration-test`, `security-scan`, `ui-test`, `e2e-test` | Nothing merges unless the same five jobs this workflow runs have passed. |
 | Require a pull request | Yes, 0 required approvals | Direct pushes to `main` are rejected so every change passes CI first; no approval is required because the project has a single maintainer. |
 | Require branches to be up to date | No | Avoids forcing a rebase and a full CI rerun after each unrelated merge. |
 | Force pushes and branch deletion | Blocked | Protects `main` history. |
@@ -71,13 +72,14 @@ If a job is renamed in `ci.yml`, update the required check names in the same cha
 
 ### Continuous delivery (implemented, deploy gated)
 
-[`cd.yml`](../../.github/workflows/cd.yml) is a separate workflow that extends CI; it does not replace it. It has two jobs.
+[`cd.yml`](../../.github/workflows/cd.yml) is a separate workflow that extends CI; it does not replace it. It has three jobs: `image`, `ui`, and `deploy`.
 
-1. **Gate.** The `image` job starts only when the `CI` workflow finished successfully for a push to `main` (or on a manual run). Pull requests that change `cd.yml`, the Dockerfile, or the scan script run a build-and-scan dry run with no push.
+1. **Gate.** The `image` job starts only when the `CI` workflow finished successfully for a push to `main` (or on a manual run). Pull requests that change `cd.yml`, the Dockerfile, the scan script, or the UI install and release-history scripts run a dry run with no push and no deploy.
 2. **Build once.** On a native GitHub-hosted ARM64 runner it builds one `linux/arm64` image, scans that exact image with the same `scripts/ci/trivy-scan.sh` policy as CI (fixable HIGH or CRITICAL findings fail the release), and publishes it to GitHub Container Registry tagged with the full commit SHA. The job outputs the immutable digest. The server pulls that digest and never rebuilds, and no mutable `latest` tag is used.
-3. **Approve.** The `deploy` job is skipped unless its repository enable variable is `true`, and it is held by the `production` environment's required reviewers. Automatic deployment on every `main` push waits until a backup restore and a rollback have been rehearsed on the VM.
-4. **Deploy.** The job connects over SSH with a pinned host key, checks out the validated commit in `/opt/libro`, and runs `scripts/deploy.sh --image <digest>`, which refuses a reference without a digest. The script backs up PostgreSQL, records the previous image, starts the stack from the base Compose file plus [`infra/docker-compose.prod.yml`](../../infra/docker-compose.prod.yml), and waits for health. Run by hand without `--image`, the same script builds the image on the VM from the checked-out commit.
-5. **Verify.** `scripts/smoke.sh` checks `/readyz` and `/livez`, logs in as the public demo student, performs an authenticated read, and confirms that an anonymous read is rejected. Any failure triggers the rollback below; success records the new image as live.
+3. **Build the UI.** The `ui` job builds `ui/dist` from the same validated commit (`npm ci`, `npm run build:history` for the release-history page, `npm run build`), packs it as one tarball, and keeps it as the `libro-ui` workflow artifact. The API image does not contain the UI.
+4. **Approve.** The `deploy` job is skipped unless its repository enable variable is `true`, and it is held by the `production` environment's required reviewers. Automatic deployment on every `main` push waits until a backup restore and a rollback have been rehearsed on the VM.
+5. **Deploy.** The job connects over SSH with a pinned host key, checks out the validated commit in `/opt/libro`, and runs `scripts/deploy.sh --image <digest>`, which refuses a reference without a digest. The script backs up PostgreSQL, records the previous image, starts the stack from the base Compose file plus [`infra/docker-compose.prod.yml`](../../infra/docker-compose.prod.yml), and waits for health. Run by hand without `--image`, the same script builds the image on the VM from the checked-out commit.
+6. **Verify.** `scripts/smoke.sh` checks `/readyz` and `/livez`, logs in as the public demo student, performs an authenticated read, and confirms that an anonymous read is rejected. Any failure triggers the rollback below; success records the new image as live. Only then does the job stream the UI tarball over the same SSH connection to [`scripts/install-ui.sh`](../../scripts/install-ui.sh), which checks it contains `index.html` and updates `ui/dist` in place (new files first, `index.html` next, stale files last). The proxy serves that directory straight from its bind mount, so no restart is needed, and a rolled-back release never leaves a newer UI in front of an older API.
 
 ## Environments
 

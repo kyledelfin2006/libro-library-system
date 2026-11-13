@@ -164,6 +164,8 @@ public class UserService {
         if (role != UserRole.STUDENT) {
             user.setUserCourse(null);
             user.setMajor(null);
+            // A librarian chose this initial password, so the owner must replace it at first sign-in.
+            user.setMustChangePassword(true);
         }
 
         // persist the normalized values, not the original client input.

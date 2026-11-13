@@ -128,6 +128,7 @@ export function Dialog({
   confirmLabel,
   busy = false,
   danger = false,
+  confirmDisabled = false,
   onConfirm,
   onClose,
 }: {
@@ -137,6 +138,7 @@ export function Dialog({
   confirmLabel: string;
   busy?: boolean;
   danger?: boolean;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -155,7 +157,7 @@ export function Dialog({
         <Button variant="secondary" onClick={onClose} disabled={busy}>
           Cancel
         </Button>
-        <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} disabled={busy}>
+        <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} disabled={busy || confirmDisabled}>
           {confirmLabel}
         </Button>
       </div>
