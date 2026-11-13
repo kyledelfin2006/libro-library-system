@@ -68,6 +68,22 @@ token="$(printf '%s' "$login" | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')"
 # 3. Demo faculty account, created by the librarian.
 create_account "demo faculty 2025-0002" /app/users/faculty "{\"universityId\":\"2025-0002\",\"password\":\"$DEMO_PASSWORD\",\"firstName\":\"Demo\",\"lastName\":\"Faculty\",\"email\":\"demo.faculty@library.local\"}" "$token"
 
+# The librarian create endpoint sets mustChangePassword, which would send the published demo faculty login to the
+# forced-change screen. The owner clears it by "changing" the password to the same published value (the API has no
+# rule against that). Re-runs skip this when the flag is already false.
+faculty_login="$(post /app/auth/login "{\"universityId\":\"2025-0002\",\"password\":\"$DEMO_PASSWORD\"}")"
+if [ "${faculty_login##*$'\n'}" = "200" ] && printf '%s' "$faculty_login" | grep -q '"mustChangePassword":true'; then
+  faculty_token="$(printf '%s' "$faculty_login" | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')"
+  [ -n "$faculty_token" ] || die "demo faculty login returned no token"
+  change="$(curl -sS --max-time 20 -w '\n%{http_code}' -X PUT "$API/app/users/2025-0002/password" \
+    -H 'Content-Type: application/json' -H "Authorization: Bearer $faculty_token" \
+    -d "{\"currentPassword\":\"$DEMO_PASSWORD\",\"newPassword\":\"$DEMO_PASSWORD\"}")"
+  [ "${change##*$'\n'}" = "200" ] || die "clearing the demo faculty password-change flag failed (HTTP ${change##*$'\n'})"
+  log "cleared the password-change flag for demo faculty 2025-0002"
+elif [ "${faculty_login##*$'\n'}" != "200" ]; then
+  log "note: demo faculty login returned HTTP ${faculty_login##*$'\n'} (an existing account may use a different password); flag left as is"
+fi
+
 # 4. Synthetic catalog: well-known public-domain titles, one physical copy each.
 existing="$(curl -sS --max-time 20 "$API/app/books/all?size=1" -H "Authorization: Bearer $token" | sed -n 's/.*"totalElements":\([0-9]*\).*/\1/p')"
 if [ "${existing:-0}" -gt 0 ] && [ "$force_books" -ne 1 ]; then
