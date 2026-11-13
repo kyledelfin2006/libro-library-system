@@ -496,7 +496,7 @@ export interface paths {
         put?: never;
         /**
          * Create a library assistant account
-         * @description Only the library librarian may create a library assistant account. The submitted role is ignored and the account is always ADMINISTRATOR.
+         * @description Only the library librarian may create a library assistant account. The submitted role is ignored and the account is always ADMINISTRATOR. The account is created with mustChangePassword=true, so its owner must replace the librarian-chosen password at first sign-in.
          */
         post: operations["createAdministrator"];
         delete?: never;
