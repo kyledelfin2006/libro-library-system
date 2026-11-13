@@ -12,6 +12,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Inventory } from './pages/Inventory';
 import { Loans } from './pages/Loans';
 import { Register } from './pages/Register';
+import { Releases } from './pages/Releases';
 import { SignIn } from './pages/SignIn';
 import { Status } from './pages/Status';
 import { Version } from './pages/Version';
@@ -46,6 +47,7 @@ export function App() {
           </Route>
           <Route element={<RequireAuth capability="buildInfo" />}>
             <Route path="/version" element={<Version />} />
+            <Route path="/releases" element={<Releases />} />
           </Route>
         </Route>
       </Route>

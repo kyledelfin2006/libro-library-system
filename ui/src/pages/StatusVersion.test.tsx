@@ -123,3 +123,52 @@ describe('version page', () => {
     expect(within(nav).getByRole('link', { name: 'Version' })).toBeInTheDocument();
   });
 });
+
+describe('release history page', () => {
+  const history = {
+    generatedAt: '2026-11-13T02:08:00Z',
+    releases: [{ name: 'v1.4.0', tag: 'v1.4.0', publishedAt: '2026-11-12T02:00:00Z', url: 'https://github.com/o/r/releases/tag/v1.4.0', prerelease: false }],
+    publishedImages: [{ commit: 'a1b2c3d4e5f6a7b8c9d0', completedAt: '2026-11-13T02:00:00Z', url: 'https://github.com/o/r/actions/runs/9', run: 9 }],
+  };
+
+  it('lists releases and published images, with external links opening in a new tab', async () => {
+    routeFetch({ '/release-history.json': () => new Response(JSON.stringify(history)) });
+    renderAt('/releases', staffUser);
+    expect(await screen.findByRole('heading', { name: 'Releases' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /v1\.4\.0/ })).toHaveAttribute('target', '_blank');
+    expect(screen.getByText('a1b2c3d4e5f6')).toBeInTheDocument();
+    expect(screen.getByText(/Generated 13 Nov 2026, 10:08/)).toBeInTheDocument();
+  });
+
+  it('shows an empty state when the file is empty, missing, or the app shell', async () => {
+    for (const response of [
+      () => new Response(JSON.stringify({ generatedAt: '2026-11-13T02:08:00Z', releases: [], publishedImages: [] })),
+      () => new Response('', { status: 404 }),
+      () => new Response('<!doctype html><html></html>'),
+    ]) {
+      routeFetch({ '/release-history.json': response });
+      const { unmount } = renderAt('/releases', staffUser);
+      expect(await screen.findByText('No release history in this build.')).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it('is linked from Version and kept from patrons', async () => {
+    routeFetch({ ...infoRoutesFor(), '/books': () => ok(pageOf([])) });
+    renderAt('/version', staffUser);
+    expect(await screen.findByRole('link', { name: 'Release history' })).toHaveAttribute('href', '/releases');
+  });
+
+  it('sends a patron to the catalog', async () => {
+    routeFetch({ '/app/books/query': () => ok(pageOf([])), '/app/books/genre': () => ok({}) });
+    renderAt('/releases');
+    expect(await screen.findByRole('heading', { name: 'Catalog' })).toBeInTheDocument();
+  });
+});
+
+function infoRoutesFor() {
+  return {
+    '/app/info': () => ok({ version: '1.4.0', buildTime: '2026-11-13T02:08:00Z', commit: 'a1b2c3d4e5f6', environment: 'production' }),
+    '/v3/api-docs': () => fail(404),
+  };
+}

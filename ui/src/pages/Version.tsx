@@ -4,6 +4,9 @@ import { apiDocsAvailable, getBuildInfo } from '../api/ops';
 import { Chip, ErrorState, Skeleton } from '../components/ui';
 import { formatInstant } from '../lib/dates';
 
+/** Optional dashboard link, set at build time (for example an SSH-tunnelled Grafana). Only http(s) addresses are used. */
+const METRICS_URL = /^https?:\/\//.test(import.meta.env.VITE_METRICS_URL ?? '') ? import.meta.env.VITE_METRICS_URL : null;
+
 /** Staff-only Version page: the running build from /app/info, plus links to Status and (when served) the API docs. */
 export function Version() {
   const info = useQuery({ queryKey: ['buildInfo'], queryFn: getBuildInfo });
@@ -27,9 +30,12 @@ export function Version() {
       )}
       <ul className="link-list">
         <li><Link to="/status">Service status</Link></li>
+        <li><Link to="/releases">Release history</Link></li>
         {docs.data && <li><a href="/swagger-ui.html" target="_blank" rel="noreferrer">API documentation<span className="visually-hidden"> (opens in a new tab)</span></a></li>}
       </ul>
-      <p className="muted">Metrics are collected on a private management port and are not linked from here.</p>
+      {METRICS_URL
+        ? <p><a href={METRICS_URL} target="_blank" rel="noreferrer">Metrics dashboard<span className="visually-hidden"> (opens in a new tab)</span></a></p>
+        : <p className="muted">Metrics are collected on a private management port. Set VITE_METRICS_URL when building to link a dashboard here.</p>}
     </section>
   );
 }

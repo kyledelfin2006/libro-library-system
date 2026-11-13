@@ -56,3 +56,32 @@ export async function apiDocsAvailable(): Promise<boolean> {
     return false;
   }
 }
+
+/** One published GitHub Release. */
+export interface ReleaseEntry { name: string; tag: string; publishedAt: string; url: string; prerelease: boolean }
+/** One successful CD run that published an image for a commit. */
+export interface PublishedImage { commit: string; completedAt: string; url: string; run: number }
+/** The static file written at build time by `scripts/build-release-history.mjs`. */
+export interface ReleaseHistory { generatedAt: string; releases: ReleaseEntry[]; publishedImages: PublishedImage[] }
+
+/**
+ * Reads the build-time release history. It is a static file, so it needs no credentials; a missing file, or a dev
+ * server answering with the app shell instead, is an empty history rather than an error.
+ */
+export async function getReleaseHistory(): Promise<ReleaseHistory | null> {
+  try {
+    const response = await fetch('/release-history.json', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+    if (!response.ok) return null;
+    const body: unknown = await response.json();
+    if (!body || typeof body !== 'object') return null;
+    const h = body as Partial<ReleaseHistory>;
+    if (typeof h.generatedAt !== 'string') return null;
+    return {
+      generatedAt: h.generatedAt,
+      releases: Array.isArray(h.releases) ? h.releases : [],
+      publishedImages: Array.isArray(h.publishedImages) ? h.publishedImages : [],
+    };
+  } catch {
+    return null;
+  }
+}
