@@ -45,14 +45,15 @@ library-api-system/
 |-- .github/
 |   |-- dependabot.yml
 |   `-- workflows/
-|       |-- ci.yml                           unit-test, integration-test, security-scan, ui-test
-|       `-- cd.yml                           ARM64 image build/scan/publish, gated SSH deploy
+|       |-- ci.yml                           unit-test, integration-test, security-scan, ui-test, e2e-test
+|       `-- cd.yml                           ARM64 image build/scan/publish, UI build, gated SSH deploy
 |-- infra/
 |   |-- docker-compose.prod.yml              production override for a single VM
+|   |-- metrics/                             Prometheus config and provisioned Grafana dashboard (profile `metrics`)
 |   `-- caddy/Caddyfile                      TLS reverse proxy
 |-- scripts/
 |   |-- common.sh, deploy.sh, smoke.sh       operations (see docs/devops/runbook.md)
-|   |-- backup.sh, restore.sh, seed-demo.sh
+|   |-- backup.sh, restore.sh, seed-demo.sh, install-ui.sh
 |   `-- ci/trivy-scan.sh                     vulnerability scan shared by CI and CD
 |-- docs/
 |   |-- architecture.md                      short overview for readers new to the project
@@ -585,7 +586,7 @@ Docker Compose does not mount migrations into `/docker-entrypoint-initdb.d`; Fly
 
 ### Local build and tests
 
-The in-progress web UI lives in `ui/`. After starting the API, run `npm ci` and `npm run dev` there. Vite proxies `/app`, `/livez`, and `/readyz` to the API. With `LIBRO_API_DOCS_ENABLED=true` on the API, `npm run gen:api` regenerates `ui/src/api/schema.d.ts` (set `LIBRO_OPENAPI_URL` for another host or port). Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build`; CI runs the same checks and fails if regeneration changes the committed schema. The local Caddy profile mounts `ui/dist`; production CD does not yet build or ship that directory.
+The web UI lives in `ui/` and is documented in the [Web UI guide](../guides/web-ui.md). After starting the API, run `npm ci` and `npm run dev` there. Vite proxies `/app`, `/livez`, and `/readyz` to the API. With `LIBRO_API_DOCS_ENABLED=true` on the API, `npm run gen:api` regenerates `ui/src/api/schema.d.ts` (set `LIBRO_OPENAPI_URL` for another host or port). Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build`; CI runs the same checks and fails if regeneration changes the committed schema. The Caddy profile mounts `ui/dist`; production CD builds it from the validated commit and installs it with `scripts/install-ui.sh` after a successful deploy. `npm run test:e2e` runs the Playwright journey.
 
 ```powershell
 .\mvnw.cmd clean test
@@ -626,8 +627,9 @@ Persistent data lives in the `postgres_data` Docker volume. `docker compose down
 | `integration-test` | `./mvnw -B -ntp -Pintegration -DskipUTs -Djacoco.haltOnFailure=false verify` | Only the PostgreSQL suite through Testcontainers, including `LoanConcurrencyIT`. Unit tests already ran in `unit-test`. |
 | `security-scan` | `scripts/ci/trivy-scan.sh fs`, then `image` | Fails on HIGH/CRITICAL findings with a fix available, in dependencies and in the built image. Accepted findings go in `.trivyignore` with an expiry note; the same script gates the CD image. |
 | `ui-test` | `npm ci`, `npm run gen:api`, typecheck, lint, tests, build | Starts a disposable PostgreSQL service and test-profile API, rejects generated type drift, then validates the UI. |
+| `e2e-test` | `npm run test:e2e` | Starts PostgreSQL and the API with a bootstrap librarian, then runs the Playwright journey and axe checks in Chromium. |
 
-Require all four checks in branch protection for `main`. `.github/dependabot.yml` opens weekly update pull requests for Maven, Docker and GitHub Actions; raise Spring Boot-managed libraries through the parent version, not individually.
+Require all five checks in branch protection for `main`. `.github/dependabot.yml` opens weekly update pull requests for Maven, Docker and GitHub Actions; raise Spring Boot-managed libraries through the parent version, not individually.
 
 ## Design Patterns and Rationale
 

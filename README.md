@@ -259,18 +259,23 @@ flowchart LR
         DB --- PG[("postgres_data volume<br/>(prod: LIBRO_DATA_DIR/postgres)")]
         Proxy --- CD[("caddy_data volume<br/>TLS certificates")]
         Proxy --- UI[/"./ui/dist (read-only)<br/>static UI build"/]
+        Prom["prometheus<br/>(profile: metrics)"] -->|"scrape app:9091"| App
+        Graf["grafana<br/>(profile: metrics)"] --> Prom
     end
     Dev["Tools on the host"] -.->|"127.0.0.1:8080 (loopback only)"| App
     Dev -.->|"127.0.0.1:5432 (local only)"| DB
+    Dev -.->|"127.0.0.1:9090 / :3000 (metrics profile)"| Prom
 ```
 
-Three services make up the system:
+Three services make up the core system, and two more are optional (profile `metrics`):
 
 | Service | Container | Image | Role |
 | --- | --- | --- | --- |
 | `db` | `library-postgres` | `postgres:18-alpine`, pinned by digest | Stores all library data. Healthy when `pg_isready` succeeds. |
 | `app` | `library-app` | Built from the repository `Dockerfile` (locally) or a digest-pinned GHCR image (production) | The Spring Boot REST API. Starts only after `db` is healthy. |
 | `proxy` | `library-proxy` | `caddy:2.8-alpine`, pinned by digest | Optional (`--profile proxy`). Terminates TLS, serves the built UI, and forwards API traffic to `app`. The only service that listens on public interfaces. |
+| `prometheus` | `library-prometheus` | `prom/prometheus:v3.5.0`, pinned by digest | Optional (`--profile metrics`). Scrapes the API's private management port (`app:9091`) every 15 s and keeps 15 days of data. Loopback only. |
+| `grafana` | `library-grafana` | `grafana/grafana:12.2.0`, pinned by digest | Optional (`--profile metrics`). Shows the provisioned "Libro API overview" dashboard: request rate and latency, logins, rate-limit rejections, password resets, JVM heap, and database connections. Loopback only, anonymous read-only, no admin user. |
 
 ### File inventory
 
@@ -278,12 +283,14 @@ Three services make up the system:
 | --- | --- |
 | [`Dockerfile`](Dockerfile) | Multi-stage build of the API image: Maven build stage, then a JRE-only runtime stage. |
 | [`.dockerignore`](.dockerignore) | Keeps secrets, version control, IDE files, build output, docs, `infra/`, and Markdown out of the build context. |
-| [`docker-compose.yml`](docker-compose.yml) | The base stack: `db`, `app`, and the optional `proxy`. Used as-is for local development and as the base layer in production. |
+| [`docker-compose.yml`](docker-compose.yml) | The base stack: `db`, `app`, and the optional `proxy`, `prometheus`, and `grafana` (profiles `proxy` and `metrics`). Used as-is for local development and as the base layer in production. |
 | [`infra/docker-compose.prod.yml`](infra/docker-compose.prod.yml) | Production override layered on top of the base file. |
 | [`infra/caddy/Caddyfile`](infra/caddy/Caddyfile) | Caddy configuration: TLS, security headers, API routing, and static UI serving with SPA fallback. |
+| [`infra/metrics/`](infra/metrics) | `prometheus.yml` (the scrape job) and Grafana provisioning: the Prometheus data source, the dashboard provider, and `dashboards/libro-overview.json`. |
 | [`.env.example`](.env.example) | Template for the private `.env` that Compose and the scripts read. The real `.env` is git-ignored and never enters an image. |
 | [`scripts/common.sh`](scripts/common.sh) | Shared helpers: loads `.env`, wraps `docker compose` with both Compose files, and waits for container health. |
 | [`scripts/deploy.sh`](scripts/deploy.sh) | Release script: back up, start the new image, wait for health, smoke test, roll back on failure. |
+| [`scripts/install-ui.sh`](scripts/install-ui.sh) | Installs a built UI (tarball on stdin) into `ui/dist` in place. CD streams the artifact to it over SSH after a successful deploy. |
 | [`scripts/smoke.sh`](scripts/smoke.sh) | Post-deploy check through the proxy (readiness, liveness, login, authenticated read, anonymous rejection). |
 | [`scripts/smoke-journey.sh`](scripts/smoke-journey.sh) | Full client journey for a disposable, freshly seeded local stack. |
 | [`scripts/backup.sh`](scripts/backup.sh) / [`scripts/restore.sh`](scripts/restore.sh) | `pg_dump` and `pg_restore` through the running `db` container. |
@@ -312,7 +319,7 @@ Three services make up the system:
 - Defines the **only** health check: `wget` against `http://127.0.0.1:8080/readyz` every 30 s (5 s timeout, 60 s start period for Flyway migrations, unhealthy after 3 failures). Compose and the deploy scripts rely on it rather than defining their own.
 - Uses the exec-form `ENTRYPOINT ["java", "-jar", "application.jar"]`, so Java is PID 1 and receives `SIGTERM` for graceful shutdown.
 
-The image does **not** contain the web UI. The UI is built separately (`cd ui && npm ci && npm run build`) and served by Caddy from a bind-mounted `ui/dist`.
+The image does **not** contain the web UI. The UI is built separately (`cd ui && npm ci && npm run build`; CD does this in its `ui` job) and served by Caddy from a bind-mounted `ui/dist`, which `scripts/install-ui.sh` updates in place.
 
 ### Local stack (docker-compose.yml)
 
@@ -322,7 +329,8 @@ Run it with `docker compose up --build`, or add `--profile proxy` to include Cad
 - **`db`.** Credentials come from `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`. Data lives in the `postgres_data` named volume mounted at `/var/lib/postgresql` (the PostgreSQL 18 data root). Published only to `127.0.0.1:5432`. `mem_limit: 512m`, `restart: unless-stopped`.
 - **`app`.** Built from the repository root. `depends_on: db` with `condition: service_healthy`. The datasource URL is derived as `jdbc:postgresql://db:5432/${POSTGRES_DB}`; `db` is the service name on the Compose network. `LIBRO_JWT_SECRET_BASE64` is required (Compose stops with a message if it is missing). Every optional setting (JWT issuer and audience, rate limits, CORS, API docs, bootstrap librarian, and so on) is passed through only when set, so the defaults in `application.properties` remain the single source. `mem_limit: 1g`, `no-new-privileges`, published only to `127.0.0.1:8080`.
 - **`proxy`.** Behind `profiles: ["proxy"]`. Starts only once `app` is healthy. Mounts the Caddyfile read-only, `./ui/dist` read-only at `/srv/ui`, and the `caddy_data` volume at `/data`. Publishes ports 80 and 443. `LIBRO_DOMAIN` defaults to `localhost`. `mem_limit: 128m`.
-- **Volumes.** `postgres_data` (database) and `caddy_data` (issued certificates). Both survive `docker compose down`.
+- **`prometheus` and `grafana`.** Behind `profiles: ["metrics"]`, so a plain `docker compose up` does not start them. Prometheus reads `infra/metrics/prometheus.yml`, starts once `app` is healthy, and stores data in `prometheus_data`. Grafana loads its provisioning and dashboard files read-only, with `GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION` and anonymous Viewer access, so there is no password to manage; that is acceptable only because both ports are bound to `127.0.0.1` (use an SSH tunnel to reach them remotely). `mem_limit: 256m` each.
+- **Volumes.** `postgres_data` (database), `caddy_data` (issued certificates), `prometheus_data`, and `grafana_data`. All survive `docker compose down`.
 
 ### Production override (infra/docker-compose.prod.yml)
 
@@ -364,14 +372,15 @@ All scripts use `scripts/common.sh`, which loads the private `.env` (BCrypt hash
 | --- | --- | --- | --- |
 | 80, 443 | `proxy` | All interfaces | The only public entry. |
 | 8080 | `app` | `127.0.0.1` only | HTTP API and the public `/livez` and `/readyz` probes. |
-| 9091 | `app` | Never | Actuator `health` and `prometheus`; reachable only inside the Docker network. |
+| 9091 | `app` | Never | Actuator `health` and `prometheus`; reachable only inside the Docker network. Security permits only GET of those paths, and only for connections that arrive on this port, so Prometheus can scrape without credentials. |
 | 5432 | `db` | `127.0.0.1` locally; not published in production | The app reaches it as `db:5432`. |
+| 9090, 3000 | `prometheus`, `grafana` | `127.0.0.1` only (profile `metrics`) | Reach them through an SSH tunnel; never publish them. |
 
 Health is layered: `db` uses `pg_isready`; `app` uses the Dockerfile `HEALTHCHECK` on `/readyz`; `proxy` waits for `app` to be healthy. `restart: unless-stopped` restarts crashed containers and survives a Docker daemon restart, while `docker compose down` still stops them.
 
 ### Image pinning and updates
 
-Every image is pinned by `@sha256` digest: the two Dockerfile base images, PostgreSQL, Caddy, the CI `ui-test` PostgreSQL service, and the Trivy scanner. Dependabot opens weekly PRs for the `docker` and `docker-compose` ecosystems. Two pins are updated by hand when their PRs land: the Trivy digest in `scripts/ci/trivy-scan.sh` and the PostgreSQL digest in `PostgresTestConfig.java` (keep it equal to `docker-compose.yml`).
+Every image is pinned by `@sha256` digest: the two Dockerfile base images, PostgreSQL, Caddy, Prometheus, Grafana, the CI `ui-test` and `e2e-test` PostgreSQL services, and the Trivy scanner. Dependabot opens weekly PRs for the `docker` and `docker-compose` ecosystems. Two pins are updated by hand when their PRs land: the Trivy digest in `scripts/ci/trivy-scan.sh` and the PostgreSQL digest in `PostgresTestConfig.java` (keep it equal to `docker-compose.yml`).
 
 ### Docker safety rules
 
@@ -395,22 +404,27 @@ flowchart LR
     CI --> Integration[integration-test: PostgreSQL]
     CI --> Security[security-scan: Trivy]
     CI --> UI[ui-test: types, lint, tests, build]
+    CI --> E2E[e2e-test: Playwright journey]
     Test --> Pass[All checks pass]
     Integration --> Pass
     Security --> Pass
     UI --> Pass
+    E2E --> Pass
     Pass -->|main push| Image[CD image job: build and scan ARM64 image]
+    Pass -->|main push| UIBuild[CD ui job: build ui/dist]
     Image --> GHCR[Publish commit-SHA image to GHCR]
     GHCR --> Gate{Deploy enabled and approved?}
+    UIBuild --> Gate
     Gate -->|Yes| Deploy[SSH to VM: scripts/deploy.sh with image digest]
     Deploy --> Smoke[Backup, start, smoke test, roll back on failure]
+    Smoke --> InstallUI[Install ui/dist on the VM]
 ```
 
 ### Workflow Breakdown
 
 #### CI ([`ci.yml`](.github/workflows/ci.yml))
 
-Every pull request and every push to `main` runs four independent jobs in parallel; any failure fails the workflow. A newer push to the same branch or PR cancels the obsolete run (`concurrency` with `cancel-in-progress`), and the workflow has read-only `contents` permission with no deployment credentials.
+Every pull request and every push to `main` runs five independent jobs in parallel; any failure fails the workflow. A newer push to the same branch or PR cancels the obsolete run (`concurrency` with `cancel-in-progress`), and the workflow has read-only `contents` permission with no deployment credentials.
 
 | Job | Runner and timeout | What it runs | What it proves |
 | --- | --- | --- | --- |
@@ -418,8 +432,9 @@ Every pull request and every push to `main` runs four independent jobs in parall
 | `integration-test` | `ubuntu-latest`, 25 min | `./mvnw -B -ntp -Pintegration -DskipUTs -Djacoco.haltOnFailure=false verify` | The `*IT` suite passes against a real PostgreSQL container via Testcontainers: Flyway migrations, schema validation, and loan concurrency. `-DskipUTs` avoids re-running unit tests; the coverage gate is not applied to this suite. Reports upload as `integration-test-reports`. |
 | `security-scan` | `ubuntu-latest`, 20 min | `scripts/ci/trivy-scan.sh fs`, then `docker build -t libro-api:ci .`, then `scripts/ci/trivy-scan.sh image libro-api:ci` | No fixable HIGH or CRITICAL vulnerabilities in `pom.xml` dependencies or in the built image (OS packages and the packaged JAR). |
 | `ui-test` | `ubuntu-latest`, 15 min | Node 24 and JDK 25, with a PostgreSQL 18 service container | Boots the API on the test profile with API docs on, regenerates `ui/src/api/schema.d.ts`, and fails on any `git diff` (generated-type drift); then `npm run typecheck`, `lint`, `test` (unit, contrast, and accessibility tests), and `build`. |
+| `e2e-test` | `ubuntu-latest`, 20 min | Node 24, JDK 25, a PostgreSQL 18 service container, and Chromium | Starts the API on the test profile with a librarian created by the startup bootstrap (random password for this run, hash from the pinned Caddy image), then runs the Playwright journey: register, sign in, search, borrow, return, and a staff lost-resolution, with axe in both themes and a phone-width navigation check. Reports upload on failure. |
 
-The Trivy policy lives in one place, [`scripts/ci/trivy-scan.sh`](scripts/ci/trivy-scan.sh), so CI and CD apply identical rules: severities `HIGH,CRITICAL`, `--ignore-unfixed`, exit code 1 on any remaining finding, and accepted exceptions in `.trivyignore`. Trivy itself runs from a digest-pinned `aquasec/trivy` image, so no third-party GitHub Action is trusted for scanning. Branch protection should require all four check names before merging to `main`.
+The Trivy policy lives in one place, [`scripts/ci/trivy-scan.sh`](scripts/ci/trivy-scan.sh), so CI and CD apply identical rules: severities `HIGH,CRITICAL`, `--ignore-unfixed`, exit code 1 on any remaining finding, and accepted exceptions in `.trivyignore`. Trivy itself runs from a digest-pinned `aquasec/trivy` image, so no third-party GitHub Action is trusted for scanning. Branch protection should require all five check names before merging to `main`.
 
 #### CD ([`cd.yml`](.github/workflows/cd.yml))
 
@@ -429,7 +444,7 @@ CD extends CI and never replaces it. Its triggers:
 | --- | --- |
 | `workflow_run` of CI on `main` | The release path. The `image` job runs only when the CI run concluded `success` and was started by a `push`. |
 | `workflow_dispatch` | Manual release of the current `main`; the deploy job still needs `production` approval. |
-| `pull_request` touching `cd.yml`, `Dockerfile`, or `scripts/ci/trivy-scan.sh` | Dry run: build and scan only, no publishing. |
+| `pull_request` touching `cd.yml`, `Dockerfile`, `scripts/ci/trivy-scan.sh`, `scripts/install-ui.sh`, or the release-history script | Dry run: build and scan the image and build the UI, no publishing or deploying. |
 
 **`image` job** (`ubuntu-24.04-arm`, native ARM64 with no QEMU emulation, 30 min; the only job allowed `packages: write`):
 
@@ -439,7 +454,13 @@ CD extends CI and never replaces it. Its triggers:
 4. Scans that exact image with `scripts/ci/trivy-scan.sh`.
 5. Unless the run is a pull request, logs in to GitHub Container Registry with `GITHUB_TOKEN` (via `--password-stdin`), pushes `ghcr.io/<owner>/libro-api:<commit-sha>`, and outputs the immutable `name@sha256:` digest.
 
-**`deploy` job** (`ubuntu-latest`, 20 min, `environment: production`):
+**`ui` job** (`ubuntu-latest`, 15 min, same release condition as `image`):
+
+1. Checks out the same validated commit and sets up Node 24.
+2. `npm ci`, then `npm run build:history`, which writes the release-history page's data from GitHub Releases and successful CD runs (best effort: an outage leaves it empty and never fails the release).
+3. `npm run build`, packs `ui/dist` as one tarball, and uploads it as the `libro-ui` artifact.
+
+**`deploy` job** (`ubuntu-latest`, 20 min, `environment: production`, needs `image` and `ui`):
 
 - Runs only when the event is not a pull request **and** the repository variable `OCI_DEPLOY_ENABLED` is `true`. The `production` environment's required reviewers then hold the job until someone approves it.
 - Uses `concurrency: production-deploy` with `cancel-in-progress: false`, so two deployments never overlap and a running one is never cancelled.
@@ -447,6 +468,7 @@ CD extends CI and never replaces it. Its triggers:
 - Writes the deploy key (mode `600`) and a pinned `known_hosts`, then connects with `StrictHostKeyChecking=yes`, which rejects any other host key. Secrets: `OCI_SSH_KEY`, `OCI_SSH_KNOWN_HOSTS`, `OCI_HOST`, `OCI_USER`.
 - Over SSH, runs `cd /opt/libro`, checks out the validated commit (so scripts and Compose files match the image), and runs `scripts/deploy.sh --image <digest>`. The values are passed as arguments through a quoted heredoc, never as shell code.
 - The server never rebuilds the release, so what was scanned is exactly what runs. `deploy.sh` backs up the database, starts the image, waits for health, smoke tests it, and rolls back to the previous image on failure.
+- Only after `deploy.sh` succeeds, a second step streams the `libro-ui` tarball over the same SSH connection to `scripts/install-ui.sh`, which refuses an upload without `index.html` and updates `ui/dist` in place (new files first, `index.html` next, stale files last). Caddy serves that directory straight from its bind mount, so no restart is needed, and a rolled-back release never leaves a newer UI in front of an older API.
 
 #### Dependabot ([`dependabot.yml`](.github/dependabot.yml))
 
@@ -454,9 +476,9 @@ Weekly update PRs for Maven (`pom.xml`, up to 5 open), Docker (Dockerfile base i
 
 ### Triggers & Quality Gates
 
-Gate summary, in order: (1) all four CI jobs pass; (2) CI succeeds on a `main` push, which unlocks the CD `image` job; (3) the image passes the Trivy scan before it is pushed; (4) the deploy job requires `OCI_DEPLOY_ENABLED=true` plus `production` environment approval; (5) `deploy.sh` passes its health check and smoke test or automatically rolls back. Setup for the environment, secrets, and enable variable is in the [Operations Runbook](docs/devops/runbook.md#7-enable-automated-deployment).
+Gate summary, in order: (1) all five CI jobs pass; (2) CI succeeds on a `main` push, which unlocks the CD `image` job; (3) the image passes the Trivy scan before it is pushed; (4) the deploy job requires `OCI_DEPLOY_ENABLED=true` plus `production` environment approval; (5) `deploy.sh` passes its health check and smoke test or automatically rolls back. Setup for the environment, secrets, and enable variable is in the [Operations Runbook](docs/devops/runbook.md#7-enable-automated-deployment).
 
-The CD workflow publishes the API image only. It does not yet build `ui/dist` for the deployed Caddy proxy, so the web UI must be built on the host with `cd ui && npm ci && npm run build` until that step is added.
+CD ships both halves of a release: the scanned API image (by digest) and the web UI build (`ui/dist`), installed together from the same validated commit.
 
 ## Deployment
 
@@ -478,7 +500,7 @@ On a provisioned VM, use `scripts/deploy.sh` for a manual release or [the runboo
 
 Run `./mvnw verify` for unit/MVC tests and the 80% line-coverage gate. Run `./mvnw -Pintegration -DskipUTs -Djacoco.haltOnFailure=false verify` for the PostgreSQL suite (unit tests run once, in the first command); it needs Docker and a test-only `LIBRO_ADMIN_PASSWORD_HASH` in the shell environment, because Maven does not load Compose's `.env`. On Windows, use `mvnw.cmd`. The [Engineering Reference](docs/reference/engineering-reference.md#testing-strategy) explains test scope and where to add coverage.
 
-The web UI under `ui/` currently covers sign-in, student registration, and forced password changes. Start the API, then run `npm ci` and `npm run dev` from `ui/`; Vite proxies `/app`, `/livez`, and `/readyz` to the API. Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` for its local checks. With API docs enabled, `npm run gen:api` refreshes the checked-in TypeScript contract. Catalog, loan, account, and dashboard pages remain on the [UI execution plan](docs/plans/implementation-plan-ui-execution.md).
+The web UI under `ui/` covers sign-in and registration, the catalog, borrowing and returning, My Account, and the staff dashboard, loans, inventory, accounts, audit log, status, version, and release history (see the [Web UI guide](docs/guides/web-ui.md)). Start the API, then run `npm ci` and `npm run dev` from `ui/`; Vite proxies the API routes. Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` for its local checks. `npm run test:e2e` runs one Playwright journey (register, sign in, search, borrow, return, and a staff lost-resolution) against a running API and a staff login set in `E2E_STAFF_ID` and `E2E_STAFF_PASSWORD`; it writes to the database, so use a disposable one. With API docs enabled, `npm run gen:api` refreshes the checked-in TypeScript contract.
 
 ## Documentation
 
@@ -486,7 +508,7 @@ The web UI under `ui/` currently covers sign-in, student registration, and force
 | --- | --- |
 | System design, flows, and data model | [Architecture](docs/architecture.md) |
 | Current repository map, API inventory, configuration, and tests | [Engineering Reference](docs/reference/engineering-reference.md) |
-| Proposed UI, backend, and deployment implementation work | [Implementation Plans](docs/plans/README.md) and [Development Roadmap](docs/reference/ROADMAP.md) |
+| The web UI: pages, roles, build, tests, and delivery | [Web UI guide](docs/guides/web-ui.md) |
 | Running and configuring a local stack | [Local Setup](docs/guides/local-setup.md) |
 | Public patron logins and private staff-account policy | [Demo Accounts](docs/guides/demo-accounts.md) |
 | Physical-copy and loan decisions | [Domain Decisions](docs/guides/domain-decisions.md) and [Loan Implementation Guide](docs/guides/loan.md) |
@@ -503,11 +525,10 @@ src/             Spring Boot application (controllers, services, repositories, F
 ui/              React/Vite UI, generated API types, and frontend tests
 infra/           Production Compose override and the Caddy reverse-proxy configuration
 scripts/         Deploy, rollback, smoke-test, backup, restore, and demo-seed scripts
-docs/plans/      Proposed implementation plans; status is in the roadmap
 docs/
   architecture.md  Design, request flows, API inventory, data model, troubleshooting, tests
   devops/          CI/CD, environments, secrets, rollback, monitoring, operations runbook
-  guides/          Domain decisions, loan guide, local setup, institutional context, API documentation standard
+  guides/          Domain decisions, loan guide, web UI guide, local setup, institutional context, API documentation standard
   reference/       Engineering reference, JWT design, role policy, roadmap
 .github/         CI and CD workflows and Dependabot configuration
 Dockerfile, docker-compose.yml, pom.xml, mvnw   Build and runtime entry points
@@ -525,7 +546,7 @@ Read the [Agent and Contributor Guide](AGENTS.md) before changing code or docume
 | Area | State |
 | --- | --- |
 | Catalog, accounts, roles, JWT authentication, loans | Implemented and covered by unit, MVC, and PostgreSQL tests |
-| CI (`unit-test`, `integration-test`, `security-scan`, `ui-test`) | Running on every pull request and push to `main`; all four checks are required by branch protection on `main` |
+| CI (`unit-test`, `integration-test`, `security-scan`, `ui-test`, `e2e-test`) | Running on every pull request and push to `main`; all five checks are required by branch protection on `main` |
 | Container image and Compose stack | Implemented, with health checks |
 | Deploy, rollback, backup, and smoke-test scripts; runbook | Implemented and rehearsed locally |
 | CD workflow (ARM64 build, scan, publish, gated deploy) | Implemented; deploy job off until the VM exists |
