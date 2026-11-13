@@ -302,6 +302,7 @@ class UserServiceTest {
         assertEquals(UserRole.ADMINISTRATOR, result.getUserRole());
         assertNull(result.getUserCourse());
         assertNull(result.getMajor());
+        assertTrue(result.isMustChangePassword());
     }
 
     @Test
@@ -315,6 +316,7 @@ class UserServiceTest {
         UserResponseDTO result = userService.createUser(request);
 
         assertEquals(UserRole.STUDENT, result.getUserRole());
+        assertFalse(result.isMustChangePassword());
     }
 
     /** Verifies signup rejects multibyte input that exceeds BCrypt's byte boundary. */
@@ -343,6 +345,7 @@ class UserServiceTest {
         assertEquals(UserRole.FACULTY, result.getUserRole());
         assertNull(result.getUserCourse());
         assertNull(result.getMajor());
+        assertTrue(result.isMustChangePassword());
     }
 
     @Test

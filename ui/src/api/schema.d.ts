@@ -516,7 +516,7 @@ export interface paths {
         put?: never;
         /**
          * Create a faculty account
-         * @description Creates a faculty account. Only librarians may use this operation; the submitted role is ignored and the account is always FACULTY.
+         * @description Creates a faculty account. Only librarians may use this operation; the submitted role is ignored and the account is always FACULTY. The account is created with mustChangePassword=true, so its owner must replace the librarian-chosen password at first sign-in.
          */
         post: operations["createFaculty"];
         delete?: never;

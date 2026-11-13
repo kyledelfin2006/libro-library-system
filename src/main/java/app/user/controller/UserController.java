@@ -81,7 +81,7 @@ public class UserController {
     }
 
     @PostMapping("/faculty")
-    @Operation(summary = "Create a faculty account", description = "Creates a faculty account. Only librarians may use this operation; the submitted role is ignored and the account is always FACULTY.")
+    @Operation(summary = "Create a faculty account", description = "Creates a faculty account. Only librarians may use this operation; the submitted role is ignored and the account is always FACULTY. The account is created with mustChangePassword=true, so its owner must replace the librarian-chosen password at first sign-in.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Faculty account created")
     @ErrorApiResponse(responseCode = "400", description = "Request validation failed or university ID/email is already registered")
     @ErrorApiResponse(responseCode = "403", description = "Only librarians may create faculty accounts")
@@ -96,7 +96,7 @@ public class UserController {
     /** Creates a library assistant account. */
     @PostMapping("/administrators")
     @Operation(summary = "Create a library assistant account",
-            description = "Only the library librarian may create a library assistant account. The submitted role is ignored and the account is always ADMINISTRATOR.")
+            description = "Only the library librarian may create a library assistant account. The submitted role is ignored and the account is always ADMINISTRATOR. The account is created with mustChangePassword=true, so its owner must replace the librarian-chosen password at first sign-in.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Library assistant account created")
     @ErrorApiResponse(responseCode = "400", description = "Request validation failed or university ID/email is already registered")
     @ErrorApiResponse(responseCode = "403", description = "Only the librarian may create library assistant accounts")

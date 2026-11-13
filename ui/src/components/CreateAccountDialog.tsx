@@ -103,7 +103,7 @@ export function CreateAccountDialog({
           value={password}
           onChange={setPassword}
           error={errors.password}
-          hint="Ask the owner to change it after their first sign-in."
+          hint="The owner must change it at their first sign-in."
         />
       </form>
     </Dialog>
