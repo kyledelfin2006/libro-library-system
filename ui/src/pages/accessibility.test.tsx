@@ -49,6 +49,27 @@ describe.each(['dark', 'light'])('axe (%s theme)', (theme) => {
     expect(await seriousViolations(container)).toEqual([]);
   });
 
+  it.each(['ready', 'not-ready'])('/status (%s) has no serious or critical violations', async (mode) => {
+    document.documentElement.dataset.theme = theme;
+    const probe = (up: boolean) => new Response('{}', { status: up ? 200 : 503 });
+    routeFetch({ '/livez': () => probe(true), '/readyz': () => probe(mode === 'ready') });
+    const { container, findByText } = renderAt('/status', null);
+    await findByText(mode === 'ready' ? /All systems ready/ : /Not ready/);
+    expect(await seriousViolations(container)).toEqual([]);
+  });
+
+  it('/version has no serious or critical violations', async () => {
+    document.documentElement.dataset.theme = theme;
+    routeFetch({
+      '/app/info': () => ok({ version: '1.4.0', buildTime: '2026-11-13T02:08:00Z', commit: 'a1b2c3d4e5f6', environment: 'production' }),
+      '/v3/api-docs': () => new Response('{}'),
+    });
+    const { container, findByRole, findByText } = renderAt('/version', staffUser);
+    await findByText('1.4.0');
+    await findByRole('link', { name: /API documentation/ });
+    expect(await seriousViolations(container)).toEqual([]);
+  });
+
   it('/accounts new-account dialog has no serious or critical violations', async () => {
     document.documentElement.dataset.theme = theme;
     routeFetch({ '/app/users?': () => ok(pageOf([])) });

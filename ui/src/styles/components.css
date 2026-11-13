@@ -181,3 +181,12 @@ a.tile:hover { border-color: var(--color-primary); }
 .help-disclosure summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
 .permission-matrix { width: 100%; border-collapse: collapse; }
 .permission-matrix th, .permission-matrix td { text-align: left; padding: var(--space-2); border-bottom: 1px solid var(--color-border); }
+
+/* Status and Version pages */
+.status-headline { font-size: 1.5rem; font-family: var(--font-serif, inherit); margin: var(--space-4) 0 var(--space-2); }
+.status-ready { color: var(--status-active); }
+.status-notready { color: var(--status-overdue); }
+.status-meta { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; margin-top: var(--space-5); }
+.version-card { max-width: 520px; }
+.link-list { list-style: none; padding: 0; display: flex; gap: var(--space-5); flex-wrap: wrap; margin: var(--space-5) 0; }
+.diagram { margin: var(--space-4) 0; }

@@ -25,6 +25,7 @@ export function Shell() {
           {staff && <NavLink to="/staff/loans">Loans</NavLink>}
           {staff && <NavLink to="/inventory">Inventory</NavLink>}
           {can(user.userRole, 'listAccounts') && <NavLink to="/accounts">Accounts</NavLink>}
+          {can(user.userRole, 'buildInfo') && <NavLink to="/version">Version</NavLink>}
           <NavLink to="/loans">My Loans</NavLink>
           <NavLink to="/account">My Account</NavLink>
         </nav>
@@ -46,7 +47,9 @@ export function Shell() {
       <main id="main" tabIndex={-1} className="shell-main">
         <Outlet />
       </main>
-      <footer className="shell-footer">Libro · Times are shown in Manila time</footer>
+      <footer className="shell-footer">
+        Libro · Times are shown in Manila time · <NavLink to="/status">Status</NavLink>
+      </footer>
     </div>
   );
 }

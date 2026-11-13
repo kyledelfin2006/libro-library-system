@@ -21,6 +21,7 @@ export type BookResponse = RequiredFields<Schemas['BookResponseDTO'], 'id' | 'ti
 export type LoanResponse = RequiredFields<Schemas['LoanResponseDTO'],
   'loanId' | 'bookId' | 'bookTitle' | 'borrowedAt' | 'dueAt' | 'status' | 'overdue'>;
 export type ErrorBody = Schemas['ErrorResponse'];
+export type BuildInfo = RequiredFields<Schemas['BuildInfoDTO'], 'version' | 'buildTime' | 'commit' | 'environment'>;
 
 /** Spring Data page as the API serializes it, with the fields the UI reads made required. */
 export interface Page<T> {

@@ -20,7 +20,11 @@ const sameOrigin = {
 export default defineConfig({
   plugins: [react()],
   server: {
-    proxy: { '/app': sameOrigin, '/livez': sameOrigin, '/readyz': sameOrigin },
+    proxy: {
+      '/app': sameOrigin, '/livez': sameOrigin, '/readyz': sameOrigin,
+      // API docs exist only when LIBRO_API_DOCS_ENABLED=true; proxied so the Version page can detect and link them.
+      '/v3/api-docs': sameOrigin, '/swagger-ui': sameOrigin,
+    },
   },
   test: {
     environment: 'jsdom',

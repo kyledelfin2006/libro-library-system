@@ -44,3 +44,19 @@ export function relativeDays(days: number): string {
   if (days === -1) return '1 day ago';
   return days > 0 ? `in ${days} days` : `${Math.abs(days)} days ago`;
 }
+
+/** "13 Nov 2026, 10:08" in Manila time for an absolute instant such as the build time ("2026-11-13T02:08:00Z"). */
+export function formatInstant(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso; // "unknown" locally: show it as the API reports it
+  const f = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Manila', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  });
+  const p = Object.fromEntries(f.formatToParts(date).map((x) => [x.type, x.value]));
+  return `${p.day} ${p.month} ${p.year}, ${p.hour}:${p.minute}`;
+}
+
+/** "10:08:41" in Manila time, for "last checked" labels. */
+export function formatClock(date: Date): string {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(date);
+}
