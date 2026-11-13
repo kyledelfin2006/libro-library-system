@@ -80,6 +80,7 @@ public class SecurityConfig {
      * @param http Spring Security HTTP configuration
      * @param jwtAuthenticationConverter maps the validated Libro role claim
      * @param apiDocsEnabled whether the public OpenAPI document and Swagger UI routes are permitted
+     * @param managementPort the private Actuator port, or a non-positive value when Actuator shares the main port
      * @return the configured filter chain
      * @throws Exception if the security chain cannot be built
      */
@@ -87,7 +88,8 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(
             HttpSecurity http,
             JwtAuthenticationConverter jwtAuthenticationConverter,
-            @Value("${libro.api-docs.enabled:false}") boolean apiDocsEnabled) throws Exception {
+            @Value("${libro.api-docs.enabled:false}") boolean apiDocsEnabled,
+            @Value("${management.server.port:-1}") int managementPort) throws Exception {
         http
                 // CORS must handle browser preflights before stateless Bearer authentication.
                 .cors(Customizer.withDefaults())
@@ -103,6 +105,9 @@ public class SecurityConfig {
                                 "/swagger-ui.html", "/swagger-ui/**").permitAll();
                     }
                     auth
+                        // Prometheus scrapes the Actuator endpoints with no credentials. They are open only on the private
+                        // management port, which deployment never publishes; the same paths on the public port stay protected.
+                        .requestMatchers(request -> isPrivateManagementRequest(request, managementPort)).permitAll()
                         // Liveness/readiness probes are public; all other Actuator endpoints live on the private management port.
                         .requestMatchers(HttpMethod.GET, "/livez", "/readyz").permitAll()
                         .requestMatchers(HttpMethod.POST, "/app/users/signup", "/app/auth/login").permitAll()
@@ -159,5 +164,22 @@ public class SecurityConfig {
                         .accessDeniedHandler(new JsonSecurityErrorHandler())
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
         return http.build();
+    }
+
+    /**
+     * Tells whether a request is a GET for the Prometheus scrape or health endpoints on the private management port.
+     * The local port is the port the server accepted the connection on, so a client cannot spoof it with a header, and
+     * it is not the published port: inside the container the management server always listens on its own port.
+     *
+     * @param request the incoming request
+     * @param managementPort the configured management port, or a non-positive value when none is separate
+     * @return true only for those read-only endpoints on that port
+     */
+    private static boolean isPrivateManagementRequest(jakarta.servlet.http.HttpServletRequest request, int managementPort) {
+        if (managementPort <= 0 || request.getLocalPort() != managementPort || !"GET".equals(request.getMethod())) {
+            return false;
+        }
+        String path = request.getRequestURI();
+        return "/actuator/prometheus".equals(path) || "/actuator/health".equals(path) || path.startsWith("/actuator/health/");
     }
 }
