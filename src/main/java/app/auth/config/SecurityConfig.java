@@ -80,7 +80,9 @@ public class SecurityConfig {
      * @param http Spring Security HTTP configuration
      * @param jwtAuthenticationConverter maps the validated Libro role claim
      * @param apiDocsEnabled whether the public OpenAPI document and Swagger UI routes are permitted
-     * @param managementPort the private Actuator port, or a non-positive value when Actuator shares the main port
+     * @param configuredManagementPort the private Actuator port; a non-positive value, or one equal to the application
+     *                                 port, keeps the Actuator paths protected
+     * @param serverPort the application port
      * @return the configured filter chain
      * @throws Exception if the security chain cannot be built
      */
@@ -89,7 +91,11 @@ public class SecurityConfig {
             HttpSecurity http,
             JwtAuthenticationConverter jwtAuthenticationConverter,
             @Value("${libro.api-docs.enabled:false}") boolean apiDocsEnabled,
-            @Value("${management.server.port:-1}") int managementPort) throws Exception {
+            @Value("${management.server.port:-1}") int configuredManagementPort,
+            @Value("${server.port:8080}") int serverPort) throws Exception {
+        // A management port equal to the application port is not private, so the open scrape rule is switched off and
+        // the Actuator paths stay protected like every other route.
+        int managementPort = configuredManagementPort == serverPort ? -1 : configuredManagementPort;
         http
                 // CORS must handle browser preflights before stateless Bearer authentication.
                 .cors(Customizer.withDefaults())

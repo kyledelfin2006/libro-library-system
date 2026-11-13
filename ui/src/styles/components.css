@@ -52,10 +52,11 @@
   .shell-header .brand { order: 1; }
   .menu-toggle { display: inline-flex; order: 2; margin-left: auto; }
   .shell-tools { order: 3; }
-  .shell-header nav { order: 4; flex: 0 0 100%; display: none; flex-direction: column; gap: 0; border-top: 1px solid var(--color-border); }
-  .shell-header nav.nav-open { display: flex; }
-  .shell-header nav a { border-bottom: 1px solid var(--color-border); padding: var(--space-2) var(--space-2); }
-  .shell-header nav a.active { border-bottom-color: var(--color-primary); }
+  /* Scoped to the signed-in shell's menu: the public Status header has only one link and no Menu button, so it stays visible. */
+  .shell-header nav#primary-nav { order: 4; flex: 0 0 100%; display: none; flex-direction: column; gap: 0; border-top: 1px solid var(--color-border); }
+  .shell-header nav#primary-nav.nav-open { display: flex; }
+  .shell-header nav#primary-nav a { border-bottom: 1px solid var(--color-border); padding: var(--space-2) var(--space-2); }
+  .shell-header nav#primary-nav a.active { border-bottom-color: var(--color-primary); }
 }
 @media (max-width: 639px) { .shell-tools .who { display: none; } }
 .shell-main { flex: 1; width: 100%; max-width: 1120px; margin: 0 auto; padding: var(--space-6) var(--space-5); }
