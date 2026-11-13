@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { can, homePath } from '../auth/permissions';
 import { useTheme, type ThemeChoice } from '../theme/ThemeProvider';
@@ -7,6 +8,22 @@ import { useTheme, type ThemeChoice } from '../theme/ThemeProvider';
 export function Shell() {
   const { user, signOut } = useAuth();
   const { choice, setChoice } = useTheme();
+  // Below 1024 px the links sit behind a Menu button instead of wrapping across several rows.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const { pathname } = useLocation();
+  useEffect(() => setMenuOpen(false), [pathname]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        menuButton.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
   if (!user) return null;
   const staff = can(user.userRole, 'staffDashboard');
 
@@ -19,7 +36,17 @@ export function Shell() {
         <NavLink to={homePath(user.userRole)} className="brand" aria-label="Libro home">
           <img src="/brand/libro-96.png" srcSet="/brand/libro-48.png 1x, /brand/libro-96.png 2x" alt="Libro" height={44} width={47} />
         </NavLink>
-        <nav aria-label="Primary">
+        <button
+          ref={menuButton}
+          type="button"
+          className="btn btn-secondary menu-toggle"
+          aria-expanded={menuOpen}
+          aria-controls="primary-nav"
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          Menu
+        </button>
+        <nav id="primary-nav" aria-label="Primary" className={menuOpen ? 'nav-open' : undefined}>
           {staff && <NavLink to="/dashboard">Dashboard</NavLink>}
           <NavLink to="/catalog">Catalog</NavLink>
           {staff && <NavLink to="/staff/loans">Loans</NavLink>}
