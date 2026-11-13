@@ -150,3 +150,21 @@
   .record-cards [data-label]::before { content: attr(data-label); display: inline-block; min-width: 96px; color: var(--color-brass); font-variant: small-caps; letter-spacing: 0.06em; }
   .record-cards .cell-cover { display: none; }
 }
+.how-it-works summary::before { content: '\25B8'; margin-right: var(--space-2); color: var(--color-primary); }
+.how-it-works[open] summary::before { content: '\25BE'; }
+
+/* Staff: dashboard, loans, inventory */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); margin: var(--space-4) 0; }
+.tile { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3) var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-panel); color: var(--color-text); text-decoration: none; }
+a.tile:hover { border-color: var(--color-primary); }
+.tile-label { color: var(--color-brass); font-variant: small-caps; letter-spacing: 0.08em; text-transform: lowercase; }
+.tile-value { font-family: var(--font-serif); font-size: 28px; font-weight: 700; min-height: 34px; }
+.dash-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-4); }
+@media (min-width: 1024px) { .dash-grid { grid-template-columns: 1fr 1fr; } }
+.split { display: grid; grid-template-columns: 1fr; gap: var(--space-5); }
+@media (min-width: 1024px) { .split:has(.side-panel) { grid-template-columns: 1fr 360px; } }
+.side-panel, .sheet { padding: var(--space-5); background: var(--color-surface-raised); border: 1px solid var(--color-border-input); border-radius: var(--radius-panel); align-self: start; }
+.sheet { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100%); overflow-y: auto; border-radius: 0; z-index: 15; box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5); }
+.row-selected { background: var(--color-primary-subtle); }
+.row-actions { display: flex; gap: var(--space-2); }
+.field textarea { padding: var(--space-3); font: inherit; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border-input); border-radius: var(--radius-control); resize: vertical; }

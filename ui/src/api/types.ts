@@ -30,3 +30,27 @@ export interface Page<T> {
   totalElements: number;
   totalPages: number;
 }
+
+export type BookRequest = Schemas['BookRequestDTO'];
+export type LoanStatus = NonNullable<LoanResponse['status']>;
+
+/** Library statistics snapshot (GET /app/books/stats). */
+export interface LibraryStatistics {
+  totalBooks: number;
+  totalReplacementCost: number;
+  highestReplacementCostBook: BookResponse | null;
+}
+
+/** One Monday-start Manila week of checkouts and returns (GET /app/loans/activity). */
+export interface WeeklyActivity {
+  weekStart: string;
+  checkouts: number;
+  returns: number;
+}
+
+/** A most-borrowed title group (GET /app/loans/top-titles). */
+export interface TopTitle {
+  title: string;
+  author: string;
+  checkouts: number;
+}

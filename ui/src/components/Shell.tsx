@@ -22,6 +22,8 @@ export function Shell() {
         <nav aria-label="Primary">
           {staff && <NavLink to="/dashboard">Dashboard</NavLink>}
           <NavLink to="/catalog">Catalog</NavLink>
+          {staff && <NavLink to="/staff/loans">Loans</NavLink>}
+          {staff && <NavLink to="/inventory">Inventory</NavLink>}
           <NavLink to="/loans">My Loans</NavLink>
           <NavLink to="/account">My Account</NavLink>
         </nav>

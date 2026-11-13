@@ -8,7 +8,7 @@ Facts about the live API stay in the controllers, OpenAPI, and the [engineering 
 
 ## Progress
 
-Built in `ui/` (typecheck, lint, 144 Vitest tests, and the production build pass; CI job `ui-test` runs them):
+Built in `ui/` (typecheck, lint, 166 Vitest tests, and the production build pass; CI job `ui-test` runs them):
 - **Step 1:** Vite/React 19/strict TypeScript scaffold; dark-first tokens (text, chart, and status colors) with a WCAG contrast test in both themes; theme switch; typed API client (envelope unwrapping, `ErrorResponse` normalization, in-memory token, 401 handler, `Retry-After`); DTO types generated from the live OpenAPI document and checked for drift by CI; `permissions.ts` with a matrix test; brand pipeline (`npm run build:brand`: lockup sizes, favicon set from the book glyph, social image); `BookCover`; shared components (Button, TextField, Chip, Skeleton, EmptyState, ErrorState, Pagination, Dialog, Toast, `<Can>`); in-house SVG bar, stacked-bar, and line charts with "View as table"; loan-slot and lifecycle diagrams; authenticated shell; Caddy serves `ui/dist` with SPA fallback, a strict CSP, and proxies `/app/*`, probes, and API docs; axe checks on the public pages in both themes.
 - **Step 2:** sign in (profile loaded from `/me`, 429 countdown, show/hide password, first-invalid-field focus), student registration with course/major logic and live password checklist, forced password change guard.
 
@@ -21,7 +21,9 @@ Still open in Step 1:
 
 - **Step 4 (built):** My Loans with the loan-slot diagram, current loans with a confirmation dialog and Return (STUDENT and FACULTY only; staff see their own history without it), paginated history sortable by the API's four allowed fields, overdue taken from the server flag, and the lifecycle diagram in a disclosure. My Account has the profile (read, then edit; only changed fields are sent), password change with the policy checklist, and a danger zone for STUDENT and FACULTY that requires typing the university ID and explains the 409 for accounts with loan history. Tables become record cards below 640 px (also applied to the catalog list view).
 
-Step 3 still needs the 5-second cover scan user test (a human test, not automated). Steps 5 to 8 are not started; pages for them are placeholders.
+- **Step 5 (built):** staff dashboard (KPI tiles that open the filtered Loans page from `totalElements` of one-row pages, loan status mix with a computed takeaway, genre bars with Other, overdue-by-days-late buckets with "first N of M", weekly checkouts line, most-borrowed titles, and a needs-attention table), loan management at `/staff/loans` (status, overdue, and borrower filters in the URL; detail panel; Mark as lost with a consequence dialog; not-found and permission states), and inventory CRUD (search, genre, cost filters; add/edit sheet with server field errors mapped; delete with the 409 retention message). My Loans stays at `/loans` for every role. The weekly chart plots checkouts only (returns appear in its caption); the dashboard issues nine small requests, not yet measured.
+
+Verified against the live API in the browser pane: sign-in, `/me`, an empty catalog, My Loans and My Account. Two real defects were found and fixed that way: the Vite dev proxy forwarded `Origin` and the API answered 403 (CORS is off by design), and an empty unfiltered catalog said "No books match these filters". Borrow, return, and all staff flows are covered by component tests but not yet run against seeded data. Step 3 still needs the 5-second cover scan user test (a human test). Steps 6 to 8 are not started.
 
 ## 1. Goals and principles
 

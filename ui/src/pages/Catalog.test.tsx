@@ -111,6 +111,13 @@ describe('catalog', () => {
     expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument();
   });
 
+  it('says the catalog is empty, not "clear a filter", when nothing is filtered', async () => {
+    catalogRoutes({ '/app/books/query': () => ok(pageOf([], { totalElements: 0, totalPages: 0 })) });
+    renderAt('/catalog');
+    expect(await screen.findByText('The catalog is empty.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+  });
+
   it('offers a manual retry when the catalog read fails, and does not retry on its own', async () => {
     let calls = 0;
     const mock = catalogRoutes({

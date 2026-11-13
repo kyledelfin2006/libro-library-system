@@ -156,12 +156,14 @@ export function Catalog() {
           ))}
         </ul>
       ) : page && page.content.length === 0 ? (
-        <EmptyState
-          title="No books match these filters."
-          action={chips.length > 0 ? <Button onClick={() => update(clearFilters(query))}>Clear filters</Button> : undefined}
-        >
-          Clear a filter or try a different word.
-        </EmptyState>
+        chips.length > 0 ? (
+          <EmptyState title="No books match these filters." action={<Button onClick={() => update(clearFilters(query))}>Clear filters</Button>}>
+            Clear a filter or try a different word.
+          </EmptyState>
+        ) : (
+          // No filters and no results: the collection itself is empty, so "clear a filter" would mislead.
+          <EmptyState title="The catalog is empty.">Books will appear here once library staff add them.</EmptyState>
+        )
       ) : page ? (
         <>
           {view === 'grid' ? (
