@@ -80,6 +80,16 @@ describe('accounts directory', () => {
     expect(searches[0]![0]).toContain('page=0');
   });
 
+  it('closes the detail panel when a filter changes', async () => {
+    directory();
+    const user = userEvent.setup();
+    renderAt('/accounts', staffUser);
+    await user.click(await screen.findByRole('button', { name: /Details for Alex/ }));
+    expect(await screen.findByRole('complementary', { name: /Alex/ })).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Role'), 'STUDENT');
+    await waitFor(() => expect(screen.queryByRole('complementary')).toBeNull());
+  });
+
   it('shows an empty state with Clear filters', async () => {
     routeFetch({ '/app/users?': () => ok(pageOf([])) });
     renderAt('/accounts?q=zzz', staffUser);

@@ -139,7 +139,7 @@
 @media (min-width: 1024px) { .account-grid { grid-template-columns: 1fr 1fr; } }
 .panel { padding: var(--space-5); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-panel); }
 .danger-zone { margin-top: var(--space-6); border-color: var(--color-danger); }
-.form-actions { display: flex; gap: var(--space-3); }
+.form-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 
 /* Below 640 px a table becomes record cards: each row is a card of label and value pairs. */
 @media (max-width: 639px) {
@@ -147,7 +147,7 @@
   .record-cards, .record-cards tbody, .record-cards tr, .record-cards th, .record-cards td { display: block; width: 100%; }
   .record-cards tr { padding: var(--space-3); margin-bottom: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); }
   .record-cards th, .record-cards td { border: 0; padding: var(--space-1) 0; }
-  .record-cards [data-label]::before { content: attr(data-label); display: inline-block; min-width: 96px; color: var(--color-brass); font-variant: small-caps; letter-spacing: 0.06em; }
+  .record-cards [data-label]::before { content: attr(data-label); display: inline-block; min-width: 8.5rem; color: var(--color-brass); font-variant: small-caps; letter-spacing: 0.06em; }
   .record-cards .cell-cover { display: none; }
 }
 .how-it-works summary::before { content: '\25B8'; margin-right: var(--space-2); color: var(--color-primary); }
@@ -162,7 +162,13 @@ a.tile:hover { border-color: var(--color-primary); }
 .dash-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-4); }
 @media (min-width: 1024px) { .dash-grid { grid-template-columns: 1fr 1fr; } }
 .split { display: grid; grid-template-columns: 1fr; gap: var(--space-5); }
-@media (min-width: 1024px) { .split:has(.side-panel) { grid-template-columns: 1fr 360px; } }
+@media (min-width: 1024px) { .split:has(.side-panel) { grid-template-columns: minmax(0, 1fr) 360px; } }
+/* The list column may shrink below its table's natural width; wide tables scroll inside it and long emails wrap. */
+.split > :first-child { min-width: 0; overflow-x: auto; }
+.loan-table td[data-label="Email"] { overflow-wrap: anywhere; }
+/* With the detail panel open there is no room for secondary columns; the panel shows the same facts. */
+@media (min-width: 1024px) { .split:has(.side-panel) .col-extra { display: none; } }
+.loan-table .chip, .loan-table .btn { white-space: nowrap; }
 .side-panel, .sheet { padding: var(--space-5); background: var(--color-surface-raised); border: 1px solid var(--color-border-input); border-radius: var(--radius-panel); align-self: start; }
 .sheet { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100%); overflow-y: auto; border-radius: 0; z-index: 15; box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5); }
 .row-selected { background: var(--color-primary-subtle); }

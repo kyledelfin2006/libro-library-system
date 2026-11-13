@@ -64,7 +64,11 @@ export function Accounts() {
       if (v === null || v === '') next.delete(k);
       else next.set(k, v);
     }
-    if (!keepPage) next.delete('page');
+    if (!keepPage) {
+      // A filter change starts a new result set, so it also closes any open panel.
+      next.delete('page');
+      if (!('open' in changes)) next.delete('open');
+    }
     setSp(next, { replace });
   };
 
@@ -173,7 +177,7 @@ export function Accounts() {
                     <th scope="col">ID</th>
                     <th scope="col">Name</th>
                     <th scope="col">Role</th>
-                    <th scope="col">Course/Major</th>
+                    <th scope="col" className="col-extra">Course/Major</th>
                     <th scope="col">Email</th>
                     <th scope="col"><span className="visually-hidden">Details</span></th>
                   </tr>
@@ -184,7 +188,7 @@ export function Accounts() {
                       <th scope="row" data-label="ID">{a.universityId}</th>
                       <td data-label="Name">{fullName(a)}</td>
                       <td data-label="Role"><RoleChip role={a.userRole} /></td>
-                      <td data-label="Course/Major">{a.userCourse ? `${a.userCourse}${a.major ? ` / ${a.major}` : ''}` : '—'}</td>
+                      <td data-label="Course/Major" className="col-extra">{a.userCourse ? `${a.userCourse}${a.major ? ` / ${a.major}` : ''}` : '—'}</td>
                       <td data-label="Email">{a.email}</td>
                       <td>
                         <Button variant="secondary" onClick={() => { setMode(null); setParams({ open: a.universityId }, true); }}>

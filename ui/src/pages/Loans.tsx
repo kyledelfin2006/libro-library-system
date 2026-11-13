@@ -119,7 +119,7 @@ export function Loans() {
                     <th scope="col">Loan</th>
                     <th scope="col">Borrower</th>
                     <th scope="col">Book</th>
-                    <th scope="col">Borrowed</th>
+                    <th scope="col" className="col-extra">Borrowed</th>
                     <th scope="col">Due</th>
                     <th scope="col">Status</th>
                     <th scope="col"><span className="visually-hidden">Details</span></th>
@@ -131,7 +131,7 @@ export function Loans() {
                       <th scope="row" data-label="Loan">{l.loanId}</th>
                       <td data-label="Borrower">{l.borrowerUniversityId}</td>
                       <td data-label="Book">{l.bookTitle}</td>
-                      <td data-label="Borrowed">{formatDate(l.borrowedAt)}</td>
+                      <td data-label="Borrowed" className="col-extra">{formatDate(l.borrowedAt)}</td>
                       <td data-label="Due">{formatDate(l.dueAt)}</td>
                       <td data-label="Status"><LoanStatusChip loan={l} /></td>
                       <td>
