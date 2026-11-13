@@ -39,6 +39,24 @@ class AuditServiceTest {
     }
 
     @Test
+    void recordedActorRoleIgnoresNonRoleAuthorities() {
+        AuditRepository repository = mock(AuditRepository.class);
+        AuditService service = new AuditService(repository, mock(UserRepository.class));
+        // A bearer-token login can carry FACTOR_BEARER ahead of the role; the role must still be recorded.
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                "2020-0002", "unused", List.of(new SimpleGrantedAuthority("FACTOR_BEARER"),
+                new SimpleGrantedAuthority("ROLE_ADMINISTRATOR"))));
+        try {
+            service.record("BOOK_CREATED", "BOOK", "13", null);
+            var saved = org.mockito.ArgumentCaptor.forClass(AuditEvent.class);
+            verify(repository).save(saved.capture());
+            assertEquals("ADMINISTRATOR", saved.getValue().getActorRole());
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Test
     void assistantCannotRequestPrivilegedTargetRole() {
         AuditRepository repository = mock(AuditRepository.class);
         UserRepository users = mock(UserRepository.class);
