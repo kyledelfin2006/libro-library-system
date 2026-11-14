@@ -11,7 +11,7 @@ The planned public demo uses patron accounts with synthetic data. Staff credenti
 | STUDENT | `2025-0001` | `DemoPatron@2026` | Public signup, run by `scripts/seed-demo.sh` |
 | FACULTY | `2025-0002` | `DemoPatron@2026` | The librarian, run by `scripts/seed-demo.sh` |
 
-Log in with `POST /app/auth/login` using `universityId` and `password`, then send the returned token as `Authorization: Bearer <token>`. Do not reuse this password anywhere else.
+Log in with `POST /app/auth/login` using `universityId` and `password`, then send the returned token as `Authorization: Bearer <token>`. Do not reuse this password anywhere else. The books they can browse are listed in the [Demo Catalog](demo-catalog.md).
 
 ## Staff demo accounts
 
