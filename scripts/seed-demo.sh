@@ -84,7 +84,8 @@ elif [ "${faculty_login##*$'\n'}" != "200" ]; then
   log "note: demo faculty login returned HTTP ${faculty_login##*$'\n'} (an existing account may use a different password); flag left as is"
 fi
 
-# 4. Synthetic catalog: well-known public-domain titles, one physical copy each.
+# 4. Synthetic catalog: 50 well-known academic titles (software engineering, cybersecurity, networking, project
+#    management), one physical copy each.
 existing="$(curl -sS --max-time 20 "$API/app/books/all?size=1" -H "Authorization: Bearer $token" | sed -n 's/.*"totalElements":\([0-9]*\).*/\1/p')"
 if [ "${existing:-0}" -gt 0 ] && [ "$force_books" -ne 1 ]; then
   log "catalog already has $existing books; skipping (use --force-books to add more)"
@@ -98,16 +99,58 @@ add_book() {
   code="${out##*$'\n'}"
   [ "$code" = "201" ] || die "adding \"$1\" failed (HTTP $code): ${out%$'\n'*}"
 }
-add_book "Pride and Prejudice" "Jane Austen" "Fiction" "Demo record: a classic novel of manners." 450.00
-add_book "Frankenstein" "Mary Shelley" "Fiction" "Demo record: a gothic science-fiction novel." 400.00
-add_book "Dracula" "Bram Stoker" "Fiction" "Demo record: an epistolary gothic horror novel." 420.00
-add_book "The Adventures of Sherlock Holmes" "Arthur Conan Doyle" "Mystery" "Demo record: twelve detective short stories." 380.00
-add_book "Treasure Island" "Robert Louis Stevenson" "Adventure" "Demo record: a pirate adventure." 350.00
-add_book "Moby-Dick" "Herman Melville" "Fiction" "Demo record: a whaling voyage and an obsession." 500.00
-add_book "The Time Machine" "H. G. Wells" "Science Fiction" "Demo record: a traveler explores the far future." 330.00
-add_book "Jane Eyre" "Charlotte Bronte" "Fiction" "Demo record: a governess comes of age." 440.00
-add_book "Alice in Wonderland" "Lewis Carroll" "Fantasy" "Demo record: a girl falls down a rabbit hole." 310.00
-add_book "The Art of War" "Sun Tzu" "Philosophy" "Demo record: an ancient treatise on strategy." 360.00
-add_book "Meditations" "Marcus Aurelius" "Philosophy" "Demo record: personal notes on Stoic practice." 340.00
-add_book "Walden" "Henry David Thoreau" "Nature" "Demo record: reflections on simple living." 370.00
-log "seeded 12 demo books"
+# Software Engineering
+add_book "Clean Code" "Robert C. Martin" "Software Engineering" "Demo record: writing readable, maintainable code." 2450.00
+add_book "The Pragmatic Programmer" "David Thomas and Andrew Hunt" "Software Engineering" "Demo record: practical habits of effective developers." 2600.00
+add_book "Design Patterns" "Erich Gamma et al." "Software Engineering" "Demo record: reusable object-oriented design solutions." 2900.00
+add_book "Refactoring" "Martin Fowler" "Software Engineering" "Demo record: improving the design of existing code." 2750.00
+add_book "Code Complete" "Steve McConnell" "Software Engineering" "Demo record: a handbook of software construction." 2800.00
+add_book "Domain-Driven Design" "Eric Evans" "Software Engineering" "Demo record: modeling complex business domains in software." 3100.00
+add_book "Clean Architecture" "Robert C. Martin" "Software Engineering" "Demo record: structuring systems around stable boundaries." 2400.00
+add_book "Working Effectively with Legacy Code" "Michael Feathers" "Software Engineering" "Demo record: safely changing untested code." 2650.00
+add_book "Test-Driven Development: By Example" "Kent Beck" "Software Engineering" "Demo record: designing code through tests written first." 2200.00
+add_book "Designing Data-Intensive Applications" "Martin Kleppmann" "Software Engineering" "Demo record: reliable, scalable data systems." 3000.00
+add_book "Effective Java" "Joshua Bloch" "Software Engineering" "Demo record: best practices for the Java platform." 2500.00
+add_book "Software Engineering" "Ian Sommerville" "Software Engineering" "Demo record: a survey textbook of the software lifecycle." 3800.00
+add_book "Introduction to Algorithms" "Thomas H. Cormen et al." "Software Engineering" "Demo record: a comprehensive algorithms textbook." 4500.00
+add_book "Continuous Delivery" "Jez Humble and David Farley" "Software Engineering" "Demo record: automating build, test, and release." 2700.00
+# Cybersecurity
+add_book "Security Engineering" "Ross Anderson" "Cybersecurity" "Demo record: building dependable secure systems." 3600.00
+add_book "The Web Application Hacker's Handbook" "Dafydd Stuttard and Marcus Pinto" "Cybersecurity" "Demo record: finding and exploiting web application flaws." 2900.00
+add_book "Applied Cryptography" "Bruce Schneier" "Cybersecurity" "Demo record: protocols, algorithms, and source code." 3200.00
+add_book "Cryptography Engineering" "Niels Ferguson et al." "Cybersecurity" "Demo record: design principles for practical cryptography." 2800.00
+add_book "Computer Security: Principles and Practice" "William Stallings and Lawrie Brown" "Cybersecurity" "Demo record: a foundational computer security textbook." 4200.00
+add_book "Hacking: The Art of Exploitation" "Jon Erickson" "Cybersecurity" "Demo record: low-level exploitation techniques." 2300.00
+add_book "The Practice of Network Security Monitoring" "Richard Bejtlich" "Cybersecurity" "Demo record: detecting and responding to intrusions." 2400.00
+add_book "Threat Modeling: Designing for Security" "Adam Shostack" "Cybersecurity" "Demo record: identifying threats during design." 2600.00
+add_book "Practical Malware Analysis" "Michael Sikorski and Andrew Honig" "Cybersecurity" "Demo record: dissecting malicious software." 2700.00
+add_book "Security in Computing" "Charles P. Pfleeger et al." "Cybersecurity" "Demo record: threats, controls, and secure system design." 3900.00
+add_book "The Tangled Web" "Michal Zalewski" "Cybersecurity" "Demo record: the security model of modern web browsers." 2100.00
+add_book "Serious Cryptography" "Jean-Philippe Aumasson" "Cybersecurity" "Demo record: a practical introduction to modern encryption." 2200.00
+add_book "Blue Team Handbook" "Don Murdoch" "Cybersecurity" "Demo record: a field guide to incident response." 1500.00
+# Networking
+add_book "Computer Networking: A Top-Down Approach" "James F. Kurose and Keith W. Ross" "Networking" "Demo record: networking taught from the application layer down." 4300.00
+add_book "Computer Networks" "Andrew S. Tanenbaum et al." "Networking" "Demo record: a classic layered networking textbook." 4100.00
+add_book "TCP/IP Illustrated, Volume 1" "W. Richard Stevens and Kevin R. Fall" "Networking" "Demo record: the TCP/IP protocols in detail." 3500.00
+add_book "Computer Networks: A Systems Approach" "Larry L. Peterson and Bruce S. Davie" "Networking" "Demo record: networks explained through system design." 3700.00
+add_book "Network Warrior" "Gary A. Donahue" "Networking" "Demo record: hands-on enterprise network administration." 2600.00
+add_book "Data Communications and Networking" "Behrouz A. Forouzan" "Networking" "Demo record: an introductory data communications textbook." 3900.00
+add_book "Interconnections" "Radia Perlman" "Networking" "Demo record: bridges, routers, and switching protocols." 3000.00
+add_book "Routing TCP/IP, Volume 1" "Jeff Doyle and Jennifer Carroll" "Networking" "Demo record: interior routing protocols in depth." 3300.00
+add_book "High Performance Browser Networking" "Ilya Grigorik" "Networking" "Demo record: web performance across the network stack." 2000.00
+add_book "UNIX Network Programming, Volume 1" "W. Richard Stevens et al." "Networking" "Demo record: the sockets networking API." 3400.00
+add_book "Network Programmability and Automation" "Jason Edelman et al." "Networking" "Demo record: automating network operations with code." 2800.00
+add_book "Wireless Communications" "Andrea Goldsmith" "Networking" "Demo record: principles of wireless system design." 3600.00
+# Project Management
+add_book "A Guide to the Project Management Body of Knowledge" "Project Management Institute" "Project Management" "Demo record: the standard reference for project management practice." 3500.00
+add_book "The Mythical Man-Month" "Frederick P. Brooks Jr." "Project Management" "Demo record: essays on managing software projects." 2100.00
+add_book "Peopleware" "Tom DeMarco and Timothy Lister" "Project Management" "Demo record: productive projects and teams." 2000.00
+add_book "Agile Estimating and Planning" "Mike Cohn" "Project Management" "Demo record: estimating and planning agile projects." 2300.00
+add_book "Scrum: The Art of Doing Twice the Work in Half the Time" "Jeff Sutherland" "Project Management" "Demo record: the origins and practice of Scrum." 1600.00
+add_book "The Phoenix Project" "Gene Kim et al." "Project Management" "Demo record: a novel about IT operations and DevOps." 1700.00
+add_book "Making Things Happen" "Scott Berkun" "Project Management" "Demo record: mastering project management in practice." 1900.00
+add_book "Accelerate" "Nicole Forsgren et al." "Project Management" "Demo record: research on high-performing technology teams." 1800.00
+add_book "Kanban" "David J. Anderson" "Project Management" "Demo record: evolutionary change for technology teams." 2100.00
+add_book "Project Management: A Systems Approach" "Harold Kerzner" "Project Management" "Demo record: planning, scheduling, and controlling projects." 4400.00
+add_book "Rapid Development" "Steve McConnell" "Project Management" "Demo record: taming wild software schedules." 2500.00
+log "seeded 50 demo books"

@@ -112,7 +112,7 @@ The [Development Problems Solved](docs/guides/development-problems-solved.md) gu
 
 ## Demo Accounts
 
-> **Try Libro:** [Demo patron accounts](#demo-accounts) are documented below. The public demo instance is not deployed yet; seed them locally to use the API now. Staff credentials stay private.
+> **Try Libro:** sign in with the [demo patron accounts](#demo-accounts) below and browse a seeded [catalog of 50 academic books](docs/guides/demo-catalog.md) (software engineering, cybersecurity, networking, project management). The public demo instance is not deployed yet; seed it locally to use the API now. Staff credentials stay private.
 
 These **public patron-only accounts** use synthetic data. They can browse and borrow under the normal loan rules, but cannot manage books or other accounts. Their shared password is published on purpose; do not reuse it elsewhere.
 
@@ -121,7 +121,7 @@ These **public patron-only accounts** use synthetic data. They can browse and bo
 | `STUDENT` | `2025-0001` | `DemoPatron@2026` | `bash scripts/seed-demo.sh --patrons-only` |
 | `FACULTY` | `2025-0002` | `DemoPatron@2026` | `bash scripts/seed-demo.sh` (requires a librarian) |
 
-After starting the [local stack](#quick-start), use the first command to create the student. The full seed also creates the faculty account and sample books and prompts for the librarian password. See [Demo Accounts](docs/guides/demo-accounts.md) for staff-account setup and [Local Setup](docs/guides/local-setup.md) for the optional first-librarian bootstrap. No public instance is available yet.
+After starting the [local stack](#quick-start), use the first command to create the student. The full seed also creates the faculty account and the [50-book demo catalog](docs/guides/demo-catalog.md) and prompts for the librarian password. See [Demo Accounts](docs/guides/demo-accounts.md) for staff-account setup and [Local Setup](docs/guides/local-setup.md) for the optional first-librarian bootstrap. No public instance is available yet.
 
 On a **fresh, disposable local database**, run the full seed and then `bash scripts/smoke-journey.sh http://127.0.0.1:8080` with `SMOKE_STAFF_ID` and `SMOKE_STAFF_PASSWORD` set in the shell. Enable `LIBRO_API_DOCS_ENABLED=true` for this check. The journey borrows, returns, marks a faculty loan lost, resets the demo student, and restores that student's original password; do not run it against data you need to keep. The short deployment check remains `scripts/smoke.sh`.
 
@@ -511,6 +511,7 @@ The web UI under `ui/` covers sign-in and registration, the catalog, borrowing a
 | The web UI: pages, roles, build, tests, and delivery | [Web UI guide](docs/guides/web-ui.md) |
 | Running and configuring a local stack | [Local Setup](docs/guides/local-setup.md) |
 | Public patron logins and private staff-account policy | [Demo Accounts](docs/guides/demo-accounts.md) |
+| Seeded demo books and how to load them | [Demo Catalog](docs/guides/demo-catalog.md) |
 | Physical-copy and loan decisions | [Domain Decisions](docs/guides/domain-decisions.md) and [Loan Implementation Guide](docs/guides/loan.md) |
 | Role boundaries and authentication internals | [Roles and JWT Guide](docs/reference/security-roles-and-jwt-guide.md) and [JWT Authentication Design](docs/reference/jwt-authentication-design.md) |
 | API documentation conventions | [API Documentation Guideline](docs/guides/api-documentation-guideline.md) |
