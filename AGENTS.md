@@ -34,7 +34,7 @@ Keep facts in the artifact that owns them. If prose disagrees with running code,
 
 ## Current implementation facts
 
-- The project is a single-module Java 25 / Spring Boot 4.1 REST API using Spring MVC, Spring Data JPA, Hibernate, PostgreSQL, Flyway, and Maven.
+- The project is a full-stack system: a single-module Java 25 / Spring Boot 4.1 REST API (the backend) plus a React/TypeScript web UI in `ui/`. The API uses Spring MVC, Spring Data JPA, Hibernate, PostgreSQL, Flyway, and Maven.
 - Login at POST /app/auth/login authenticates through Spring Security, LibroUserDetailsService, and BCrypt, then issues a 15-minute HS256 JWT. Protected routes accept Bearer tokens only; HTTP Basic is removed.
 - POST /app/users/signup, POST /app/auth/login, and GET /livez, GET /readyz are public. Other routes require authentication. The filter chain is stateless and CSRF is disabled for this Authorization-header-only API.
 - Login and signup requests pass through a configurable per-IP fixed-window MVC interceptor after Spring Security and before body binding/controller invocation; over-limit requests return 429 without reaching the controller/service. Counters are per process and reset on restart. `SERVER_FORWARD_HEADERS_STRATEGY` defaults to `none`; use `native` only when the app port is reachable solely from the trusted reverse proxy or load balancer. Use gateway throttling and private app ingress before scaling or public exposure.

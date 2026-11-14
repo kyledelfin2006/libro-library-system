@@ -8,12 +8,14 @@
 [![CD](https://github.com/kyledelfin2006/libro-library-system/actions/workflows/cd.yml/badge.svg?branch=main)](https://github.com/kyledelfin2006/libro-library-system/actions/workflows/cd.yml)
 ![Java](https://img.shields.io/badge/Java-25-orange?logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.2-6DB33F?logo=springboot&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
 
 ## Project Overview
 
-Libro is a Spring Boot REST API for the library of Aklan State University – College of Computer Studies (ASU-CCS). It manages physical book copies, user accounts, and loan history. Each catalog record is one physical copy, which keeps loan history accurate per copy (see [Domain Decisions](docs/guides/domain-decisions.md)).
+Libro is a full-stack library management system for the library of Aklan State University – College of Computer Studies (ASU-CCS): a Java 25 / Spring Boot REST API with a React and TypeScript web UI (`ui/`), backed by PostgreSQL. It manages physical book copies, user accounts, and loan history, with role-based screens for students, faculty, library assistants, and the librarian. Each catalog record is one physical copy, which keeps loan history accurate per copy (see [Domain Decisions](docs/guides/domain-decisions.md)).
 
 ## Table of Contents
 
@@ -66,11 +68,13 @@ Libro is a Spring Boot REST API for the library of Aklan State University – Co
 - **Loans:** students and faculty borrow for 14 days, up to three active loans each; overdue loans block new checkouts. See the [Loan Implementation Guide](docs/guides/loan.md).
 - **Accounts and roles:** public signup creates students; librarians create faculty and library-assistant accounts. Four roles (`STUDENT`, `FACULTY`, `ADMINISTRATOR`, `LIBRARIAN`) are enforced at the route and service layers.
 - **Security:** stateless HS256 JWT Bearer authentication, BCrypt passwords, per-IP rate limits on login and signup, and a uniform JSON error contract. See the [JWT Authentication Design](docs/reference/jwt-authentication-design.md).
+- **Web UI:** a React app in `ui/` for sign-in, student signup, catalog and borrowing, My Loans, My Account, and staff dashboards, loan management, inventory, accounts, and audit log. See the [Web UI guide](docs/guides/web-ui.md).
 - **Operations:** Flyway-owned schema, Docker Compose, public `/livez` and `/readyz` probes, and Prometheus metrics on a private management port.
 
 | Layer | Technology |
 | --- | --- |
-| Language and framework | Java 25, Spring Boot 4.1.2 (Web, Data JPA, Security, OAuth2 Resource Server, Validation) |
+| Backend | Java 25, Spring Boot 4.1.2 (Web, Data JPA, Security, OAuth2 Resource Server, Validation) |
+| Frontend | React 19, TypeScript, Vite, TanStack Query, React Router; Vitest, Playwright, and axe for tests |
 | Data | PostgreSQL 18, Flyway 13.3.0, Hibernate with schema validation |
 | Build and test | Maven, JUnit 5, Mockito, Testcontainers, JaCoCo |
 | Delivery | Docker, Docker Compose, Caddy, GitHub Actions, Trivy |
@@ -79,7 +83,8 @@ Libro is a Spring Boot REST API for the library of Aklan State University – Co
 
 ```mermaid
 flowchart LR
-    Client[API client] --> Security[Spring Security<br/>JWT Bearer and role gates]
+    UI[React web UI<br/>ui/] --> Security[Spring Security<br/>JWT Bearer and role gates]
+    Client[Other API clients] --> Security
     Security --> Controller[Feature controllers<br/>HTTP and DTO validation]
     Controller --> Service[Feature services<br/>rules, ownership, transactions, mapping]
     Service --> Repository[Spring Data JPA repositories]
@@ -87,7 +92,7 @@ flowchart LR
     Flyway[Flyway migrations] --> Database
 ```
 
-The single-module codebase groups `auth`, `book`, `loan`, `user`, `audit`, and `info` by feature, then by layer. Controllers accept and return DTOs; services own business rules, transactions, and entity-to-DTO mapping; repositories own persistence. Shared responses, errors, request IDs, time handling, and OpenAPI configuration live in `global`. Flyway owns the schema, and Hibernate validates it at startup. [Architecture Overview](docs/architecture.md) shows the request and data flows; its Design Rules section records the package decision.
+The React UI is a separate app in `ui/` that calls the API with a Bearer token; it has no server-side code of its own. The single-module backend codebase groups `auth`, `book`, `loan`, `user`, `audit`, and `info` by feature, then by layer. Controllers accept and return DTOs; services own business rules, transactions, and entity-to-DTO mapping; repositories own persistence. Shared responses, errors, request IDs, time handling, and OpenAPI configuration live in `global`. Flyway owns the schema, and Hibernate validates it at startup. [Architecture Overview](docs/architecture.md) shows the request and data flows; its Design Rules section records the package decision.
 
 ## Notable code changes
 

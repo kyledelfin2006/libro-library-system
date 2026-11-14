@@ -6,7 +6,7 @@ This is the detailed implementation reference for agents and contributors. The r
 
 It documents the repository as it exists, the intended architecture, the contracts between layers, and the checks expected before a contribution is considered complete.
 
-The application is a single-module Spring Boot REST API for managing a library's book collection, user accounts, loan history, and fixed-format audit events. It exposes book CRUD/search/statistics, user/account operations, loan checkout/return/loss/history and chart routes, staff build info, audit reads, and health endpoints. PostgreSQL backs persistence.
+The system is full-stack: a single-module Spring Boot REST API with a React/TypeScript web UI in `ui/` (see the [Web UI guide](../guides/web-ui.md)). The API manages a library's book collection, user accounts, loan history, and fixed-format audit events. It exposes book CRUD/search/statistics, user/account operations, loan checkout/return/loss/history and chart routes, staff build info, audit reads, and health endpoints. PostgreSQL backs persistence.
 
 ## Project Snapshot
 
