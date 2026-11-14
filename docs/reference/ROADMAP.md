@@ -98,6 +98,8 @@ The web UI MVP is built and documented in the [Web UI guide](../guides/web-ui.md
 
 - [x] Sign-in, registration, catalog, borrow and return, My Account, staff dashboard, loans, inventory, accounts, audit log, status, version, and release history.
 - [x] CD builds and ships `ui/dist`; the Playwright journey runs in CI; the optional `metrics` Compose profile adds Prometheus and Grafana.
+- [x] Seed a 50-book academic demo catalog (software engineering, cybersecurity, networking, project management) through `scripts/seed-demo.sh`; the list is documented in the [Demo Catalog](../guides/demo-catalog.md).
+- [ ] Run the full demo seed on the production VM once it is deployed (the catalog loads only into an empty database; a host seeded with the earlier 12 classic novels keeps them unless reset).
 - [ ] Run the 5-second cover scan test with real people (see the guide's open items).
 
 ## Source documents
