@@ -158,7 +158,7 @@ describe('inventory', () => {
     await user.type(sheet.getByLabelText('Title'), '  Emma ');
     await user.type(sheet.getByLabelText('Author'), 'Jane Austen');
     await user.type(sheet.getByLabelText('Genre'), 'Classic');
-    await user.type(sheet.getByLabelText('Replacement cost'), '12.5');
+    await user.type(sheet.getByLabelText('Replacement cost (₱)'), '12.5');
     await user.click(sheet.getByRole('button', { name: 'Add copy' }));
     expect(await screen.findByText('Added Emma.')).toBeInTheDocument();
     const post = mock.mock.calls.find((c) => c[0] === '/app/books/add')!;

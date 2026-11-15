@@ -24,9 +24,15 @@ describe('book detail', () => {
     renderAt('/catalog/1');
     expect(await screen.findByRole('heading', { name: 'Dune' })).toBeInTheDocument();
     expect(screen.getByText('Copy no.')).toBeInTheDocument();
-    expect(screen.getByText('24.50')).toBeInTheDocument();
+    expect(screen.getByText('₱24.50')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Borrow this copy' })).toBeEnabled();
     expect(await screen.findByText('0 of 3 loan slots used.')).toBeInTheDocument();
+  });
+
+  it('tells a patron what a lost copy costs', async () => {
+    routes();
+    renderAt('/catalog/1');
+    expect(await screen.findByText(/If this copy is lost, you may be asked to pay its replacement cost of ₱24.50/)).toBeInTheDocument();
   });
 
   it('borrows and announces the due date', async () => {

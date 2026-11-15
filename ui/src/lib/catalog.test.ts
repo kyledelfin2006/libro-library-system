@@ -73,3 +73,12 @@ describe('loan messages', () => {
     expect(borrowSuccessMessage({ dueAt: iso } as never)).toMatch(/^Borrowed\. Due \w{3} \d+ \w{3} \d{4}, 14 days from today\.$/);
   });
 });
+
+describe('formatCost', () => {
+  it('formats pesos with symbol, separators and centavos', async () => {
+    const { formatCost } = await import('../components/BookViews');
+    expect(formatCost(2450)).toBe('₱2,450.00');
+    expect(formatCost(500)).toBe('₱500.00');
+    expect(formatCost(undefined)).toBe('Not recorded');
+  });
+});

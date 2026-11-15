@@ -299,6 +299,7 @@ Three services make up the core system, and two more are optional (profile `metr
 | [`scripts/smoke-journey.sh`](scripts/smoke-journey.sh) | Full client journey for a disposable, freshly seeded local stack. |
 | [`scripts/backup.sh`](scripts/backup.sh) / [`scripts/restore.sh`](scripts/restore.sh) | `pg_dump` and `pg_restore` through the running `db` container. |
 | [`scripts/seed-demo.sh`](scripts/seed-demo.sh) | Creates the public demo accounts and a synthetic catalog through the API. |
+| [`scripts/reset-demo.sh`](scripts/reset-demo.sh) | Local only: wipes the database volume, restarts the stack, and reseeds the demo data. |
 | [`scripts/ci/trivy-scan.sh`](scripts/ci/trivy-scan.sh) | Runs Trivy from its own pinned Docker image against the repository or a built image. Shared by CI and CD. |
 | [`.trivyignore`](.trivyignore) | Accepted vulnerability findings (one CVE per line with a reason and expiry). Currently empty. |
 | [`.github/dependabot.yml`](.github/dependabot.yml) | Weekly update PRs for Docker base images and Compose images, among other ecosystems. |

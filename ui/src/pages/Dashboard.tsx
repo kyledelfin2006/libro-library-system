@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { getGenres } from '../api/books';
 import { bookStats, listLoans, loanActivity, topTitles } from '../api/staff';
+import { formatPeso } from '../components/BookViews';
 import { HBarChart, LineChart, StackedBar } from '../components/charts';
 import { Button, ErrorState, Skeleton } from '../components/ui';
 import { daysUntil, formatDate } from '../lib/dates';
@@ -68,7 +69,7 @@ export function Dashboard() {
         <Tile label="Lost" value={lost.data} to="/staff/loans?status=LOST" pending={lost.isPending} />
         <Tile
           label="Replacement value"
-          value={stats.data ? stats.data.totalReplacementCost.toFixed(2) : undefined}
+          value={stats.data ? formatPeso(stats.data.totalReplacementCost) : undefined}
           pending={stats.isPending}
         />
       </div>

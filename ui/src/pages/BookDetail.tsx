@@ -80,6 +80,9 @@ export function BookDetail() {
               <dd>{formatCost(b.replacementCost)}</dd>
             </div>
           </dl>
+          {patron && b.replacementCost !== undefined && (
+            <p className="muted">If this copy is lost, you may be asked to pay its replacement cost of {formatCost(b.replacementCost)}.</p>
+          )}
 
           {lost && <p className="muted">This copy was reported lost.</p>}
 
