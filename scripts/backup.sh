@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# Back up the PostgreSQL database to a compressed custom-format dump, optionally upload it to object storage,
+# Back up the PostgreSQL database to a compressed custom-format dump
 # and prune old local copies.
 #
 # Usage: scripts/backup.sh
 # Environment (from the private .env):
 #   LIBRO_DATA_DIR       block-volume mount; dumps go to $LIBRO_DATA_DIR/backups unless LIBRO_BACKUP_DIR is set
 #   LIBRO_BACKUP_KEEP    number of local dumps to keep (default 7)
-#   LIBRO_BACKUP_BUCKET  optional object-storage bucket; uploads need the configured provider CLI and identity
-#                        (set an object lifecycle rule for retention)
 set -euo pipefail
 # shellcheck disable=SC1091
 . "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -33,14 +31,6 @@ fi
 # Only a complete dump gets its final name, so a half-written file is never mistaken for a backup.
 mv "$tmp" "$dir/$name"
 chmod 600 "$dir/$name" 2>/dev/null || true
-
-# Optional off-host copy; a failed upload fails the backup so it is never silently local-only.
-if [ -n "${LIBRO_BACKUP_BUCKET:-}" ]; then
-  command -v oci >/dev/null || die "LIBRO_BACKUP_BUCKET is set but the OCI CLI is not installed"
-  oci os object put --bucket-name "$LIBRO_BACKUP_BUCKET" --file "$dir/$name" --name "backups/$name" \
-    --auth instance_principal --force >/dev/null
-  log "Uploaded to bucket $LIBRO_BACKUP_BUCKET as backups/$name"
-fi
 
 # Keep the newest N local dumps.
 # shellcheck disable=SC2012

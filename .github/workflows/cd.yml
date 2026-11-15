@@ -147,7 +147,7 @@ jobs:
     # reviewers then hold the job until someone approves it.
     if: >-
       github.event_name != 'pull_request'
-      && vars.OCI_DEPLOY_ENABLED == 'true'
+      && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -165,10 +165,10 @@ jobs:
           path: ${{ runner.temp }}/ui
       - name: Deploy over SSH
         env:
-          SSH_KEY: ${{ secrets.OCI_SSH_KEY }}
-          KNOWN_HOSTS: ${{ secrets.OCI_SSH_KNOWN_HOSTS }}
-          HOST: ${{ secrets.OCI_HOST }}
-          DEPLOY_USER: ${{ secrets.OCI_USER }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           SHA: ${{ needs.image.outputs.sha }}
           IMAGE: ${{ needs.image.outputs.image }}
         run: |
@@ -204,8 +204,8 @@ jobs:
       # ui/dist straight from the bind mount, so no container restart is needed.
       - name: Install web UI
         env:
-          HOST: ${{ secrets.OCI_HOST }}
-          DEPLOY_USER: ${{ secrets.OCI_USER }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           # Reuses the key and pinned host key written by the previous step on this runner. The tarball is
           # streamed on stdin; install-ui.sh checks for index.html and updates ui/dist in place.

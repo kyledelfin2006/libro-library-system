@@ -42,7 +42,6 @@ chmod 600 .env
 | `LIBRO_DOMAIN` | The public host name from step 1 |
 | `LIBRO_DATA_DIR` | `/mnt/libro` |
 | `LIBRO_API_DOCS_ENABLED` | `true` for the synthetic-data demo (Swagger UI), otherwise `false` |
-| `LIBRO_BACKUP_BUCKET` | Optional bucket name for off-host backups; see section 5 before enabling |
 
 Generate a BCrypt hash without storing the password. The command prompts for it, and the `sed` turns the `$2y$` prefix into the `$2a$` form Spring and the Flyway check accept. **Single-quote the result in `.env`**, because hashes contain `$`:
 
@@ -75,7 +74,6 @@ Schedule a nightly backup and keep the dump count small (the volume is shared wi
 0 3 * * * cd /opt/libro && scripts/backup.sh >> /mnt/libro/backups/backup.log 2>&1
 ```
 
-The optional off-host upload path in `scripts/backup.sh` depends on a provider-specific command-line tool and instance identity. This runbook covers local backups only. Before setting `LIBRO_BACKUP_BUCKET`, confirm that the upload tool and identity are configured for the target host and set a lifecycle rule to control storage growth.
 
 **Rehearse a restore before relying on it:**
 
