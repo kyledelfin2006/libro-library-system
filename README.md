@@ -16,7 +16,7 @@
 ## System Screenshots
 
 <p align="center">
-  <img src="assets/system-preview.gif" alt="Animated preview of Libro: sign-in, staff dashboard, catalog, book detail with loan slots, and My Loans" width="760">
+  <img src="assets/system-preview.gif" alt="Animated preview of Libro: sign-in, staff dashboard, catalog, book detail with loan slots, and My Loans" width="800">
 </p>
 
 <p align="center"><sub>Sign-in, staff dashboard, catalog, book detail, and My Loans.</sub></p>
