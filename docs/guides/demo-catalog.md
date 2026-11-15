@@ -4,6 +4,14 @@ The demo seed loads **50 synthetic book records** on an academic theme: software
 
 Try it with the [demo patron accounts](demo-accounts.md): sign in as the student `2025-0001` or faculty `2025-0002`, then browse, search, filter by genre, and borrow.
 
+## Resetting the local demo
+
+```bash
+bash scripts/reset-demo.sh
+```
+
+Wipes the local database volume, rebuilds and starts the stack, waits until it is healthy, then runs the seed above. It asks for confirmation (`--yes` skips it), reads the librarian password from the git-ignored `SEED-ACCOUNTS.local.txt` when `SEED_LIBRARIAN_PASSWORD` is unset, and publishes the database on port 5433 if 5432 is already in use. Local development only; it deletes data.
+
 ## Loading the catalog
 
 ```bash
