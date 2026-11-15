@@ -16,9 +16,13 @@ for (const w of [48, 96, 192, 256, 512]) {
   await logo().resize({ width: w }).png({ compressionLevel: 9 }).toFile(out(`libro-${w}.png`));
 }
 
-// Favicons use the book glyph only (the wordmark is unreadable at 16 px), centred on a transparent square.
-const glyph = await logo().extract({ left: 95, top: 85, width: 1060, height: 640 }).toBuffer();
-const square = await sharp(glyph).resize({ width: 1060, height: 1060, fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
+// Favicons use the whole mark (book, badge and wordmark), trimmed to its content and centred on a transparent
+// square with a small margin, so no part of the logo is cropped.
+const trimmed = await logo().trim({ threshold: 10 }).toBuffer();
+const square = await sharp(trimmed)
+  .resize({ width: 1100, height: 1100, fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+  .extend({ top: 50, bottom: 50, left: 50, right: 50, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+  .png().toBuffer();
 const sizes = { 'favicon-16.png': 16, 'favicon-32.png': 32, 'apple-touch-icon.png': 180, 'icon-512.png': 512 };
 for (const [name, size] of Object.entries(sizes)) {
   await sharp(square).resize(size, size).png({ compressionLevel: 9 }).toFile(out(name));
