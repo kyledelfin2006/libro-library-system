@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, vi } from 'vitest';
+import { manilaToday } from '../lib/dates';
 import { fail, ok, pageOf, renderAt, routeFetch, staffUser } from '../test/render';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -18,7 +19,23 @@ function routes(over: Parameters<typeof routeFetch>[0] = {}, loans: object[] = [
   });
 }
 
+/** A due date `days` calendar days from today in Manila, in the API's local date-time format. */
+const dueIn = (days: number) => {
+  const d = new Date(`${manilaToday()}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return `${d.toISOString().slice(0, 10)}T10:00:00`;
+};
+
 describe('my loans', () => {
+  it('flags loans that fall due within two days', async () => {
+    routes({}, [loan({ dueAt: dueIn(0) }), loan({ loanId: 6, dueAt: dueIn(1) }), loan({ loanId: 7, dueAt: dueIn(2) }), loan({ loanId: 8, dueAt: dueIn(9) })]);
+    renderAt('/loans');
+    expect(await screen.findByText('Due today')).toBeInTheDocument();
+    expect(screen.getByText('Due tomorrow')).toBeInTheDocument();
+    expect(screen.getByText('Due in 2 days')).toBeInTheDocument();
+    expect(screen.getAllByText('Active')).toHaveLength(1);
+  });
+
   it('shows loan slots and current loans with a Return action', async () => {
     routes();
     renderAt('/loans');

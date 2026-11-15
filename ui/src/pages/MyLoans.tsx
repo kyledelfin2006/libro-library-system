@@ -21,6 +21,11 @@ const SORT_LABELS: Record<LoanSortField, string> = {
 /** Status chip. Overdue comes from the server's flag, never from the browser clock. */
 function LoanStatus({ loan }: { loan: LoanResponse }) {
   if (loan.status === 'ACTIVE' && loan.overdue) return <Chip tone="overdue">Overdue</Chip>;
+  if (loan.status === 'ACTIVE') {
+    // Heads-up for loans that fall due within two days. Only wording: the server's flag still decides overdue.
+    const days = daysUntil(loan.dueAt);
+    if (days >= 0 && days <= 2) return <Chip tone="overdue">{days === 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : `Due in ${days} days`}</Chip>;
+  }
   const tone: ChipTone = loan.status === 'ACTIVE' ? 'active' : loan.status === 'RETURNED' ? 'returned' : 'lost';
   const label = loan.status === 'ACTIVE' ? 'Active' : loan.status === 'RETURNED' ? 'Returned' : 'Lost';
   return <Chip tone={tone}>{label}</Chip>;
