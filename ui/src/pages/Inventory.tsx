@@ -72,8 +72,8 @@ export function Inventory() {
             {Object.keys(genres.data ?? {}).sort().map((g) => <option key={g} value={g}>{g}</option>)}
           </select>
         </div>
-        <TextField label="Min cost" inputMode="decimal" value={min} onChange={(e) => resetPage(setMin)(e.target.value)} />
-        <TextField label="Max cost" inputMode="decimal" value={max} onChange={(e) => resetPage(setMax)(e.target.value)} error={costError} />
+        <TextField label="Min cost (₱)" inputMode="decimal" value={min} onChange={(e) => resetPage(setMin)(e.target.value)} />
+        <TextField label="Max cost (₱)" inputMode="decimal" value={max} onChange={(e) => resetPage(setMax)(e.target.value)} error={costError} />
       </div>
 
       {books.isPending ? (
@@ -222,7 +222,7 @@ function BookSheet({
           <div className="field-hint">{v.description.length} / {LIMITS.description}</div>
           {errors.description && <div className="field-error">{errors.description}</div>}
         </div>
-        <TextField label="Replacement cost" inputMode="decimal" value={v.replacementCost} onChange={set('replacementCost')} error={errors.replacementCost} />
+        <TextField label="Replacement cost (₱)" inputMode="decimal" value={v.replacementCost} onChange={set('replacementCost')} error={errors.replacementCost} />
         <div className="form-actions">
           <Button type="submit" disabled={saving}>{saving ? 'Saving…' : book ? 'Save changes' : 'Add copy'}</Button>
           <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>

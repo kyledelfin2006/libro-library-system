@@ -4,9 +4,16 @@ import { BookBadge } from './BookBadge';
 import { BookCover } from './BookCover';
 import { Chip } from './ui';
 
-/** Replacement cost with two decimals and no currency symbol until the owner chooses one (plan section 5.8). */
+const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
+
+/** Philippine pesos with a symbol, thousands separators and centavos, e.g. ₱2,450.00. The API stores a plain number. */
+export function formatPeso(value: number): string {
+  return peso.format(value);
+}
+
+/** Replacement cost in pesos, or a placeholder when the record has none. */
 export function formatCost(value: number | undefined): string {
-  return value === undefined ? 'Not recorded' : value.toFixed(2);
+  return value === undefined ? 'Not recorded' : formatPeso(value);
 }
 
 /** Grid card: generated cover plus real text (title, author, genre, status), so the cover stays decoration. */

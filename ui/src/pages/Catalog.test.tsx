@@ -97,8 +97,8 @@ describe('catalog', () => {
     await screen.findByText('2 books');
     const calls = queries(mock).length;
     await user.click(screen.getByRole('button', { name: /Filters/ }));
-    await user.type(screen.getByLabelText('Minimum cost'), '30');
-    await user.type(screen.getByLabelText('Maximum cost'), '10');
+    await user.type(screen.getByLabelText('Minimum cost (₱)'), '30');
+    await user.type(screen.getByLabelText('Maximum cost (₱)'), '10');
     await user.click(screen.getByRole('button', { name: 'Apply filters' }));
     expect(screen.getByText(/minimum cost cannot be higher/)).toBeInTheDocument();
     expect(queries(mock)).toHaveLength(calls);
@@ -135,10 +135,10 @@ describe('catalog', () => {
     catalogRoutes();
     const { unmount } = renderAt('/catalog');
     await screen.findByText('2 books');
-    expect(screen.queryByText(/Cost 24.50/)).toBeNull();
+    expect(screen.queryByText(/Cost ₱24.50/)).toBeNull();
     unmount();
     renderAt('/catalog', staffUser);
-    expect((await screen.findAllByText(/Cost 24.50/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Cost ₱24.50/)).length).toBeGreaterThan(0);
   });
 
   it('switches to the list view and keeps it in the URL', async () => {

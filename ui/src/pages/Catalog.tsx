@@ -248,8 +248,8 @@ function FilterPanel({
           <option key={g} value={g} />
         ))}
       </datalist>
-      <TextField label="Minimum cost" inputMode="decimal" value={min} onChange={(e) => setMin(e.target.value)} />
-      <TextField label="Maximum cost" inputMode="decimal" value={max} onChange={(e) => setMax(e.target.value)} error={error} />
+      <TextField label="Minimum cost (₱)" inputMode="decimal" value={min} onChange={(e) => setMin(e.target.value)} />
+      <TextField label="Maximum cost (₱)" inputMode="decimal" value={max} onChange={(e) => setMax(e.target.value)} error={error} />
       <label className="checkbox">
         <input type="checkbox" checked={available} onChange={(e) => setAvailable(e.target.checked)} /> Available only
       </label>
