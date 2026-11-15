@@ -13,12 +13,21 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
 
+## System Screenshots
+
+<p align="center">
+  <img src="assets/system-preview.gif" alt="Animated preview of Libro: sign-in, staff dashboard, catalog, book detail with loan slots, and My Loans" width="760">
+</p>
+
+<p align="center"><sub>Sign-in, staff dashboard, catalog, book detail, and My Loans.</sub></p>
+
 ## Project Overview
 
 Libro is a full-stack library management system for the library of Aklan State University – College of Computer Studies (ASU-CCS): a Java 25 / Spring Boot REST API with a React and TypeScript web UI (`ui/`), backed by PostgreSQL. It manages physical book copies, user accounts, and loan history, with role-based screens for students, faculty, library assistants, and the librarian. Each catalog record is one physical copy, which keeps loan history accurate per copy (see [Domain Decisions](docs/guides/domain-decisions.md)).
 
 ## Table of Contents
 
+- [System Screenshots](#system-screenshots)
 - [Project Overview](#project-overview)
 - [Features](#features)
 - [Architecture](#architecture)
