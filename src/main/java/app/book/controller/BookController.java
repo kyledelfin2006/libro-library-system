@@ -88,16 +88,6 @@ public class BookController {
         return ResponseEntity.ok(new ApiResponse<>(true, "Book deleted successfully"));
     }
 
-    @GetMapping("/all")
-    @Operation(summary = "List books with pagination",
-            description = "Page numbering starts at zero. The default is page 0, size 12, sorted by id ascending; the maximum page size is 100. Sort with sort=property,direction using id, title, author, genre, or replacementCost. Unsupported sort properties return 400.")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Book page", useReturnTypeSchema = true)
-    @ErrorApiResponse(responseCode = "400", description = "Invalid pagination or sort parameter")
-    public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> getAllBooks(
-            @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.ok(service.getBooks(pageable)));
-    }
-
     /** Validates the replacement-cost bounds and delegates pagination and filtering to the service. */
     @GetMapping("/query")
     @Operation(summary = "Query books with pagination",

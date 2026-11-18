@@ -110,6 +110,7 @@ class OpenApiMvcTest {
                         .value("#/components/schemas/ErrorResponse"))
                 .andExpect(jsonPath("$.paths['/app/books/replacement-cost']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/app/books/budget']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/app/books/all']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/app/books/search']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/app/books/sorted']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/app/books/price']").doesNotExist())
@@ -168,7 +169,7 @@ class OpenApiMvcTest {
         var paths = root.path("paths");
         for (String[] route : new String[][] {
                 {"/app/users", "get"}, {"/app/users/{universityId}", "put"},
-                {"/app/books/{id}", "get"}, {"/app/books/all", "get"},
+                {"/app/books/{id}", "get"}, {"/app/books/query", "get"},
                 {"/app/loans/me", "get"}, {"/app/loans/users/{universityId}", "get"}
         }) {
             var operation = paths.path(route[0]).path(route[1]);
@@ -177,7 +178,7 @@ class OpenApiMvcTest {
                     .has("schema"), route[0]);
             assertTrue(operation.path("responses").has("401"), route[0]);
         }
-        var sizeParameters = paths.path("/app/books/all").path("get").path("parameters");
+        var sizeParameters = paths.path("/app/books/query").path("get").path("parameters");
         boolean capped = false;
         for (var parameter : sizeParameters) {
             if ("size".equals(parameter.path("name").asText())) {
@@ -191,7 +192,7 @@ class OpenApiMvcTest {
         assertEquals(401, paths.path("/app/books/{id}").path("get").path("responses")
                 .path("401").path("content").elements().next().path("example")
                 .path("statusCode").asInt());
-        assertEquals(0, paths.path("/app/books/all").path("get").path("responses")
+        assertEquals(0, paths.path("/app/books/query").path("get").path("responses")
                 .path("200").path("content").elements().next().path("example")
                 .path("data").path("totalElements").asInt());
     }

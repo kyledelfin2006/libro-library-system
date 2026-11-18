@@ -67,18 +67,6 @@ public class BookService {
 
 
     /**
-     * Retrieves a paginated list of all books.
-     *
-     * @param pageable the pagination and sorting information
-     * @return a page of books matching the given pageable parameters
-     * @throws InvalidRequestException if the sort names a field outside the allowlist
-     */
-    public Page<BookResponseDTO> getBooks(Pageable pageable) {
-        validateBookSort(pageable);
-        return mapPage(repository.findAll(pageable));
-    }
-
-    /**
      * Filters books by text and optional inclusive replacement-cost bounds before applying a stable page sort.
      *
      * @param title optional title substring

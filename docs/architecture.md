@@ -286,7 +286,7 @@ Flyway owns schema creation and updates; Hibernate validates the resulting schem
 | App fails to start with datasource errors | Missing or incorrect `SPRING_DATASOURCE_*` variables | Check `.env` and Docker Compose values |
 | `400 Bad Request` on create or replace | Validation failed in `BookRequestDTO` | Make sure `title`, `author`, `genre`, and `replacement cost` are valid |
 | `Invalid JSON format in request body` | Malformed request payload | Send valid JSON and set `Content-Type: application/json` |
-| `Book not found` | The requested ID does not exist | Verify the ID with `GET /app/books/all` |
+| `Book not found` | The requested ID does not exist | Verify the ID with `GET /app/books/query` |
 | `Invalid Number Format` | Non-numeric values were sent to a numeric endpoint | Use numeric values for `replacement cost`, `minReplacementCost`, `maxReplacementCost`, and similar fields |
 | `Method not allowed` | Wrong HTTP verb was used | Match the method listed in the endpoint table |
 | `401 Unauthorized` on a protected API or documentation route | Bearer token is missing, expired, malformed, or invalid | Log in at `POST /app/auth/login` and send the returned token in `Authorization: Bearer <token>` |

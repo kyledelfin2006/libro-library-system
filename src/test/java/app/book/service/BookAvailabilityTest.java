@@ -27,10 +27,11 @@ class BookAvailabilityTest {
         Book lost = book(3L);
         lost.markLost();
         var page = PageRequest.of(0, 12);
-        when(repository.findAll(page)).thenReturn(new PageImpl<>(List.of(free, borrowed, lost)));
+        when(repository.queryBooks(eq(""), eq(""), eq(""), isNull(), isNull(), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(free, borrowed, lost)));
         when(repository.findActiveBookIds(List.of(1L, 2L, 3L), LoanStatus.ACTIVE)).thenReturn(Set.of(2L));
 
-        var result = service.getBooks(page).getContent();
+        var result = service.queryBooks(null, null, null, null, null, null, null, page).getContent();
 
         assertTrue(result.get(0).isAvailable());
         assertFalse(result.get(1).isAvailable());

@@ -48,7 +48,7 @@ request GET /app/users/me "$patron_token"
 expect 200 'own profile'
 printf '%s' "$body" | grep -q '"mustChangePassword":false' || fail 'profile recovery flag missing'
 
-request GET '/app/books/all?size=12' "$patron_token"
+request GET '/app/books/query?size=12' "$patron_token"
 expect 200 'book list'
 printf '%s' "$body" | grep -q '"content":\[' || fail 'book page has no content array'
 request GET '/app/books/query?title=Frankenstein' "$patron_token"

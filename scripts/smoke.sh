@@ -35,12 +35,12 @@ token="$(printf '%s' "$login_body" | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/
 pass "login issued a token for $UNIVERSITY_ID"
 
 # 3. An authenticated read goes through the JWT filter, the service, and the database.
-code="$(status "$BASE/app/books/all?size=1" -H "Authorization: Bearer $token")"
+code="$(status "$BASE/app/books/query?size=1" -H "Authorization: Bearer $token")"
 [ "$code" = "200" ] || fail "authenticated book list returned HTTP $code"
 pass "authenticated read returned 200"
 
 # 4. The same route must reject an anonymous request.
-code="$(status "$BASE/app/books/all?size=1")"
+code="$(status "$BASE/app/books/query?size=1")"
 [ "$code" = "401" ] || fail "anonymous book list returned HTTP $code instead of 401"
 pass "anonymous read is rejected (401)"
 

@@ -86,7 +86,7 @@ fi
 
 # 4. Synthetic catalog: 50 well-known academic titles (software engineering, cybersecurity, networking, project
 #    management), one physical copy each.
-existing="$(curl -sS --max-time 20 "$API/app/books/all?size=1" -H "Authorization: Bearer $token" | sed -n 's/.*"totalElements":\([0-9]*\).*/\1/p')"
+existing="$(curl -sS --max-time 20 "$API/app/books/query?size=1" -H "Authorization: Bearer $token" | sed -n 's/.*"totalElements":\([0-9]*\).*/\1/p')"
 if [ "${existing:-0}" -gt 0 ] && [ "$force_books" -ne 1 ]; then
   log "catalog already has $existing books; skipping (use --force-books to add more)"
   exit 0

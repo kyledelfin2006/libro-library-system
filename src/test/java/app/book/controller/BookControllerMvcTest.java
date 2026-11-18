@@ -185,32 +185,6 @@ class BookControllerMvcTest {
     }
 
     @Test
-    void listBooks_bindsPaginationAndSortQueryParameters() throws Exception {
-        when(service.getBooks(any(Pageable.class))).thenReturn(
-                new PageImpl<>(List.of(response(1L)), PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "replacementCost")), 5)
-        );
-
-        mockMvc.perform(get("/app/books/all")
-                        .queryParam("page", "1")
-                        .queryParam("size", "2")
-                        .queryParam("sort", "replacementCost,desc"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[0].id").value(1))
-                .andExpect(jsonPath("$.data.content[0].title").value("1984"))
-                .andExpect(jsonPath("$.data.number").value(1))
-                .andExpect(jsonPath("$.data.size").value(2))
-                .andExpect(jsonPath("$.data.totalElements").value(5))
-                .andExpect(jsonPath("$.data.totalPages").value(3));
-
-        org.mockito.ArgumentCaptor<Pageable> pageable = org.mockito.ArgumentCaptor.forClass(Pageable.class);
-        verify(service).getBooks(pageable.capture());
-        Pageable actual = pageable.getValue();
-        org.junit.jupiter.api.Assertions.assertEquals(1, actual.getPageNumber());
-        org.junit.jupiter.api.Assertions.assertEquals(2, actual.getPageSize());
-        org.junit.jupiter.api.Assertions.assertEquals(Sort.Direction.DESC, actual.getSort().getOrderFor("replacementCost").getDirection());
-    }
-
-    @Test
     void queryBooks_bindsFiltersAndReturnsPageMetadata() throws Exception {
         when(service.queryBooks(any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(response(1L)), PageRequest.of(1, 2), 5));

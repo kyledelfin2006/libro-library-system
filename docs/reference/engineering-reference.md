@@ -374,7 +374,6 @@ Authentication routes:
 | Method | Path | Purpose | Response shape |
 |---|---|---|---|
 | GET | `/stats` | Count, total replacement cost, highest replacement-cost copy | `ApiResponse<LibraryStatisticsDTO>` |
-| GET | `/all?page=...&size=...&sort=...` | Paginated collection | `ApiResponse<Page<BookResponseDTO>>` |
 | GET | `/query?title=...&author=...&genre=...&minReplacementCost=...&maxReplacementCost=...&copyStatus=...&available=...` | Paginated book query with optional combined filters and sorting; responses include advisory availability | `ApiResponse<Page<BookResponseDTO>>` |
 | GET | `/genre` | Count grouped by genre | `ApiResponse<Map<String, Long>>` |
 | GET | `/{id}` | Retrieve one book | `ApiResponse<BookResponseDTO>` |
