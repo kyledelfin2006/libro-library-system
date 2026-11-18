@@ -1,5 +1,6 @@
 package app.loan.service;
 
+import app.audit.service.AuditService;
 import app.book.entity.Book;
 import app.book.entity.BookCopyStatus;
 import app.book.repository.BookRepository;
@@ -68,13 +69,16 @@ class LoanServiceTest {
     @Mock
     private BookRepository bookRepository;
 
+    @Mock
+    private AuditService audit;
+
     private LoanService loanService;
 
     /** Builds the service with a real mapper and fixed library time for deterministic assertions. */
     @BeforeEach
     void setUp() {
         loanService = new LoanService(
-                loanRepository, userRepository, bookRepository, new LoanMapper(), LIBRARY_CLOCK);
+                loanRepository, userRepository, bookRepository, new LoanMapper(), LIBRARY_CLOCK, audit);
     }
 
     /** Verifies a student checkout creates an active 14-day loan from the authenticated identity. */
@@ -240,6 +244,7 @@ class LoanServiceTest {
         assertEquals(NOW, response.lostAt());
         assertEquals(STAFF_ID, response.lostByUniversityId());
         assertEquals(BookCopyStatus.LOST, copy.getCopyStatus());
+        verify(audit).record("LOAN_MARKED_LOST", "LOAN", String.valueOf(LOAN_ID), null);
     }
 
     /** Verifies patrons cannot use the staff-only lost-resolution service operation. */
@@ -251,6 +256,7 @@ class LoanServiceTest {
         assertThrows(AccessDeniedException.class, () -> loanService.markLost(BORROWER_ID, LOAN_ID));
 
         verify(loanRepository, never()).findByIdForUpdate(any());
+        org.mockito.Mockito.verifyNoInteractions(audit);
     }
 
     /** Verifies assistants cannot resolve loans belonging to other assistants. */

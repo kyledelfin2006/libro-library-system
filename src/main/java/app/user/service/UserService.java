@@ -61,8 +61,8 @@ public class UserService {
     /** Owner and role rules for account access; see {@link UserAccessPolicy}. */
     private final UserAccessPolicy accessPolicy;
     private final MeterRegistry meterRegistry;
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private AuditService audit;
+    /** Records account changes in the caller's transaction; a required collaborator, never optional. */
+    private final AuditService audit;
 
     /**
      * Validates and persists a new user.
@@ -174,7 +174,7 @@ public class UserService {
 
         // save user
         User savedUser = userRepository.save(user);
-        if (audit != null) audit.record("ACCOUNT_CREATED", "USER", savedUser.getUniversityId(), role);
+        audit.record("ACCOUNT_CREATED", "USER", savedUser.getUniversityId(), role);
         return userMapper.toResponseDTO(savedUser);
     }
 
@@ -246,7 +246,7 @@ public class UserService {
         user.setLastName(lastName);
         user.setMiddleInitial(middleInitial);
         user.setEmail(email);
-        if (audit != null) audit.record("PROFILE_CHANGED", "USER", user.getUniversityId(), user.getUserRole());
+        audit.record("PROFILE_CHANGED", "USER", user.getUniversityId(), user.getUserRole());
         // Return the public DTO and let transaction commit persist dirty changes.
         return userMapper.toResponseDTO(user);
     }
@@ -338,7 +338,7 @@ public class UserService {
         if (newEmail != null) {
             user.setEmail(newEmail);
         }
-        if (audit != null) audit.record("PROFILE_CHANGED", "USER", user.getUniversityId(), user.getUserRole());
+        audit.record("PROFILE_CHANGED", "USER", user.getUniversityId(), user.getUserRole());
 
         // Return a response DTO; dirty checking persists the managed entity.
         return userMapper.toResponseDTO(user);
@@ -407,7 +407,7 @@ public class UserService {
         // Replace only the stored hash; raw password values never reach the entity.
         user.setPasswordHash(encodedPasswordHash);
         user.setMustChangePassword(false);
-        if (audit != null) audit.record("PASSWORD_CHANGED", "USER", user.getUniversityId(), user.getUserRole());
+        audit.record("PASSWORD_CHANGED", "USER", user.getUniversityId(), user.getUserRole());
     }
 
     /** Resets a managed account with a temporary password and records the required follow-up change. */
@@ -430,7 +430,7 @@ public class UserService {
         }
         user.setPasswordHash(passwordEncoder.encode(request.temporaryPassword()));
         user.setMustChangePassword(true);
-        if (audit != null) audit.record("PASSWORD_RESET", "USER", user.getUniversityId(), user.getUserRole());
+        audit.record("PASSWORD_RESET", "USER", user.getUniversityId(), user.getUserRole());
         // Count successful resets without account identifiers or password data in metric labels.
         meterRegistry.counter("libro.auth.password_resets").increment();
     }
@@ -638,7 +638,7 @@ public class UserService {
             throw new app.global.exception.ConflictException(
                     "Account has loan history and must be retained", "RESOURCE_HAS_HISTORY");
         }
-        if (audit != null) audit.record("ACCOUNT_DELETED", "USER", normalizedTargetId, user.getUserRole());
+        audit.record("ACCOUNT_DELETED", "USER", normalizedTargetId, user.getUserRole());
     }
 
     /**

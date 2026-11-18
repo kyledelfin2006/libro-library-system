@@ -1,5 +1,6 @@
 package app.book.service;
 
+import app.audit.service.AuditService;
 import app.book.entity.Book;
 import app.book.mapper.BookMapper;
 import app.book.repository.BookRepository;
@@ -20,7 +21,7 @@ class BookAvailabilityTest {
     @Test
     void mixedPageUsesOneActiveLoanLookupAndLostCopiesStayUnavailable() {
         BookRepository repository = mock(BookRepository.class);
-        BookService service = new BookService(repository, new BookMapper(), mock(Validator.class));
+        BookService service = new BookService(repository, new BookMapper(), mock(Validator.class), mock(AuditService.class));
         Book free = book(1L);
         Book borrowed = book(2L);
         Book lost = book(3L);
@@ -41,7 +42,7 @@ class BookAvailabilityTest {
     @Test
     void deletionWithLoanHistoryHasStableConflictCode() {
         BookRepository repository = mock(BookRepository.class);
-        BookService service = new BookService(repository, new BookMapper(), mock(Validator.class));
+        BookService service = new BookService(repository, new BookMapper(), mock(Validator.class), mock(AuditService.class));
         when(repository.hasLoanHistory(1L)).thenReturn(true);
         var conflict = assertThrows(app.global.exception.ConflictException.class,
                 () -> service.deleteBookById(1L));

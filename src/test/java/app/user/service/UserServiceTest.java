@@ -1,4 +1,5 @@
 package app.user.service;
+import app.audit.service.AuditService;
 import app.global.exception.InvalidRequestException;
 
 import app.user.dto.UserPatchRequestDTO;
@@ -61,6 +62,9 @@ class UserServiceTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
+    /** Audit collaborator; the service requires it, so tests supply a mock and can verify recorded events. */
+    private final AuditService audit = mock(AuditService.class);
+
     /** Service under test using a real mapper and validator. */
     private final UserService userService = new UserService(
             repository,
@@ -68,7 +72,8 @@ class UserServiceTest {
             new UserMapper(),
             validatorFactory.getValidator(),
             new UserAccessPolicy(),
-            meterRegistry
+            meterRegistry,
+            audit
     );
 
     /** Persisted user fixture rebuilt before every scenario. */
@@ -85,6 +90,7 @@ class UserServiceTest {
     void setUp() {
         reset(repository);
         reset(passwordEncoder);
+        reset(audit);
 
         existingUser = new User();
         existingUser.setId(1L);
@@ -266,6 +272,7 @@ class UserServiceTest {
         assertEquals("new-hash", existingUser.getPasswordHash());
         assertTrue(existingUser.isMustChangePassword());
         assertEquals(before + 1, meterRegistry.counter("libro.auth.password_resets").count());
+        verify(audit).record("PASSWORD_RESET", "USER", "2025-4321", UserRole.STUDENT);
         verify(repository, never()).save(any(User.class));
     }
 
@@ -303,6 +310,8 @@ class UserServiceTest {
         assertNull(result.getUserCourse());
         assertNull(result.getMajor());
         assertTrue(result.isMustChangePassword());
+        verify(audit).record(org.mockito.ArgumentMatchers.eq("ACCOUNT_CREATED"), org.mockito.ArgumentMatchers.eq("USER"),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(UserRole.ADMINISTRATOR));
     }
 
     @Test
