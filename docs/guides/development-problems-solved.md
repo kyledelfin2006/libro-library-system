@@ -205,7 +205,7 @@ I added `OpenApiMvcTest` to the Docker-free suite. It generates `/v3/api-docs` t
 
 ### What was wrong
 
-At the time of this change, the existing `/search`, `/budget`, `/sorted`, and `/price` endpoints returned complete lists. The `/all` endpoint supported pagination, but it could not combine searches and price filters. A client filtering a large collection therefore had to request every match before showing even its first screen of results. The response size and the number of entities loaded into memory could grow with the collection. V5 later renamed the public price field and range route to replacement-cost terminology; the current range route is `/replacement-cost`.
+At the time of this change, the existing `/search`, `/budget`, `/sorted`, and `/price` endpoints returned complete lists. The `/all` endpoint supported pagination, but it could not combine searches and price filters. A client filtering a large collection therefore had to request every match before showing even its first screen of results. The response size and the number of entities loaded into memory could grow with the collection. V5 later renamed the public price field and range route to replacement-cost terminology. Those separate routes (`/all`, `/search`, `/budget`, `/sorted`, and `/replacement-cost`) have since been removed; `GET /app/books/query`, described below, now covers every one of them.
 
 ### How I addressed it
 

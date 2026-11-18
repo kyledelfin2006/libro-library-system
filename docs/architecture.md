@@ -208,14 +208,14 @@ These rules are applied the same way in every feature package; the project uses 
 Each `Book` is one physical borrowable copy. Separate copies can share a title or author and still have independent availability and loan histories. The catalog supports:
 
 - Create, view, replace, partially update, and delete copy records.
-- Search by title, author, genre, or exact replacement cost; combine text and inclusive replacement-cost filters.
+- List and search through one route, `GET /app/books/query`. Optional title, author, and genre substrings, an inclusive replacement-cost range (a lone minimum or maximum works, and equal bounds give an exact match), `copyStatus`, and advisory `available` filters combine with AND; with no filters it lists the whole collection.
 - Paginate and sort results, with supported sort fields validated by the API.
-- Filter by a replacement-cost range or a maximum budget. Every successful response uses the `ApiResponse` envelope (`success`, `message`, `data`, `timestamp`); errors use `ErrorResponse`. Every list endpoint is paginated (zero-based `page`, default `size` 12, maximum 100, `sort=property,direction`).
+- Every successful response uses the `ApiResponse` envelope (`success`, `message`, `data`, `timestamp`); errors use `ErrorResponse`. The book list is paginated (zero-based `page`, default `size` 12, maximum 100, `sort=property,direction`).
 - Record an optional description and a positive replacement cost. Replacement cost is catalog information, not a fee charged to a borrower.
 
 ### Collection insight
 
-Collection statistics include the number of copies, total and average replacement cost, the copy with the highest replacement cost, and counts by genre.
+Collection statistics (`GET /app/books/stats`) include the number of copies, the total replacement cost, and the copy with the highest replacement cost; `GET /app/books/genre` returns counts by genre.
 
 ### Loans and circulation
 
@@ -286,7 +286,7 @@ Flyway owns schema creation and updates; Hibernate validates the resulting schem
 | App fails to start with datasource errors | Missing or incorrect `SPRING_DATASOURCE_*` variables | Check `.env` and Docker Compose values |
 | `400 Bad Request` on create or replace | Validation failed in `BookRequestDTO` | Make sure `title`, `author`, `genre`, and `replacement cost` are valid |
 | `Invalid JSON format in request body` | Malformed request payload | Send valid JSON and set `Content-Type: application/json` |
-| `Book not found` | The requested ID does not exist | Verify the ID with `GET /app/books/all` |
+| `Book not found` | The requested ID does not exist | Verify the ID with `GET /app/books/query` |
 | `Invalid Number Format` | Non-numeric values were sent to a numeric endpoint | Use numeric values for `replacement cost`, `minReplacementCost`, `maxReplacementCost`, and similar fields |
 | `Method not allowed` | Wrong HTTP verb was used | Match the method listed in the endpoint table |
 | `401 Unauthorized` on a protected API or documentation route | Bearer token is missing, expired, malformed, or invalid | Log in at `POST /app/auth/login` and send the returned token in `Authorization: Bearer <token>` |

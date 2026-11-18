@@ -185,34 +185,8 @@ class BookControllerMvcTest {
     }
 
     @Test
-    void listBooks_bindsPaginationAndSortQueryParameters() throws Exception {
-        when(service.getBooks(any(Pageable.class))).thenReturn(
-                new PageImpl<>(List.of(response(1L)), PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "replacementCost")), 5)
-        );
-
-        mockMvc.perform(get("/app/books/all")
-                        .queryParam("page", "1")
-                        .queryParam("size", "2")
-                        .queryParam("sort", "replacementCost,desc"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[0].id").value(1))
-                .andExpect(jsonPath("$.data.content[0].title").value("1984"))
-                .andExpect(jsonPath("$.data.number").value(1))
-                .andExpect(jsonPath("$.data.size").value(2))
-                .andExpect(jsonPath("$.data.totalElements").value(5))
-                .andExpect(jsonPath("$.data.totalPages").value(3));
-
-        org.mockito.ArgumentCaptor<Pageable> pageable = org.mockito.ArgumentCaptor.forClass(Pageable.class);
-        verify(service).getBooks(pageable.capture());
-        Pageable actual = pageable.getValue();
-        org.junit.jupiter.api.Assertions.assertEquals(1, actual.getPageNumber());
-        org.junit.jupiter.api.Assertions.assertEquals(2, actual.getPageSize());
-        org.junit.jupiter.api.Assertions.assertEquals(Sort.Direction.DESC, actual.getSort().getOrderFor("replacementCost").getDirection());
-    }
-
-    @Test
     void queryBooks_bindsFiltersAndReturnsPageMetadata() throws Exception {
-        when(service.queryBooks(any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(service.queryBooks(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(response(1L)), PageRequest.of(1, 2), 5));
 
         mockMvc.perform(get("/app/books/query")
@@ -232,7 +206,8 @@ class BookControllerMvcTest {
         var page = org.mockito.ArgumentCaptor.forClass(Pageable.class);
         verify(service).queryBooks(org.mockito.Mockito.eq("farm"), org.mockito.Mockito.eq("orwell"),
                 org.mockito.Mockito.eq("satire"), org.mockito.Mockito.eq(new BigDecimal("10.00")),
-                org.mockito.Mockito.eq(new BigDecimal("25.00")), page.capture());
+                org.mockito.Mockito.eq(new BigDecimal("25.00")), org.mockito.Mockito.isNull(),
+                org.mockito.Mockito.isNull(), page.capture());
         org.junit.jupiter.api.Assertions.assertEquals(1, page.getValue().getPageNumber());
         org.junit.jupiter.api.Assertions.assertEquals(2, page.getValue().getPageSize());
         org.junit.jupiter.api.Assertions.assertEquals(Sort.Direction.DESC,
@@ -244,25 +219,25 @@ class BookControllerMvcTest {
         mockMvc.perform(get("/app/books/query").queryParam("minReplacementCost", "invalid"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.statusCode").value(400));
-        verify(service, never()).queryBooks(any(), any(), any(), any(), any(), any());
+        verify(service, never()).queryBooks(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void queryBooks_usesDefaultsAndReturnsValidationErrors() throws Exception {
-        when(service.queryBooks(any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(service.queryBooks(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
         mockMvc.perform(get("/app/books/query"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(0));
 
         var page = org.mockito.ArgumentCaptor.forClass(Pageable.class);
-        verify(service).queryBooks(any(), any(), any(), any(), any(), page.capture());
+        verify(service).queryBooks(any(), any(), any(), any(), any(), any(), any(), page.capture());
         org.junit.jupiter.api.Assertions.assertEquals(0, page.getValue().getPageNumber());
         org.junit.jupiter.api.Assertions.assertEquals(12, page.getValue().getPageSize());
         org.junit.jupiter.api.Assertions.assertEquals(Sort.Direction.ASC,
                 page.getValue().getSort().getOrderFor("id").getDirection());
 
-        when(service.queryBooks(any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(service.queryBooks(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenThrow(new InvalidRequestException("minReplacementCost must be less than or equal to maxReplacementCost"));
         mockMvc.perform(get("/app/books/query")
                         .queryParam("minReplacementCost", "20")
@@ -271,53 +246,23 @@ class BookControllerMvcTest {
                 .andExpect(jsonPath("$.statusCode").value(400));
     }
 
-    @Test
-    void search_bindsAndForwardsQueryParameters() throws Exception {
-        when(service.searchBooks(eq("author"), eq("orwell"), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(response(1L))));
-
-        mockMvc.perform(get("/app/books/search")
-                        .queryParam("type", "author")
-                        .queryParam("value", "orwell"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[0].id").value(1))
-                .andExpect(jsonPath("$.data.content[0].author").value("George Orwell"));
-
-        verify(service).searchBooks(eq("author"), eq("orwell"), any(Pageable.class));
-    }
-
-    @Test
-    void replacementCostFilter_bindsDecimalQueryParameters() throws Exception {
-        when(service.getBooksInReplacementCostRange(eq(new BigDecimal("10.00")), eq(new BigDecimal("25.00")),
-                any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
-
-        mockMvc.perform(get("/app/books/replacement-cost")
-                        .queryParam("minReplacementCost", "10.00")
-                        .queryParam("maxReplacementCost", "25.00"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content").isEmpty());
-
-        verify(service).getBooksInReplacementCostRange(eq(new BigDecimal("10.00")), eq(new BigDecimal("25.00")),
-                any(Pageable.class));
-    }
-
     /** Regression: only InvalidRequestException is a 400; a library's bare IllegalArgumentException is a hidden 500. */
     @Test
     void unexpectedIllegalArgumentException_returnsGenericServerErrorWithoutItsMessage() throws Exception {
-        when(service.getBooksSortedBy(eq("boom"), any(Pageable.class)))
+        when(service.queryBooks(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenThrow(new IllegalArgumentException("internal library detail"));
 
-        mockMvc.perform(get("/app/books/sorted").queryParam("category", "boom"))
+        mockMvc.perform(get("/app/books/query"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.details", not(containsString("internal library detail"))));
     }
 
     @Test
-    void sorted_whenServiceRejectsField_returnsGlobalValidationResponse() throws Exception {
-        when(service.getBooksSortedBy(eq("unknown"), any(Pageable.class)))
+    void query_whenServiceRejectsSortField_returnsGlobalValidationResponse() throws Exception {
+        when(service.queryBooks(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenThrow(new InvalidRequestException("Invalid sort field: unknown"));
 
-        mockMvc.perform(get("/app/books/sorted").queryParam("category", "unknown"))
+        mockMvc.perform(get("/app/books/query").queryParam("sort", "unknown"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Validation failed"))
                 .andExpect(jsonPath("$.details").value("Invalid sort field: unknown"))
@@ -325,8 +270,8 @@ class BookControllerMvcTest {
     }
 
     @Test
-    void replacementCostFilter_withNonNumericBoundary_returnsGlobalTypeMismatchResponse() throws Exception {
-        mockMvc.perform(get("/app/books/replacement-cost")
+    void queryBooks_withNonNumericBoundary_returnsGlobalTypeMismatchResponse() throws Exception {
+        mockMvc.perform(get("/app/books/query")
                         .queryParam("minReplacementCost", "cheap")
                         .queryParam("maxReplacementCost", "25"))
                 .andExpect(status().isBadRequest())
@@ -334,7 +279,7 @@ class BookControllerMvcTest {
                 .andExpect(jsonPath("$.details", containsString("minReplacementCost")))
                 .andExpect(jsonPath("$.statusCode").value(400));
 
-        verify(service, never()).getBooksInReplacementCostRange(any(), any(), any());
+        verify(service, never()).queryBooks(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

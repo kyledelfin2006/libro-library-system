@@ -27,7 +27,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -95,7 +94,7 @@ class BookServiceTest {
                 eq(new BigDecimal("10")), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(sampleBook)));
 
-        bookService.queryBooks("JAVA", "Bloch", "Programming", new BigDecimal("10"), null, requested);
+        bookService.queryBooks("JAVA", "Bloch", "Programming", new BigDecimal("10"), null, null, null, requested);
 
         var page = org.mockito.ArgumentCaptor.forClass(Pageable.class);
         verify(repository).queryBooks(eq("JAVA"), eq("Bloch"), eq("Programming"),
@@ -110,9 +109,9 @@ class BookServiceTest {
     void queryBooks_rejectsInvalidRangeAndSortBeforeRepositoryAccess() {
         Pageable allowed = PageRequest.of(0, 12, Sort.by("id"));
         assertThrows(InvalidRequestException.class,
-                () -> bookService.queryBooks(null, null, null, BigDecimal.TEN, BigDecimal.ONE, allowed));
+                () -> bookService.queryBooks(null, null, null, BigDecimal.TEN, BigDecimal.ONE, null, null, allowed));
         assertThrows(InvalidRequestException.class,
-                () -> bookService.queryBooks(null, null, null, null, null,
+                () -> bookService.queryBooks(null, null, null, null, null, null, null,
                         PageRequest.of(0, 12, Sort.by("createdAt"))));
         verifyNoInteractions(repository);
     }
@@ -508,124 +507,23 @@ class BookServiceTest {
                 .thenReturn(result);
     }
 
-    /** Verifies the budget read is an inclusive upper bound and stays paginated. */
+    /** Verifies an upper-bound-only filter and a two-sided range both reach the shared query with inclusive bounds. */
     @Test
-    void getBooksAtOrBelowReplacementCost_shouldQueryUpperBoundOnly() {
+    void queryBooks_withReplacementCostBounds_shouldForwardBoundsInclusively() {
         Page<Book> expected = new PageImpl<>(List.of(sampleBook));
         stubQuery("", "", "", null, new BigDecimal("30.0"), expected);
+        stubQuery("", "", "", BigDecimal.TEN, new BigDecimal("30"), expected);
 
-        assertMappedSample(bookService.getBooksAtOrBelowReplacementCost(new BigDecimal("30.0"), FIRST_PAGE));
-    }
-
-    /** Verifies a missing maximum is rejected before any query. */
-    @Test
-    void getBooksAtOrBelowReplacementCost_whenMaximumMissing_shouldReject() {
-        assertThrows(InvalidRequestException.class,
-                () -> bookService.getBooksAtOrBelowReplacementCost(null, FIRST_PAGE));
-        verifyNoInteractions(repository);
+        assertMappedSample(bookService.queryBooks(null, null, null, null, new BigDecimal("30.0"), null, null, FIRST_PAGE));
+        assertMappedSample(bookService.queryBooks(null, null, null, BigDecimal.TEN, new BigDecimal("30"), null, null, FIRST_PAGE));
     }
 
     /** Verifies reversed replacementCost ranges are rejected before query execution. */
     @Test
-    void getBooksInReplacementCostRange_whenMinimumExceedsMaximum_shouldReject() {
-        assertThrows(InvalidRequestException.class, () -> bookService.getBooksInReplacementCostRange(
-                new BigDecimal("30.0"), new BigDecimal("10.0"), FIRST_PAGE));
+    void queryBooks_whenMinimumExceedsMaximum_shouldRejectBeforeQuerying() {
+        assertThrows(InvalidRequestException.class, () -> bookService.queryBooks(
+                null, null, null, new BigDecimal("30.0"), new BigDecimal("10.0"), null, null, FIRST_PAGE));
         verifyNoInteractions(repository);
-    }
-
-    /** Verifies incomplete replacementCost ranges fail with a client-facing validation error. */
-    @Test
-    void getBooksInReplacementCostRange_whenBoundaryIsMissing_shouldReject() {
-        assertThrows(InvalidRequestException.class,
-                () -> bookService.getBooksInReplacementCostRange(null, BigDecimal.TEN, FIRST_PAGE));
-        verifyNoInteractions(repository);
-    }
-
-    /** Verifies a valid range is forwarded with both inclusive bounds. */
-    @Test
-    void getBooksInReplacementCostRange_shouldQueryBothBounds() {
-        Page<Book> expected = new PageImpl<>(List.of(sampleBook));
-        stubQuery("", "", "", BigDecimal.TEN, new BigDecimal("30"), expected);
-
-        assertMappedSample(bookService.getBooksInReplacementCostRange(BigDecimal.TEN, new BigDecimal("30"), FIRST_PAGE));
-    }
-
-    /** Verifies each text search type maps to its own filter, with type matching case- and whitespace-insensitive. */
-    @Test
-    void searchBooks_textTypes_shouldFilterTheMatchingField() {
-        Page<Book> expected = new PageImpl<>(List.of(sampleBook));
-        stubQuery("", "Bloch", "", null, null, expected);
-        stubQuery("Effective", "", "", null, null, expected);
-        stubQuery("", "", "Program", null, null, expected);
-
-        assertMappedSample(bookService.searchBooks("  AUTHOR  ", "Bloch", FIRST_PAGE));
-        assertMappedSample(bookService.searchBooks("title", "Effective", FIRST_PAGE));
-        assertMappedSample(bookService.searchBooks("genre", "Program", FIRST_PAGE));
-    }
-
-    /** Verifies replacementCost search is an exact match expressed as an equal-bounds range. */
-    @Test
-    void searchBooks_byReplacementCost_shouldUseEqualBounds() {
-        Page<Book> expected = new PageImpl<>(List.of(sampleBook));
-        stubQuery("", "", "", new BigDecimal("45"), new BigDecimal("45"), expected);
-
-        assertMappedSample(bookService.searchBooks("replacementCost", "45", FIRST_PAGE));
-    }
-
-    /** Verifies malformed replacementCost text is rejected without querying. */
-    @Test
-    void searchBooks_byReplacementCost_withInvalidNumber_shouldThrowInvalidRequestException() {
-        assertThrows(InvalidRequestException.class,
-                () -> bookService.searchBooks("replacementCost", "not-a-number", FIRST_PAGE));
-        verifyNoInteractions(repository);
-    }
-
-    /** Verifies unsupported search fields are rejected instead of becoming dynamic queries. */
-    @Test
-    void searchBooks_withInvalidType_shouldThrowInvalidRequestException() {
-        assertThrows(InvalidRequestException.class, () -> bookService.searchBooks("invalid", "value", FIRST_PAGE));
-        verifyNoInteractions(repository);
-    }
-
-    @Test
-    void searchBooks_withMissingTypeOrValue_shouldThrowInvalidRequestException() {
-        assertThrows(InvalidRequestException.class, () -> bookService.searchBooks(null, "value", FIRST_PAGE));
-        assertThrows(InvalidRequestException.class, () -> bookService.searchBooks("   ", "value", FIRST_PAGE));
-        assertThrows(InvalidRequestException.class, () -> bookService.searchBooks("author", null, FIRST_PAGE));
-        verifyNoInteractions(repository);
-    }
-
-    /** Verifies the sorted read orders ascending by the normalized field, keeps the id tie-breaker, and pages. */
-    @Test
-    void getBooksSortedBy_validField_shouldPageSortedAscending() {
-        Page<Book> expected = new PageImpl<>(List.of(sampleBook));
-        when(repository.queryBooks(eq(""), eq(""), eq(""), isNull(), isNull(), any(Pageable.class))).thenReturn(expected);
-
-        assertMappedSample(bookService.getBooksSortedBy("  REPLACEMENTCOST  ", PageRequest.of(2, 5)));
-
-        ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
-        verify(repository).queryBooks(eq(""), eq(""), eq(""), isNull(), isNull(), page.capture());
-        assertEquals(2, page.getValue().getPageNumber());
-        assertEquals(5, page.getValue().getPageSize());
-        assertEquals(Sort.Direction.ASC, page.getValue().getSort().getOrderFor("replacementCost").getDirection());
-        assertNotNull(page.getValue().getSort().getOrderFor("id"));
-    }
-
-    /** Verifies the sort allowlist rejects unknown entity properties. */
-    @Test
-    void getBooksSortedBy_invalidField_shouldThrowInvalidRequestException() {
-        assertThrows(InvalidRequestException.class, () -> bookService.getBooksSortedBy("invalidField", FIRST_PAGE));
-        verifyNoInteractions(repository);
-    }
-
-    /** Verifies a null or blank field falls back to id order. */
-    @Test
-    void getBooksSortedBy_blankField_shouldSortById() {
-        Page<Book> expected = new PageImpl<>(List.of(sampleBook));
-        when(repository.queryBooks(any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(expected);
-
-        assertMappedSample(bookService.getBooksSortedBy(null, FIRST_PAGE));
-        assertMappedSample(bookService.getBooksSortedBy("   ", FIRST_PAGE));
     }
 
     // ---------- getGenreDistribution ----------
@@ -680,22 +578,6 @@ class BookServiceTest {
         assertEquals(0L, result.totalBooks());
         assertEquals(BigDecimal.ZERO, result.totalReplacementCost());
         assertNull(result.highestReplacementCostBook());
-    }
-
-    /** Verifies that a populated AVG aggregate is returned without numerical distortion. */
-    @Test
-    void getAverageReplacementCost_whenBooksExist_shouldReturnAverage() {
-        when(repository.getAverageReplacementCost()).thenReturn(Optional.of(new BigDecimal("25.50")));
-        BigDecimal avg = bookService.getAverageReplacementCost();
-        assertEquals(0, new BigDecimal("25.50").compareTo(avg));
-    }
-
-    /** Verifies that an empty AVG result is represented as {@link BigDecimal#ZERO}. */
-    @Test
-    void getAverageReplacementCost_whenNoBooks_shouldReturnZero() {
-        when(repository.getAverageReplacementCost()).thenReturn(Optional.empty());
-        BigDecimal avg = bookService.getAverageReplacementCost();
-        assertEquals(BigDecimal.ZERO, avg);
     }
 
     /** Mimics the persistence provider, which assigns the generated id to the instance passed to save. */

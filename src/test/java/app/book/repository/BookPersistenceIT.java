@@ -190,21 +190,21 @@ class BookPersistenceIT {
         ));
 
         Page<BookResponseDTO> first = bookService.queryBooks("farm", "ORWELL", "satire",
-                new BigDecimal("12.00"), new BigDecimal("18.00"),
+                new BigDecimal("12.00"), new BigDecimal("18.00"), null, null,
                 PageRequest.of(0, 1, Sort.by("replacementCost")));
         Page<BookResponseDTO> second = bookService.queryBooks("farm", "ORWELL", "satire",
-                new BigDecimal("12.00"), new BigDecimal("18.00"),
+                new BigDecimal("12.00"), new BigDecimal("18.00"), null, null,
                 PageRequest.of(1, 1, Sort.by("replacementCost")));
 
         assertEquals(2, first.getTotalElements());
         assertEquals(2, first.getTotalPages());
         assertEquals("Animal Farm", first.getContent().getFirst().getTitle());
         assertEquals("Farm Stories", second.getContent().getFirst().getTitle());
-        assertEquals(1, bookService.queryBooks(null, null, null, new BigDecimal("24.00"), null,
+        assertEquals(1, bookService.queryBooks(null, null, null, new BigDecimal("24.00"), null, null, null,
                 PageRequest.of(0, 12)).getTotalElements());
-        assertEquals(3, bookService.queryBooks(null, null, null, null, new BigDecimal("18.00"),
+        assertEquals(3, bookService.queryBooks(null, null, null, null, new BigDecimal("18.00"), null, null,
                 PageRequest.of(0, 12)).getTotalElements());
-        assertEquals(4, bookService.queryBooks(null, null, null, null, null,
+        assertEquals(4, bookService.queryBooks(null, null, null, null, null, null, null,
                 PageRequest.of(0, 12)).getTotalElements());
     }
 

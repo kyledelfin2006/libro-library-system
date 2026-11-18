@@ -234,7 +234,7 @@ Successful response (`accessToken` and `timestamp` vary):
 Use the returned token for a protected catalog request:
 
 ```http
-GET /app/books/all?page=0&size=12 HTTP/1.1
+GET /app/books/query?page=0&size=12 HTTP/1.1
 Host: localhost:8080
 Authorization: Bearer <signed JWT>
 ```
@@ -243,7 +243,7 @@ Authorization: Bearer <signed JWT>
 
 | Area | Representative endpoints | Access |
 | --- | --- | --- |
-| Books | `GET /app/books/all`, `GET /app/books/query`, `GET /app/books/{id}`, `POST /app/books/add` | All roles read; library assistants and librarians write. Book responses include advisory `available`; query supports `available` and `copyStatus`. |
+| Books | `GET /app/books/query`, `GET /app/books/{id}`, `POST /app/books/add` | All roles read; library assistants and librarians write. Book responses include advisory `available`; query supports `available` and `copyStatus`. |
 | Users | `POST /app/users/signup`, `GET /app/users`, `GET /app/users/me`, `GET /app/users/{universityId}`, `PUT /app/users/{universityId}/password/reset` | Signup is public; the staff directory supports scoped `role` and text `q` filters. Profiles and resets remain role scoped. |
 | Loans | `POST /app/loans/{bookId}`, `PUT /app/loans/{loanId}/return`, `GET /app/loans/me`, `GET /app/loans`, `GET /app/loans/activity`, `GET /app/loans/top-titles` | Students/faculty borrow and return their own loans; staff get scoped lists and chart aggregates. |
 | Staff | `GET /app/info`, `GET /app/audit` | Staff can see safe build details and role-scoped change history. |
