@@ -56,8 +56,8 @@ public class LoanService {
     private final BookRepository bookRepository;
     private final LoanMapper loanMapper;
     private final Clock libraryClock;
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private AuditService audit;
+    /** Records loan loss resolutions in the caller's transaction; a required collaborator, never optional. */
+    private final AuditService audit;
 
     /** Returns a zero-filled sequence of Manila calendar weeks for authorized staff. */
     @Transactional(readOnly = true)
@@ -245,7 +245,7 @@ public class LoanService {
         LocalDateTime lostAt = LocalDateTime.now(libraryClock);
         loan.markLost(staff, lostAt);
         book.markLost();
-        if (audit != null) audit.record("LOAN_MARKED_LOST", "LOAN", loanId.toString(), null);
+        audit.record("LOAN_MARKED_LOST", "LOAN", loanId.toString(), null);
 
         // The lost loan remains in history and is no longer overdue or active.
         return loanMapper.toResponse(loan, lostAt);

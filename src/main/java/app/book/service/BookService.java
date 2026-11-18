@@ -63,8 +63,8 @@ public class BookService {
     /** Explicit entity/DTO conversion. */
     private final BookMapper mapper;
     private final Validator validator;
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private AuditService audit;
+    /** Records catalog changes in the caller's transaction; a required collaborator, never optional. */
+    private final AuditService audit;
 
 
     /**
@@ -188,7 +188,7 @@ public class BookService {
         // Validate using validator method
         validateEntity(newBook);
         repository.save(newBook);
-        if (audit != null) audit.record("BOOK_CREATED", "BOOK", newBook.getId().toString(), null);
+        audit.record("BOOK_CREATED", "BOOK", newBook.getId().toString(), null);
 
         log.info("Successfully added book '{}' to catalogue with ID: {}", newBook.getTitle(), newBook.getId());
         return mapBook(newBook);
@@ -253,7 +253,7 @@ public class BookService {
             log.warn("Failed delete operation: Book with ID {} not found", id);
             throw new BookNotFoundException("Couldn't find book of ID: " + id);
         }
-        if (audit != null) audit.record("BOOK_DELETED", "BOOK", id.toString(), null);
+        audit.record("BOOK_DELETED", "BOOK", id.toString(), null);
     }
 
     /**
@@ -307,7 +307,7 @@ public class BookService {
         }
 
         validateEntity(existingBook);
-        if (audit != null) audit.record("BOOK_CHANGED", "BOOK", id.toString(), null);
+        audit.record("BOOK_CHANGED", "BOOK", id.toString(), null);
         // No repository.save(): the entity is managed, so Hibernate writes the changes when the transaction commits.
         return mapBook(existingBook);
     }
@@ -358,7 +358,7 @@ public class BookService {
 
         // 4. Validate entity using existing validator method
         validateEntity(existingBook);
-        if (audit != null) audit.record("BOOK_CHANGED", "BOOK", id.toString(), null);
+        audit.record("BOOK_CHANGED", "BOOK", id.toString(), null);
 
         // 5. Dirty checking persists the managed entity at commit; return its API view.
         return mapBook(existingBook);

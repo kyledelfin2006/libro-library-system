@@ -5,6 +5,7 @@ import app.book.exception.BookValidationException;
 import app.book.dto.BookResponseDTO;
 import app.book.mapper.BookMapper;
 import app.global.exception.InvalidRequestException;
+import app.audit.service.AuditService;
 import app.book.entity.Book;
 import app.book.dto.BookRequestDTO;
 import app.book.dto.BookPatchRequestDTO;
@@ -50,11 +51,14 @@ class BookServiceTest {
     /** Mocked persistence boundary used to define query results and verify repository calls. */
     private final BookRepository repository = mock(BookRepository.class);
 
+    /** Audit collaborator; the service requires it, so tests supply a mock and can verify recorded events. */
+    private final AuditService audit = mock(AuditService.class);
+
     private final ValidatorFactory validatorFactory = Validation.buildDefaultValidatorFactory();
 
     /** Service under test, using the real stateless mapper and mocked persistence boundary. */
     private final BookService bookService = new BookService(
-            repository, new BookMapper(), validatorFactory.getValidator());
+            repository, new BookMapper(), validatorFactory.getValidator(), audit);
 
     @AfterAll
     void closeValidatorFactory() {
@@ -77,6 +81,7 @@ class BookServiceTest {
     @BeforeEach
     void setUp() {
         reset(repository);
+        reset(audit);
         sampleBook = new Book(TITLE, AUTHOR, GENRE, REPLACEMENT_COST);
         sampleBook.setId(BOOK_ID);
 
@@ -116,7 +121,7 @@ class BookServiceTest {
     /** Verifies that a valid request is mapped, saved once, and returned as a populated response DTO. */
     @Test
     void addBook_shouldSaveAndReturnBook() {
-        when(repository.save(any(Book.class))).thenReturn(sampleBook);
+        when(repository.save(any(Book.class))).thenAnswer(assignGeneratedId());
 
         BookResponseDTO result = bookService.addBook(sampleBookRequestDTO);
 
@@ -126,12 +131,20 @@ class BookServiceTest {
         assertEquals(GENRE, result.getGenre());
         assertEquals(0, REPLACEMENT_COST.compareTo(result.getReplacementCost()));
         verify(repository, times(1)).save(any(Book.class));
+        verify(audit).record("BOOK_CREATED", "BOOK", BOOK_ID.toString(), null);
+    }
+
+    /** Verifies a rejected create leaves no audit event behind. */
+    @Test
+    void addBook_whenInputMissing_shouldNotRecordAuditEvent() {
+        assertThrows(InvalidRequestException.class, () -> bookService.addBook(null));
+        verifyNoInteractions(audit);
     }
 
     /** Verifies create requests are normalized before the entity reaches persistence. */
     @Test
     void addBook_shouldTrimTextFieldsBeforeSaving() {
-        when(repository.save(any(Book.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(Book.class))).thenAnswer(assignGeneratedId());
 
         BookResponseDTO result = bookService.addBook(new BookRequestDTO(
                 "  Effective Java  ",
@@ -683,6 +696,15 @@ class BookServiceTest {
         when(repository.getAverageReplacementCost()).thenReturn(Optional.empty());
         BigDecimal avg = bookService.getAverageReplacementCost();
         assertEquals(BigDecimal.ZERO, avg);
+    }
+
+    /** Mimics the persistence provider, which assigns the generated id to the instance passed to save. */
+    private static org.mockito.stubbing.Answer<Book> assignGeneratedId() {
+        return invocation -> {
+            Book saved = invocation.getArgument(0);
+            saved.setId(BOOK_ID);
+            return saved;
+        };
     }
 
     /** Asserts a page holds exactly the sample copy, mapped to its response DTO inside the service. */

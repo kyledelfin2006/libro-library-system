@@ -1,5 +1,6 @@
 package app.loan.service;
 
+import app.audit.service.AuditService;
 import app.book.repository.BookRepository;
 import app.loan.mapper.LoanMapper;
 import app.loan.repository.LoanRepository;
@@ -31,7 +32,7 @@ class LoanAggregatesTest {
         assistant.setUserRole(UserRole.ADMINISTRATOR);
         when(users.findByUniversityId("2025-4321")).thenReturn(Optional.of(assistant));
         Clock clock = Clock.fixed(Instant.parse("2026-10-19T02:30:00Z"), ZoneId.of("Asia/Manila"));
-        LoanService service = new LoanService(loans, users, mock(BookRepository.class), new LoanMapper(), clock);
+        LoanService service = new LoanService(loans, users, mock(BookRepository.class), new LoanMapper(), clock, mock(AuditService.class));
         WeeklyLoanActivityProjection week = mock(WeeklyLoanActivityProjection.class);
         when(week.getWeekStart()).thenReturn(LocalDate.parse("2026-10-12"));
         when(week.getCheckouts()).thenReturn(2L);
@@ -57,7 +58,7 @@ class LoanAggregatesTest {
         librarian.setUserRole(UserRole.LIBRARIAN);
         when(users.findByUniversityId("2025-4321")).thenReturn(Optional.of(librarian));
         Clock clock = Clock.fixed(Instant.parse("2026-10-19T02:30:00Z"), ZoneId.of("Asia/Manila"));
-        LoanService service = new LoanService(loans, users, mock(BookRepository.class), new LoanMapper(), clock);
+        LoanService service = new LoanService(loans, users, mock(BookRepository.class), new LoanMapper(), clock, mock(AuditService.class));
         TopTitleProjection title = mock(TopTitleProjection.class);
         when(title.getTitle()).thenReturn("The Library Book");
         when(title.getAuthor()).thenReturn("Susan Orlean");

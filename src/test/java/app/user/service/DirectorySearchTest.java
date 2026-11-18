@@ -1,5 +1,6 @@
 package app.user.service;
 
+import app.audit.service.AuditService;
 import app.user.entity.enums.UserRole;
 import app.user.mapper.UserMapper;
 import app.user.repository.UserRepository;
@@ -22,7 +23,7 @@ class DirectorySearchTest {
     void assistantCannotFilterForAdministratorsAndSearchKeepsScopedRoles() {
         UserRepository repository = mock(UserRepository.class);
         UserService service = new UserService(repository, mock(PasswordEncoder.class),
-                mock(UserMapper.class), mock(Validator.class), new UserAccessPolicy(), mock(MeterRegistry.class));
+                mock(UserMapper.class), mock(Validator.class), new UserAccessPolicy(), mock(MeterRegistry.class), mock(AuditService.class));
         var roles = List.of(new SimpleGrantedAuthority("ROLE_ADMINISTRATOR"));
         var page = PageRequest.of(0, 12);
 
