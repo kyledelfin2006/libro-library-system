@@ -59,46 +59,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/app/books/all": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List books with pagination
-         * @description Page numbering starts at zero. The default is page 0, size 12, sorted by id ascending; the maximum page size is 100. Sort with sort=property,direction using id, title, author, genre, or replacementCost. Unsupported sort properties return 400.
-         */
-        get: operations["getAllBooks"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/app/books/budget": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Find books by maximum replacement cost
-         * @description Returns all copies whose recorded replacement cost is at or below maxReplacementCost, inclusively. Results are paginated: page numbering starts at zero, default size 12, maximum 100.
-         */
-        get: operations["budgetBooks"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/app/books/genre": {
         parameters: {
             query?: never;
@@ -139,66 +99,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/app/books/replacement-cost": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Filter books by replacement-cost range
-         * @description Returns copies with replacement costs between minReplacementCost and maxReplacementCost, inclusive. minReplacementCost must not exceed maxReplacementCost. Results are paginated: page numbering starts at zero, default size 12, maximum 100.
-         */
-        get: operations["getReplacementCostRangedBooks"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/app/books/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Search books
-         * @description Search title, author, or genre with a case-insensitive substring. Replacement-cost searches require an exact numeric value. Results are paginated: page numbering starts at zero, default size 12, maximum 100; sort with sort=property,direction.
-         */
-        get: operations["searchBooks"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/app/books/sorted": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List books sorted by a field
-         * @description Returns a page sorted ascending by title, author, id, replacementCost, or genre. The default field is title. The category parameter decides the order; page and size are honored (default size 12, maximum 100).
-         */
-        get: operations["getSortedBooks"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/app/books/stats": {
         parameters: {
             query?: never;
@@ -211,46 +111,6 @@ export interface paths {
          * @description Returns the collection count and total recorded replacement cost, plus the copy with the highest replacement cost. The highest-cost copy is null when the collection is empty.
          */
         get: operations["getStats"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/app/books/stats/average-replacement-cost": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get average replacement cost
-         * @description Returns the average recorded replacement cost in the ApiResponse data field, or 0 when the collection is empty.
-         */
-        get: operations["getAverageReplacementCost"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/app/books/stats/count": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get book count
-         * @description Returns the collection count in the ApiResponse data field.
-         */
-        get: operations["getBooksCount"];
         put?: never;
         post?: never;
         delete?: never;
@@ -642,20 +502,6 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @description Success envelope returned by every successful API operation. Errors use ErrorResponse instead. */
-        ApiResponseBigDecimal: {
-            /** @description Operation result. The schema is specialized to each endpoint's response type. */
-            data?: number;
-            /** @description Human-readable operation result. */
-            message?: string;
-            /** @description Whether the operation completed successfully. */
-            success?: boolean;
-            /**
-             * Format: int64
-             * @description Response creation time as Unix epoch milliseconds.
-             */
-            timestamp?: number;
-        };
-        /** @description Success envelope returned by every successful API operation. Errors use ErrorResponse instead. */
         ApiResponseBookResponseDTO: {
             /** @description Operation result. The schema is specialized to each endpoint's response type. */
             data?: components["schemas"]["BookResponseDTO"];
@@ -701,23 +547,6 @@ export interface components {
         ApiResponseLoanResponseDTO: {
             /** @description Operation result. The schema is specialized to each endpoint's response type. */
             data?: components["schemas"]["LoanResponseDTO"];
-            /** @description Human-readable operation result. */
-            message?: string;
-            /** @description Whether the operation completed successfully. */
-            success?: boolean;
-            /**
-             * Format: int64
-             * @description Response creation time as Unix epoch milliseconds.
-             */
-            timestamp?: number;
-        };
-        /** @description Success envelope returned by every successful API operation. Errors use ErrorResponse instead. */
-        ApiResponseLong: {
-            /**
-             * Format: int64
-             * @description Operation result. The schema is specialized to each endpoint's response type.
-             */
-            data?: number;
             /** @description Human-readable operation result. */
             message?: string;
             /** @description Whether the operation completed successfully. */
@@ -1305,98 +1134,6 @@ export interface operations {
             };
         };
     };
-    getAllBooks: {
-        parameters: {
-            query?: {
-                /** @description Zero-based page index (0..N) */
-                page?: number;
-                /** @description The size of the page to be returned */
-                size?: number;
-                /** @description Sorting criteria in the format: property,(asc|desc). Default sort order is ascending. Multiple sort criteria are supported. */
-                sort?: string[];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Book page */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponsePageBookResponseDTO"];
-                };
-            };
-            /** @description Invalid pagination or sort parameter */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Bearer token is missing or invalid */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    budgetBooks: {
-        parameters: {
-            query: {
-                /** @description Inclusive maximum replacement cost. */
-                maxReplacementCost: number;
-                /** @description Zero-based page index (0..N) */
-                page?: number;
-                /** @description The size of the page to be returned */
-                size?: number;
-                /** @description Sorting criteria in the format: property,(asc|desc). Default sort order is ascending. Multiple sort criteria are supported. */
-                sort?: string[];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Affordable book page */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponsePageBookResponseDTO"];
-                };
-            };
-            /** @description maxReplacementCost is not a valid decimal */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Bearer token is missing or invalid */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
     getGenre: {
         parameters: {
             query?: never;
@@ -1482,151 +1219,6 @@ export interface operations {
             };
         };
     };
-    getReplacementCostRangedBooks: {
-        parameters: {
-            query: {
-                /** @description Inclusive minimum replacement cost. */
-                minReplacementCost: number;
-                /** @description Inclusive maximum replacement cost. */
-                maxReplacementCost: number;
-                /** @description Zero-based page index (0..N) */
-                page?: number;
-                /** @description The size of the page to be returned */
-                size?: number;
-                /** @description Sorting criteria in the format: property,(asc|desc). Default sort order is ascending. Multiple sort criteria are supported. */
-                sort?: string[];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Books in replacement-cost range */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponsePageBookResponseDTO"];
-                };
-            };
-            /** @description Invalid decimal value or minimum replacement cost exceeds maximum */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Bearer token is missing or invalid */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    searchBooks: {
-        parameters: {
-            query: {
-                /** @description Field to search: author, title, genre, or replacementCost. */
-                type: "author" | "title" | "genre" | "replacementCost";
-                /** @description Text fragment for title, author, or genre; exact decimal value for replacement cost. */
-                value: string;
-                /** @description Zero-based page index (0..N) */
-                page?: number;
-                /** @description The size of the page to be returned */
-                size?: number;
-                /** @description Sorting criteria in the format: property,(asc|desc). Default sort order is ascending. Multiple sort criteria are supported. */
-                sort?: string[];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Matching book page */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponsePageBookResponseDTO"];
-                };
-            };
-            /** @description Unsupported search type or invalid replacement-cost value */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Bearer token is missing or invalid */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    getSortedBooks: {
-        parameters: {
-            query?: {
-                /** @description Allowed values: title, author, id, replacementCost, genre. */
-                category?: "title" | "author" | "id" | "replacementCost" | "genre";
-                /** @description Zero-based page index (0..N) */
-                page?: number;
-                /** @description The size of the page to be returned */
-                size?: number;
-                /** @description Sorting criteria in the format: property,(asc|desc). Default sort order is ascending. Multiple sort criteria are supported. */
-                sort?: string[];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Sorted book page */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponsePageBookResponseDTO"];
-                };
-            };
-            /** @description Unsupported sort field */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Bearer token is missing or invalid */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
     getStats: {
         parameters: {
             query?: never;
@@ -1643,64 +1235,6 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseLibraryStatisticsDTO"];
-                };
-            };
-            /** @description Bearer token is missing or invalid */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    getAverageReplacementCost: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseBigDecimal"];
-                };
-            };
-            /** @description Bearer token is missing or invalid */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    getBooksCount: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseLong"];
                 };
             };
             /** @description Bearer token is missing or invalid */

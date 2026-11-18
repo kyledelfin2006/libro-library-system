@@ -27,7 +27,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -68,36 +67,21 @@ public class BookService {
 
 
     /**
-     * Retrieves a paginated list of all books.
-     *
-     * @param pageable the pagination and sorting information
-     * @return a page of books matching the given pageable parameters
-     * @throws InvalidRequestException if the sort names a field outside the allowlist
-     */
-    public Page<BookResponseDTO> getBooks(Pageable pageable) {
-        validateBookSort(pageable);
-        return mapPage(repository.findAll(pageable));
-    }
-
-    /**
-     * Filters books by text and optional inclusive replacement-cost bounds before applying a stable page sort.
+     * Filters books by text, optional inclusive replacement-cost bounds, physical disposition, and current
+     * availability, then applies a stable page sort. Every filter is optional; a {@code null} filter is ignored,
+     * so passing none lists the whole collection.
      *
      * @param title optional title substring
      * @param author optional author substring
      * @param genre optional genre substring
      * @param minReplacementCost optional inclusive lower bound
      * @param maxReplacementCost optional inclusive upper bound
+     * @param copyStatus optional physical copy status
+     * @param available optional advisory checkout availability
      * @param pageable requested page and allowlisted sort order
      * @return the matching page of physical copies
      * @throws InvalidRequestException if the replacement-cost range or sort order is invalid
      */
-    public Page<BookResponseDTO> queryBooks(String title, String author, String genre,
-                                            BigDecimal minReplacementCost, BigDecimal maxReplacementCost,
-                                            Pageable pageable) {
-        return queryBooks(title, author, genre, minReplacementCost, maxReplacementCost, null, null, pageable);
-    }
-
-    /** Filters by physical disposition and current availability in addition to existing catalog fields. */
     public Page<BookResponseDTO> queryBooks(String title, String author, String genre,
                                             BigDecimal minReplacementCost, BigDecimal maxReplacementCost,
                                             BookCopyStatus copyStatus, Boolean available, Pageable pageable) {
@@ -380,83 +364,6 @@ public class BookService {
     }
 
     /**
-     * Pages books whose replacement cost is at or below the specified maximum.
-     * Delegates to {@link #queryBooks} so sort validation and the stable id tie-breaker apply.
-     *
-     * @param maxReplacementCost the maximum replacement amount (inclusive)
-     * @param pageable requested page (size is capped by Spring's max-page-size) and allowlisted sort
-     * @return a page of copies at or below the specified replacement amount
-     * @throws InvalidRequestException if the maximum is missing or the sort is unsupported
-     */
-    public Page<BookResponseDTO> getBooksAtOrBelowReplacementCost(BigDecimal maxReplacementCost, Pageable pageable) {
-        if (maxReplacementCost == null) {
-            throw new InvalidRequestException("maxReplacementCost is required");
-        }
-        return queryBooks(null, null, null, null, maxReplacementCost, pageable);
-    }
-
-    /**
-     * Pages books whose replacement cost falls within the given range (inclusive).
-     *
-     * @param minReplacementCost the minimum amount (must be ≤ max)
-     * @param maxReplacementCost the maximum amount (must be ≥ min)
-     * @param pageable requested page and allowlisted sort
-     * @return a page of books in the replacement-cost range
-     * @throws InvalidRequestException if a bound is missing or min > max
-     */
-    public Page<BookResponseDTO> getBooksInReplacementCostRange(BigDecimal minReplacementCost,
-                                                                BigDecimal maxReplacementCost, Pageable pageable) {
-        if (minReplacementCost == null || maxReplacementCost == null) {
-            throw new InvalidRequestException("minReplacementCost and maxReplacementCost are required");
-        }
-        // queryBooks rejects a reversed range, so the bounds are not compared twice here.
-        return queryBooks(null, null, null, minReplacementCost, maxReplacementCost, pageable);
-    }
-
-    /**
-     * Pages books by a specific field type and value.
-     * <p>
-     * Supported search types: {@code author}, {@code title}, {@code genre}, {@code replacementCost}.
-     * Text types match case-insensitive substrings; replacement cost requires an exact numeric value.
-     * </p>
-     *
-     * @param type  the field to search on (case-insensitive, trimmed)
-     * @param value the search term
-     * @param pageable requested page and allowlisted sort
-     * @return a page of matching books
-     * @throws InvalidRequestException if the search type is unsupported or
-     *                                  the replacement-cost value is not a valid number
-     */
-    public Page<BookResponseDTO> searchBooks(String type, String value, Pageable pageable) {
-        if (type == null || type.isBlank()) {
-            throw new InvalidRequestException("Search type is required");
-        }
-        if (value == null) {
-            throw new InvalidRequestException("Search value is required");
-        }
-
-        String formattedType = type.trim().toLowerCase(Locale.ROOT);
-
-        return switch (formattedType) {
-            case "author" -> queryBooks(null, value, null, null, null, pageable);
-            case "title" -> queryBooks(value, null, null, null, null, pageable);
-            case "genre" -> queryBooks(null, null, value, null, null, pageable);
-            case "replacementcost" -> {
-                BigDecimal replacementCost;
-                try {
-                    replacementCost = new BigDecimal(value);
-                } catch (NumberFormatException e) {
-                    throw new InvalidRequestException("Invalid replacement-cost format value: " + value);
-                }
-                // An exact match is an inclusive range whose bounds are equal.
-                yield queryBooks(null, null, null, replacementCost, replacementCost, pageable);
-            }
-            default -> throw new InvalidRequestException(
-                    "Invalid search type: " + type + ". Valid types: author, title, genre, replacementCost");
-        };
-    }
-
-    /**
      * Retrieves genre distribution counts and converts the internal typed projections
      * into the existing public map response shape.
      *
@@ -468,37 +375,6 @@ public class BookService {
                         GenreCount::genre,
                         GenreCount::count
                 ));
-    }
-
-
-    /**
-     * Pages all books sorted ascending by the specified field.
-     * <p>
-     * Allowed sort fields are: {@code title}, {@code author}, {@code id}, {@code replacementCost}, {@code genre}.
-     * A null or blank field sorts by id. The field, not any sort carried by {@code pageable}, decides the order.
-     * </p>
-     *
-     * @param field the name of the field to sort by (case-insensitive, trimmed)
-     * @param pageable supplies the page number and size only
-     * @return a page of books sorted accordingly
-     * @throws InvalidRequestException if the field is not one of the allowed values
-     */
-    public Page<BookResponseDTO> getBooksSortedBy(String field, Pageable pageable) {
-        String fieldName = "id";
-        if (field != null && !field.trim().isEmpty()) {
-            // Normalize ordinary fields to lowercase, but keep the JPA camel-case property spelling.
-            String normalized = field.trim().toLowerCase(Locale.ROOT);
-            fieldName = normalized.equals("replacementcost") ? "replacementCost" : normalized;
-        }
-
-        // Validate against the allowlist so a client can never name an arbitrary entity property.
-        if (!SORTABLE_BOOK_FIELDS.contains(fieldName)) {
-            throw new InvalidRequestException("Invalid sort field: " + field);
-        }
-
-        Pageable sortedPage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
-                Sort.by(fieldName).ascending());
-        return queryBooks(null, null, null, null, null, sortedPage);
     }
 
     /**
@@ -525,26 +401,6 @@ public class BookService {
                 aggregate.totalReplacementCost(),
                 highestReplacementCostDTO
         );
-    }
-
-    /**
-     * Calculates the average replacement cost of all copies in the library.
-     *
-     * @return the average replacement cost as a {@link BigDecimal}, or {@link BigDecimal#ZERO}
-     *         if no books exist
-     */
-    public BigDecimal getAverageReplacementCost() {
-        Optional<BigDecimal> averageReplacementCost = repository.getAverageReplacementCost();
-        return averageReplacementCost.orElse(BigDecimal.ZERO);
-    }
-
-    /**
-     * Counts the physical copies in the collection.
-     *
-     * @return the number of copies; zero when the library is empty
-     */
-    public Long getBookCount() {
-        return repository.count();
     }
 
 }
