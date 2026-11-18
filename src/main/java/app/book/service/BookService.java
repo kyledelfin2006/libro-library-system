@@ -67,24 +67,21 @@ public class BookService {
 
 
     /**
-     * Filters books by text and optional inclusive replacement-cost bounds before applying a stable page sort.
+     * Filters books by text, optional inclusive replacement-cost bounds, physical disposition, and current
+     * availability, then applies a stable page sort. Every filter is optional; a {@code null} filter is ignored,
+     * so passing none lists the whole collection.
      *
      * @param title optional title substring
      * @param author optional author substring
      * @param genre optional genre substring
      * @param minReplacementCost optional inclusive lower bound
      * @param maxReplacementCost optional inclusive upper bound
+     * @param copyStatus optional physical copy status
+     * @param available optional advisory checkout availability
      * @param pageable requested page and allowlisted sort order
      * @return the matching page of physical copies
      * @throws InvalidRequestException if the replacement-cost range or sort order is invalid
      */
-    public Page<BookResponseDTO> queryBooks(String title, String author, String genre,
-                                            BigDecimal minReplacementCost, BigDecimal maxReplacementCost,
-                                            Pageable pageable) {
-        return queryBooks(title, author, genre, minReplacementCost, maxReplacementCost, null, null, pageable);
-    }
-
-    /** Filters by physical disposition and current availability in addition to existing catalog fields. */
     public Page<BookResponseDTO> queryBooks(String title, String author, String genre,
                                             BigDecimal minReplacementCost, BigDecimal maxReplacementCost,
                                             BookCopyStatus copyStatus, Boolean available, Pageable pageable) {

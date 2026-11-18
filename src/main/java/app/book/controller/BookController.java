@@ -112,11 +112,8 @@ public class BookController {
             @Parameter(description = "Current advisory checkout availability.")
             @RequestParam(required = false) Boolean available,
             @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
-        Page<BookResponseDTO> books = copyStatus == null && available == null
-                ? service.queryBooks(title, author, genre, minReplacementCost, maxReplacementCost, pageable)
-                : service.queryBooks(title, author, genre, minReplacementCost, maxReplacementCost,
-                        copyStatus, available, pageable);
-        return ResponseEntity.ok(ApiResponse.ok(books));
+        return ResponseEntity.ok(ApiResponse.ok(service.queryBooks(title, author, genre,
+                minReplacementCost, maxReplacementCost, copyStatus, available, pageable)));
     }
 
     @GetMapping("/genre")

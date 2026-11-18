@@ -90,7 +90,7 @@ class BookServiceTest {
                 eq(new BigDecimal("10")), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(sampleBook)));
 
-        bookService.queryBooks("JAVA", "Bloch", "Programming", new BigDecimal("10"), null, requested);
+        bookService.queryBooks("JAVA", "Bloch", "Programming", new BigDecimal("10"), null, null, null, requested);
 
         var page = org.mockito.ArgumentCaptor.forClass(Pageable.class);
         verify(repository).queryBooks(eq("JAVA"), eq("Bloch"), eq("Programming"),
@@ -105,9 +105,9 @@ class BookServiceTest {
     void queryBooks_rejectsInvalidRangeAndSortBeforeRepositoryAccess() {
         Pageable allowed = PageRequest.of(0, 12, Sort.by("id"));
         assertThrows(InvalidRequestException.class,
-                () -> bookService.queryBooks(null, null, null, BigDecimal.TEN, BigDecimal.ONE, allowed));
+                () -> bookService.queryBooks(null, null, null, BigDecimal.TEN, BigDecimal.ONE, null, null, allowed));
         assertThrows(InvalidRequestException.class,
-                () -> bookService.queryBooks(null, null, null, null, null,
+                () -> bookService.queryBooks(null, null, null, null, null, null, null,
                         PageRequest.of(0, 12, Sort.by("createdAt"))));
         verifyNoInteractions(repository);
     }
@@ -502,15 +502,15 @@ class BookServiceTest {
         stubQuery("", "", "", null, new BigDecimal("30.0"), expected);
         stubQuery("", "", "", BigDecimal.TEN, new BigDecimal("30"), expected);
 
-        assertMappedSample(bookService.queryBooks(null, null, null, null, new BigDecimal("30.0"), FIRST_PAGE));
-        assertMappedSample(bookService.queryBooks(null, null, null, BigDecimal.TEN, new BigDecimal("30"), FIRST_PAGE));
+        assertMappedSample(bookService.queryBooks(null, null, null, null, new BigDecimal("30.0"), null, null, FIRST_PAGE));
+        assertMappedSample(bookService.queryBooks(null, null, null, BigDecimal.TEN, new BigDecimal("30"), null, null, FIRST_PAGE));
     }
 
     /** Verifies reversed replacementCost ranges are rejected before query execution. */
     @Test
     void queryBooks_whenMinimumExceedsMaximum_shouldRejectBeforeQuerying() {
         assertThrows(InvalidRequestException.class, () -> bookService.queryBooks(
-                null, null, null, new BigDecimal("30.0"), new BigDecimal("10.0"), FIRST_PAGE));
+                null, null, null, new BigDecimal("30.0"), new BigDecimal("10.0"), null, null, FIRST_PAGE));
         verifyNoInteractions(repository);
     }
 
