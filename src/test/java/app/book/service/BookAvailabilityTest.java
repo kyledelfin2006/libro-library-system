@@ -1,7 +1,6 @@
 package app.book.service;
 
 import app.book.entity.Book;
-import app.book.entity.BookCopyStatus;
 import app.book.mapper.BookMapper;
 import app.book.repository.BookRepository;
 import app.loan.entity.LoanStatus;
