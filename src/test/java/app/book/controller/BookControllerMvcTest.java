@@ -271,38 +271,23 @@ class BookControllerMvcTest {
                 .andExpect(jsonPath("$.statusCode").value(400));
     }
 
-    @Test
-    void search_bindsAndForwardsQueryParameters() throws Exception {
-        when(service.searchBooks(eq("author"), eq("orwell"), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(response(1L))));
-
-        mockMvc.perform(get("/app/books/search")
-                        .queryParam("type", "author")
-                        .queryParam("value", "orwell"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[0].id").value(1))
-                .andExpect(jsonPath("$.data.content[0].author").value("George Orwell"));
-
-        verify(service).searchBooks(eq("author"), eq("orwell"), any(Pageable.class));
-    }
-
     /** Regression: only InvalidRequestException is a 400; a library's bare IllegalArgumentException is a hidden 500. */
     @Test
     void unexpectedIllegalArgumentException_returnsGenericServerErrorWithoutItsMessage() throws Exception {
-        when(service.getBooksSortedBy(eq("boom"), any(Pageable.class)))
+        when(service.queryBooks(any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenThrow(new IllegalArgumentException("internal library detail"));
 
-        mockMvc.perform(get("/app/books/sorted").queryParam("category", "boom"))
+        mockMvc.perform(get("/app/books/query"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.details", not(containsString("internal library detail"))));
     }
 
     @Test
-    void sorted_whenServiceRejectsField_returnsGlobalValidationResponse() throws Exception {
-        when(service.getBooksSortedBy(eq("unknown"), any(Pageable.class)))
+    void query_whenServiceRejectsSortField_returnsGlobalValidationResponse() throws Exception {
+        when(service.queryBooks(any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenThrow(new InvalidRequestException("Invalid sort field: unknown"));
 
-        mockMvc.perform(get("/app/books/sorted").queryParam("category", "unknown"))
+        mockMvc.perform(get("/app/books/query").queryParam("sort", "unknown"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Validation failed"))
                 .andExpect(jsonPath("$.details").value("Invalid sort field: unknown"))

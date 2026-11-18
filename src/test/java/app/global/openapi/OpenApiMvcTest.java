@@ -110,6 +110,8 @@ class OpenApiMvcTest {
                         .value("#/components/schemas/ErrorResponse"))
                 .andExpect(jsonPath("$.paths['/app/books/replacement-cost']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/app/books/budget']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/app/books/search']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/app/books/sorted']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/app/books/price']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/app/books/stats/average-replacement-cost']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/app/books/stats/count']").doesNotExist())

@@ -51,7 +51,7 @@ printf '%s' "$body" | grep -q '"mustChangePassword":false' || fail 'profile reco
 request GET '/app/books/all?size=12' "$patron_token"
 expect 200 'book list'
 printf '%s' "$body" | grep -q '"content":\[' || fail 'book page has no content array'
-request GET '/app/books/search?type=title&value=Frankenstein' "$patron_token"
+request GET '/app/books/query?title=Frankenstein' "$patron_token"
 expect 200 'book search'
 book_id="$(number id)"
 [ -n "$book_id" ] || fail 'seeded Frankenstein copy not found'
@@ -72,7 +72,7 @@ request POST /app/auth/login '' "{\"universityId\":\"$FACULTY_ID\",\"password\":
 expect 200 'faculty login'
 faculty_token="$(field accessToken)"
 [ -n "$faculty_token" ] || fail 'faculty token missing'
-request GET '/app/books/search?type=title&value=Dracula' "$faculty_token"
+request GET '/app/books/query?title=Dracula' "$faculty_token"
 expect 200 'second book search'
 second_book_id="$(number id)"
 [ -n "$second_book_id" ] || fail 'seeded Dracula copy not found'

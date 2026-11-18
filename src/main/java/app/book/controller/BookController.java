@@ -53,21 +53,6 @@ public class BookController {
         return ResponseEntity.ok(ApiResponse.ok(service.getLibraryStatistics()));
     }
 
-    /** Searches text fields by substring and replacement cost by an exact decimal amount. */
-    @GetMapping("/search")
-    @Operation(summary = "Search books",
-            description = "Search title, author, or genre with a case-insensitive substring. Replacement-cost searches require an exact numeric value. Results are paginated: page numbering starts at zero, default size 12, maximum 100; sort with sort=property,direction.")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Matching book page", useReturnTypeSchema = true)
-    @ErrorApiResponse(responseCode = "400", description = "Unsupported search type or invalid replacement-cost value")
-    public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> searchBooks(
-            @Parameter(description = "Field to search: author, title, genre, or replacementCost.", example = "title", schema = @Schema(allowableValues = {"author", "title", "genre", "replacementCost"}))
-            @RequestParam String type,
-            @Parameter(description = "Text fragment for title, author, or genre; exact decimal value for replacement cost.", example = "1984")
-            @RequestParam String value,
-            @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.ok(service.searchBooks(type, value, pageable)));
-    }
-
     /** Creates one physical copy after request DTO validation; the service returns the public response shape. */
     @PostMapping("/add")
     @Operation(summary = "Add a book",
@@ -142,18 +127,6 @@ public class BookController {
                 : service.queryBooks(title, author, genre, minReplacementCost, maxReplacementCost,
                         copyStatus, available, pageable);
         return ResponseEntity.ok(ApiResponse.ok(books));
-    }
-
-    @GetMapping("/sorted")
-    @Operation(summary = "List books sorted by a field",
-            description = "Returns a page sorted ascending by title, author, id, replacementCost, or genre. The default field is title. The category parameter decides the order; page and size are honored (default size 12, maximum 100).")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Sorted book page", useReturnTypeSchema = true)
-    @ErrorApiResponse(responseCode = "400", description = "Unsupported sort field")
-    public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> getSortedBooks(
-            @Parameter(description = "Allowed values: title, author, id, replacementCost, genre.", schema = @Schema(allowableValues = {"title", "author", "id", "replacementCost", "genre"}))
-            @RequestParam(required = false, defaultValue = "title") String category,
-            @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.ok(service.getBooksSortedBy(category, pageable)));
     }
 
     @GetMapping("/genre")
