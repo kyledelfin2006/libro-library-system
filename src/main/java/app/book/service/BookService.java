@@ -380,40 +380,6 @@ public class BookService {
     }
 
     /**
-     * Pages books whose replacement cost is at or below the specified maximum.
-     * Delegates to {@link #queryBooks} so sort validation and the stable id tie-breaker apply.
-     *
-     * @param maxReplacementCost the maximum replacement amount (inclusive)
-     * @param pageable requested page (size is capped by Spring's max-page-size) and allowlisted sort
-     * @return a page of copies at or below the specified replacement amount
-     * @throws InvalidRequestException if the maximum is missing or the sort is unsupported
-     */
-    public Page<BookResponseDTO> getBooksAtOrBelowReplacementCost(BigDecimal maxReplacementCost, Pageable pageable) {
-        if (maxReplacementCost == null) {
-            throw new InvalidRequestException("maxReplacementCost is required");
-        }
-        return queryBooks(null, null, null, null, maxReplacementCost, pageable);
-    }
-
-    /**
-     * Pages books whose replacement cost falls within the given range (inclusive).
-     *
-     * @param minReplacementCost the minimum amount (must be ≤ max)
-     * @param maxReplacementCost the maximum amount (must be ≥ min)
-     * @param pageable requested page and allowlisted sort
-     * @return a page of books in the replacement-cost range
-     * @throws InvalidRequestException if a bound is missing or min > max
-     */
-    public Page<BookResponseDTO> getBooksInReplacementCostRange(BigDecimal minReplacementCost,
-                                                                BigDecimal maxReplacementCost, Pageable pageable) {
-        if (minReplacementCost == null || maxReplacementCost == null) {
-            throw new InvalidRequestException("minReplacementCost and maxReplacementCost are required");
-        }
-        // queryBooks rejects a reversed range, so the bounds are not compared twice here.
-        return queryBooks(null, null, null, minReplacementCost, maxReplacementCost, pageable);
-    }
-
-    /**
      * Pages books by a specific field type and value.
      * <p>
      * Supported search types: {@code author}, {@code title}, {@code genre}, {@code replacementCost}.

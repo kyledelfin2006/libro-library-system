@@ -375,12 +375,10 @@ Authentication routes:
 |---|---|---|---|
 | GET | `/stats` | Count, total replacement cost, highest replacement-cost copy | `ApiResponse<LibraryStatisticsDTO>` |
 | GET | `/search?type=...&value=...` | Search by author, title, genre, or exact replacement cost | `ApiResponse<Page<BookResponseDTO>>` |
-| GET | `/budget?maxReplacementCost=...` | Books at or below a maximum replacement cost | `ApiResponse<Page<BookResponseDTO>>` |
 | GET | `/all?page=...&size=...&sort=...` | Paginated collection | `ApiResponse<Page<BookResponseDTO>>` |
 | GET | `/query?title=...&author=...&genre=...&minReplacementCost=...&maxReplacementCost=...&copyStatus=...&available=...` | Paginated book query with optional combined filters and sorting; responses include advisory availability | `ApiResponse<Page<BookResponseDTO>>` |
 | GET | `/sorted?category=...` | Ascending sort by an allowed field (`category` decides the order) | `ApiResponse<Page<BookResponseDTO>>` |
 | GET | `/genre` | Count grouped by genre | `ApiResponse<Map<String, Long>>` |
-| GET | `/replacement-cost?minReplacementCost=...&maxReplacementCost=...` | Inclusive replacement cost range | `ApiResponse<Page<BookResponseDTO>>` |
 | GET | `/{id}` | Retrieve one book | `ApiResponse<BookResponseDTO>` |
 | POST | `/add` | Create a validated book | `ApiResponse<BookResponseDTO>`, HTTP 201 |
 | PATCH | `/{id}` | Partially update supplied fields | `ApiResponse<BookResponseDTO>` |

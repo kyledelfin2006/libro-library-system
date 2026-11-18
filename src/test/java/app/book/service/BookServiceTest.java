@@ -495,46 +495,23 @@ class BookServiceTest {
                 .thenReturn(result);
     }
 
-    /** Verifies the budget read is an inclusive upper bound and stays paginated. */
+    /** Verifies an upper-bound-only filter and a two-sided range both reach the shared query with inclusive bounds. */
     @Test
-    void getBooksAtOrBelowReplacementCost_shouldQueryUpperBoundOnly() {
+    void queryBooks_withReplacementCostBounds_shouldForwardBoundsInclusively() {
         Page<Book> expected = new PageImpl<>(List.of(sampleBook));
         stubQuery("", "", "", null, new BigDecimal("30.0"), expected);
+        stubQuery("", "", "", BigDecimal.TEN, new BigDecimal("30"), expected);
 
-        assertMappedSample(bookService.getBooksAtOrBelowReplacementCost(new BigDecimal("30.0"), FIRST_PAGE));
-    }
-
-    /** Verifies a missing maximum is rejected before any query. */
-    @Test
-    void getBooksAtOrBelowReplacementCost_whenMaximumMissing_shouldReject() {
-        assertThrows(InvalidRequestException.class,
-                () -> bookService.getBooksAtOrBelowReplacementCost(null, FIRST_PAGE));
-        verifyNoInteractions(repository);
+        assertMappedSample(bookService.queryBooks(null, null, null, null, new BigDecimal("30.0"), FIRST_PAGE));
+        assertMappedSample(bookService.queryBooks(null, null, null, BigDecimal.TEN, new BigDecimal("30"), FIRST_PAGE));
     }
 
     /** Verifies reversed replacementCost ranges are rejected before query execution. */
     @Test
-    void getBooksInReplacementCostRange_whenMinimumExceedsMaximum_shouldReject() {
-        assertThrows(InvalidRequestException.class, () -> bookService.getBooksInReplacementCostRange(
-                new BigDecimal("30.0"), new BigDecimal("10.0"), FIRST_PAGE));
+    void queryBooks_whenMinimumExceedsMaximum_shouldRejectBeforeQuerying() {
+        assertThrows(InvalidRequestException.class, () -> bookService.queryBooks(
+                null, null, null, new BigDecimal("30.0"), new BigDecimal("10.0"), FIRST_PAGE));
         verifyNoInteractions(repository);
-    }
-
-    /** Verifies incomplete replacementCost ranges fail with a client-facing validation error. */
-    @Test
-    void getBooksInReplacementCostRange_whenBoundaryIsMissing_shouldReject() {
-        assertThrows(InvalidRequestException.class,
-                () -> bookService.getBooksInReplacementCostRange(null, BigDecimal.TEN, FIRST_PAGE));
-        verifyNoInteractions(repository);
-    }
-
-    /** Verifies a valid range is forwarded with both inclusive bounds. */
-    @Test
-    void getBooksInReplacementCostRange_shouldQueryBothBounds() {
-        Page<Book> expected = new PageImpl<>(List.of(sampleBook));
-        stubQuery("", "", "", BigDecimal.TEN, new BigDecimal("30"), expected);
-
-        assertMappedSample(bookService.getBooksInReplacementCostRange(BigDecimal.TEN, new BigDecimal("30"), FIRST_PAGE));
     }
 
     /** Verifies each text search type maps to its own filter, with type matching case- and whitespace-insensitive. */

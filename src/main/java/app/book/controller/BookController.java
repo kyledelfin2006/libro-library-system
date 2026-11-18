@@ -68,19 +68,6 @@ public class BookController {
         return ResponseEntity.ok(ApiResponse.ok(service.searchBooks(type, value, pageable)));
     }
 
-    /** Filters copies using an inclusive maximum recorded replacement amount. */
-    @GetMapping("/budget")
-    @Operation(summary = "Find books by maximum replacement cost",
-            description = "Returns all copies whose recorded replacement cost is at or below maxReplacementCost, inclusively. Results are paginated: page numbering starts at zero, default size 12, maximum 100.")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Affordable book page", useReturnTypeSchema = true)
-    @ErrorApiResponse(responseCode = "400", description = "maxReplacementCost is not a valid decimal")
-    public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> budgetBooks(
-            @Parameter(description = "Inclusive maximum replacement cost.", example = "25.00")
-            @RequestParam BigDecimal maxReplacementCost,
-            @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.ok(service.getBooksAtOrBelowReplacementCost(maxReplacementCost, pageable)));
-    }
-
     /** Creates one physical copy after request DTO validation; the service returns the public response shape. */
     @PostMapping("/add")
     @Operation(summary = "Add a book",
@@ -174,21 +161,6 @@ public class BookController {
             description = "Returns a map from each genre name to the number of book records in that genre.")
     public ResponseEntity<ApiResponse<Map<String, Long>>> getGenre() {
         return ResponseEntity.ok(ApiResponse.ok(service.getGenreDistribution()));
-    }
-
-    /** Returns copies whose recorded replacement amounts fall within the inclusive range. */
-    @GetMapping("/replacement-cost")
-    @Operation(summary = "Filter books by replacement-cost range",
-            description = "Returns copies with replacement costs between minReplacementCost and maxReplacementCost, inclusive. minReplacementCost must not exceed maxReplacementCost. Results are paginated: page numbering starts at zero, default size 12, maximum 100.")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Books in replacement-cost range", useReturnTypeSchema = true)
-    @ErrorApiResponse(responseCode = "400", description = "Invalid decimal value or minimum replacement cost exceeds maximum")
-    public ResponseEntity<ApiResponse<Page<BookResponseDTO>>> getReplacementCostRangedBooks(
-            @Parameter(description = "Inclusive minimum replacement cost.", example = "10.00")
-            @RequestParam BigDecimal minReplacementCost,
-            @Parameter(description = "Inclusive maximum replacement cost.", example = "25.00")
-            @RequestParam BigDecimal maxReplacementCost,
-            @ParameterObject @PageableDefault(size = 12, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.ok(service.getBooksInReplacementCostRange(minReplacementCost, maxReplacementCost, pageable)));
     }
 
     /** Applies only supplied catalog fields; null and blank description values preserve the current description. */

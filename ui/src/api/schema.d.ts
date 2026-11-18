@@ -79,26 +79,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/app/books/budget": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Find books by maximum replacement cost
-         * @description Returns all copies whose recorded replacement cost is at or below maxReplacementCost, inclusively. Results are paginated: page numbering starts at zero, default size 12, maximum 100.
-         */
-        get: operations["budgetBooks"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/app/books/genre": {
         parameters: {
             query?: never;
@@ -131,26 +111,6 @@ export interface paths {
          * @description Optional title, author, genre, copyStatus, and advisory available filters combine with AND. Text filters use case-insensitive substrings; replacement-cost bounds are inclusive. With no filters, returns all books. Pages start at zero; default page 0, size 12, id ascending; maximum size 100. Sort by id, title, author, genre, or replacementCost with sort=property,direction. Invalid ranges or sort fields return 400.
          */
         get: operations["queryBooks"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/app/books/replacement-cost": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Filter books by replacement-cost range
-         * @description Returns copies with replacement costs between minReplacementCost and maxReplacementCost, inclusive. minReplacementCost must not exceed maxReplacementCost. Results are paginated: page numbering starts at zero, default size 12, maximum 100.
-         */
-        get: operations["getReplacementCostRangedBooks"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1279,53 +1239,6 @@ export interface operations {
             };
         };
     };
-    budgetBooks: {
-        parameters: {
-            query: {
-                /** @description Inclusive maximum replacement cost. */
-                maxReplacementCost: number;
-                /** @description Zero-based page index (0..N) */
-                page?: number;
-                /** @description The size of the page to be returned */
-                size?: number;
-                /** @description Sorting criteria in the format: property,(asc|desc). Default sort order is ascending. Multiple sort criteria are supported. */
-                sort?: string[];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Affordable book page */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponsePageBookResponseDTO"];
-                };
-            };
-            /** @description maxReplacementCost is not a valid decimal */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Bearer token is missing or invalid */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
     getGenre: {
         parameters: {
             query?: never;
@@ -1392,55 +1305,6 @@ export interface operations {
                 };
             };
             /** @description Invalid decimal, replacement-cost range, pagination, or sort field */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Bearer token is missing or invalid */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    getReplacementCostRangedBooks: {
-        parameters: {
-            query: {
-                /** @description Inclusive minimum replacement cost. */
-                minReplacementCost: number;
-                /** @description Inclusive maximum replacement cost. */
-                maxReplacementCost: number;
-                /** @description Zero-based page index (0..N) */
-                page?: number;
-                /** @description The size of the page to be returned */
-                size?: number;
-                /** @description Sorting criteria in the format: property,(asc|desc). Default sort order is ascending. Multiple sort criteria are supported. */
-                sort?: string[];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Books in replacement-cost range */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponsePageBookResponseDTO"];
-                };
-            };
-            /** @description Invalid decimal value or minimum replacement cost exceeds maximum */
             400: {
                 headers: {
                     [name: string]: unknown;

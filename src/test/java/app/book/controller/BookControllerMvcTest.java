@@ -286,21 +286,6 @@ class BookControllerMvcTest {
         verify(service).searchBooks(eq("author"), eq("orwell"), any(Pageable.class));
     }
 
-    @Test
-    void replacementCostFilter_bindsDecimalQueryParameters() throws Exception {
-        when(service.getBooksInReplacementCostRange(eq(new BigDecimal("10.00")), eq(new BigDecimal("25.00")),
-                any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
-
-        mockMvc.perform(get("/app/books/replacement-cost")
-                        .queryParam("minReplacementCost", "10.00")
-                        .queryParam("maxReplacementCost", "25.00"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content").isEmpty());
-
-        verify(service).getBooksInReplacementCostRange(eq(new BigDecimal("10.00")), eq(new BigDecimal("25.00")),
-                any(Pageable.class));
-    }
-
     /** Regression: only InvalidRequestException is a 400; a library's bare IllegalArgumentException is a hidden 500. */
     @Test
     void unexpectedIllegalArgumentException_returnsGenericServerErrorWithoutItsMessage() throws Exception {
@@ -325,8 +310,8 @@ class BookControllerMvcTest {
     }
 
     @Test
-    void replacementCostFilter_withNonNumericBoundary_returnsGlobalTypeMismatchResponse() throws Exception {
-        mockMvc.perform(get("/app/books/replacement-cost")
+    void queryBooks_withNonNumericBoundary_returnsGlobalTypeMismatchResponse() throws Exception {
+        mockMvc.perform(get("/app/books/query")
                         .queryParam("minReplacementCost", "cheap")
                         .queryParam("maxReplacementCost", "25"))
                 .andExpect(status().isBadRequest())
@@ -334,7 +319,7 @@ class BookControllerMvcTest {
                 .andExpect(jsonPath("$.details", containsString("minReplacementCost")))
                 .andExpect(jsonPath("$.statusCode").value(400));
 
-        verify(service, never()).getBooksInReplacementCostRange(any(), any(), any());
+        verify(service, never()).queryBooks(any(), any(), any(), any(), any(), any());
     }
 
     @Test
