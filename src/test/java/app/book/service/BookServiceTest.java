@@ -669,22 +669,6 @@ class BookServiceTest {
         assertNull(result.highestReplacementCostBook());
     }
 
-    /** Verifies that a populated AVG aggregate is returned without numerical distortion. */
-    @Test
-    void getAverageReplacementCost_whenBooksExist_shouldReturnAverage() {
-        when(repository.getAverageReplacementCost()).thenReturn(Optional.of(new BigDecimal("25.50")));
-        BigDecimal avg = bookService.getAverageReplacementCost();
-        assertEquals(0, new BigDecimal("25.50").compareTo(avg));
-    }
-
-    /** Verifies that an empty AVG result is represented as {@link BigDecimal#ZERO}. */
-    @Test
-    void getAverageReplacementCost_whenNoBooks_shouldReturnZero() {
-        when(repository.getAverageReplacementCost()).thenReturn(Optional.empty());
-        BigDecimal avg = bookService.getAverageReplacementCost();
-        assertEquals(BigDecimal.ZERO, avg);
-    }
-
     /** Asserts a page holds exactly the sample copy, mapped to its response DTO inside the service. */
     private static void assertMappedSample(Page<BookResponseDTO> page) {
         assertEquals(1, page.getContent().size());

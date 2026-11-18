@@ -219,46 +219,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/app/books/stats/average-replacement-cost": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get average replacement cost
-         * @description Returns the average recorded replacement cost in the ApiResponse data field, or 0 when the collection is empty.
-         */
-        get: operations["getAverageReplacementCost"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/app/books/stats/count": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get book count
-         * @description Returns the collection count in the ApiResponse data field.
-         */
-        get: operations["getBooksCount"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/app/books/{id}": {
         parameters: {
             query?: never;
@@ -642,20 +602,6 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @description Success envelope returned by every successful API operation. Errors use ErrorResponse instead. */
-        ApiResponseBigDecimal: {
-            /** @description Operation result. The schema is specialized to each endpoint's response type. */
-            data?: number;
-            /** @description Human-readable operation result. */
-            message?: string;
-            /** @description Whether the operation completed successfully. */
-            success?: boolean;
-            /**
-             * Format: int64
-             * @description Response creation time as Unix epoch milliseconds.
-             */
-            timestamp?: number;
-        };
-        /** @description Success envelope returned by every successful API operation. Errors use ErrorResponse instead. */
         ApiResponseBookResponseDTO: {
             /** @description Operation result. The schema is specialized to each endpoint's response type. */
             data?: components["schemas"]["BookResponseDTO"];
@@ -701,23 +647,6 @@ export interface components {
         ApiResponseLoanResponseDTO: {
             /** @description Operation result. The schema is specialized to each endpoint's response type. */
             data?: components["schemas"]["LoanResponseDTO"];
-            /** @description Human-readable operation result. */
-            message?: string;
-            /** @description Whether the operation completed successfully. */
-            success?: boolean;
-            /**
-             * Format: int64
-             * @description Response creation time as Unix epoch milliseconds.
-             */
-            timestamp?: number;
-        };
-        /** @description Success envelope returned by every successful API operation. Errors use ErrorResponse instead. */
-        ApiResponseLong: {
-            /**
-             * Format: int64
-             * @description Operation result. The schema is specialized to each endpoint's response type.
-             */
-            data?: number;
             /** @description Human-readable operation result. */
             message?: string;
             /** @description Whether the operation completed successfully. */
@@ -1643,64 +1572,6 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseLibraryStatisticsDTO"];
-                };
-            };
-            /** @description Bearer token is missing or invalid */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    getAverageReplacementCost: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseBigDecimal"];
-                };
-            };
-            /** @description Bearer token is missing or invalid */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    getBooksCount: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseLong"];
                 };
             };
             /** @description Bearer token is missing or invalid */

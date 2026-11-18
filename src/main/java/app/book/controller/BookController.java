@@ -191,22 +191,6 @@ public class BookController {
         return ResponseEntity.ok(ApiResponse.ok(service.getBooksInReplacementCostRange(minReplacementCost, maxReplacementCost, pageable)));
     }
 
-    /** Returns the average replacement amount, using zero for an empty collection. */
-    @GetMapping("/stats/average-replacement-cost")
-    @Operation(summary = "Get average replacement cost",
-            description = "Returns the average recorded replacement cost in the ApiResponse data field, or 0 when the collection is empty.")
-    public ResponseEntity<ApiResponse<BigDecimal>> getAverageReplacementCost() {
-        return ResponseEntity.ok(new ApiResponse<>(true,
-                "Average Replacement Cost of Collection", service.getAverageReplacementCost()));
-    }
-
-    @GetMapping("/stats/count")
-    @Operation(summary = "Get book count",
-            description = "Returns the collection count in the ApiResponse data field.")
-    public ResponseEntity<ApiResponse<Long>> getBooksCount() {
-        return ResponseEntity.ok(new ApiResponse<>(true, "Book Collection Count", service.getBookCount()));
-    }
-
     /** Applies only supplied catalog fields; null and blank description values preserve the current description. */
     @PatchMapping("/{id}")
     @Operation(summary = "Partially update a book",

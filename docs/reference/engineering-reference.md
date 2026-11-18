@@ -374,8 +374,6 @@ Authentication routes:
 | Method | Path | Purpose | Response shape |
 |---|---|---|---|
 | GET | `/stats` | Count, total replacement cost, highest replacement-cost copy | `ApiResponse<LibraryStatisticsDTO>` |
-| GET | `/stats/average-replacement-cost` | Average collection replacement cost | `ApiResponse<BigDecimal>` |
-| GET | `/stats/count` | Number of books | `ApiResponse<Long>` |
 | GET | `/search?type=...&value=...` | Search by author, title, genre, or exact replacement cost | `ApiResponse<Page<BookResponseDTO>>` |
 | GET | `/budget?maxReplacementCost=...` | Books at or below a maximum replacement cost | `ApiResponse<Page<BookResponseDTO>>` |
 | GET | `/all?page=...&size=...&sort=...` | Paginated collection | `ApiResponse<Page<BookResponseDTO>>` |

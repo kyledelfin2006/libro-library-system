@@ -527,24 +527,4 @@ public class BookService {
         );
     }
 
-    /**
-     * Calculates the average replacement cost of all copies in the library.
-     *
-     * @return the average replacement cost as a {@link BigDecimal}, or {@link BigDecimal#ZERO}
-     *         if no books exist
-     */
-    public BigDecimal getAverageReplacementCost() {
-        Optional<BigDecimal> averageReplacementCost = repository.getAverageReplacementCost();
-        return averageReplacementCost.orElse(BigDecimal.ZERO);
-    }
-
-    /**
-     * Counts the physical copies in the collection.
-     *
-     * @return the number of copies; zero when the library is empty
-     */
-    public Long getBookCount() {
-        return repository.count();
-    }
-
 }

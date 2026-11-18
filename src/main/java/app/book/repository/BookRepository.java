@@ -162,16 +162,4 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     @Query("DELETE FROM Book b WHERE b.id = :id")
     int deleteBookById(@Param("id") Long id);
 
-    /**
-     * Calculates the average replacement cost of all books in the library.
-     *
-     * @return an {@code Optional} containing the average replacement cost, or
-     *         {@code Optional.empty()} if no books exist
-     */
-    @Query("SELECT AVG(b.replacementCost) FROM Book b")
-    Optional<BigDecimal> getAverageReplacementCost();
-
-
-
-
 }
