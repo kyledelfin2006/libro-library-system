@@ -1,4 +1,6 @@
 package app.user.service;
+import app.audit.entity.AuditAction;
+import app.audit.entity.AuditEntityType;
 import app.audit.service.AuditService;
 import app.global.exception.InvalidRequestException;
 
@@ -164,7 +166,7 @@ class UserServiceTest {
                 UserRole.STUDENT, UserRole.FACULTY, UserRole.ADMINISTRATOR);
         when(repository.findByUserRoleIn(visibleRoles, pageable)).thenReturn(Page.empty());
 
-        userService.getAllUsers(pageable, "2025-9999", authorities("LIBRARIAN"));
+        userService.getAllUsers(pageable, "2025-9999", authorities("LIBRARIAN"), null, null);
 
         verify(repository).findByUserRoleIn(visibleRoles, pageable);
     }
@@ -272,7 +274,7 @@ class UserServiceTest {
         assertEquals("new-hash", existingUser.getPasswordHash());
         assertTrue(existingUser.isMustChangePassword());
         assertEquals(before + 1, meterRegistry.counter("libro.auth.password_resets").count());
-        verify(audit).record("PASSWORD_RESET", "USER", "2025-4321", UserRole.STUDENT);
+        verify(audit).record(AuditAction.PASSWORD_RESET, AuditEntityType.USER, "2025-4321", UserRole.STUDENT);
         verify(repository, never()).save(any(User.class));
     }
 
@@ -310,7 +312,7 @@ class UserServiceTest {
         assertNull(result.getUserCourse());
         assertNull(result.getMajor());
         assertTrue(result.isMustChangePassword());
-        verify(audit).record(org.mockito.ArgumentMatchers.eq("ACCOUNT_CREATED"), org.mockito.ArgumentMatchers.eq("USER"),
+        verify(audit).record(org.mockito.ArgumentMatchers.eq(AuditAction.ACCOUNT_CREATED), org.mockito.ArgumentMatchers.eq(AuditEntityType.USER),
                 org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(UserRole.ADMINISTRATOR));
     }
 
@@ -593,7 +595,7 @@ class UserServiceTest {
 
     /** Exercises the student directory as an authorized administrator. */
     private Page<UserResponseDTO> getAllUsers(Pageable pageable) {
-        return userService.getAllUsers(pageable, "2025-4321", authorities("ADMINISTRATOR"));
+        return userService.getAllUsers(pageable, "2025-4321", authorities("ADMINISTRATOR"), null, null);
     }
 
     /** Builds one Spring Security role authority for a service call. */

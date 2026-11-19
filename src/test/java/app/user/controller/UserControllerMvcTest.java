@@ -40,6 +40,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -166,7 +167,7 @@ class UserControllerMvcTest {
 
     @Test
     void listUsers_returnsPageAndUsesDocumentedDefaultPagination() throws Exception {
-        when(service.getAllUsers(any(Pageable.class), anyString(), anyCollection())).thenReturn(
+        when(service.getAllUsers(any(Pageable.class), anyString(), anyCollection(), any(), any())).thenReturn(
                 new PageImpl<>(List.of(user()), PageRequest.of(0, 12), 1));
 
         mockMvc.perform(get("/app/users").principal(CALLER))
@@ -177,7 +178,7 @@ class UserControllerMvcTest {
                 .andExpect(jsonPath("$.data.totalElements").value(1));
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(service).getAllUsers(pageable.capture(), eq(USER_ID), anyCollection());
+        verify(service).getAllUsers(pageable.capture(), eq(USER_ID), anyCollection(), isNull(), isNull());
         assertEquals(0, pageable.getValue().getPageNumber());
         assertEquals(12, pageable.getValue().getPageSize());
         assertEquals("universityId", pageable.getValue().getSort().iterator().next().getProperty());
@@ -185,7 +186,7 @@ class UserControllerMvcTest {
 
     @Test
     void listUsers_bindsPageSizeAndSort() throws Exception {
-        when(service.getAllUsers(any(Pageable.class), anyString(), anyCollection())).thenReturn(
+        when(service.getAllUsers(any(Pageable.class), anyString(), anyCollection(), any(), any())).thenReturn(
                 new PageImpl<>(List.of(user()), PageRequest.of(1, 2), 3));
 
         mockMvc.perform(get("/app/users")
@@ -199,7 +200,7 @@ class UserControllerMvcTest {
                 .andExpect(jsonPath("$.data.totalElements").value(3));
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(service).getAllUsers(pageable.capture(), eq(USER_ID), anyCollection());
+        verify(service).getAllUsers(pageable.capture(), eq(USER_ID), anyCollection(), isNull(), isNull());
         assertEquals("lastName", pageable.getValue().getSort().iterator().next().getProperty());
         assertEquals(org.springframework.data.domain.Sort.Direction.DESC,
                 pageable.getValue().getSort().iterator().next().getDirection());

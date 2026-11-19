@@ -5,6 +5,8 @@ import app.book.exception.BookValidationException;
 import app.book.dto.BookResponseDTO;
 import app.book.mapper.BookMapper;
 import app.global.exception.InvalidRequestException;
+import app.audit.entity.AuditAction;
+import app.audit.entity.AuditEntityType;
 import app.audit.service.AuditService;
 import app.book.entity.Book;
 import app.book.dto.BookRequestDTO;
@@ -130,7 +132,7 @@ class BookServiceTest {
         assertEquals(GENRE, result.getGenre());
         assertEquals(0, REPLACEMENT_COST.compareTo(result.getReplacementCost()));
         verify(repository, times(1)).save(any(Book.class));
-        verify(audit).record("BOOK_CREATED", "BOOK", BOOK_ID.toString(), null);
+        verify(audit).record(AuditAction.BOOK_CREATED, AuditEntityType.BOOK, BOOK_ID.toString(), null);
     }
 
     /** Verifies a rejected create leaves no audit event behind. */
@@ -296,6 +298,7 @@ class BookServiceTest {
     @Test
     void patchBook_trimsDescription() {
         Book existing = new Book("Old Title", "Old Author", "Old Genre", "Old summary", new BigDecimal("10.0"));
+        existing.setId(BOOK_ID);
         when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(existing));
         BookPatchRequestDTO updates = new BookPatchRequestDTO(null, null, null, "  New summary  ", null);
 
@@ -401,6 +404,7 @@ class BookServiceTest {
     @Test
     void replaceBook_clearsOptionalDescription() {
         Book existing = new Book("Title", "Author", "Genre", "Old summary", REPLACEMENT_COST);
+        existing.setId(BOOK_ID);
         when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(existing));
         BookRequestDTO replacement = new BookRequestDTO("Title", "Author", "Genre", null, REPLACEMENT_COST);
 

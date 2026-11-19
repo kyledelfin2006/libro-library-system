@@ -1,6 +1,8 @@
 package app.book.service;
 
 import app.global.exception.InvalidRequestException;
+import app.audit.entity.AuditAction;
+import app.audit.entity.AuditEntityType;
 import app.audit.service.AuditService;
 import app.book.dto.BookResponseDTO;
 import app.book.dto.LibraryStatisticsDTO;
@@ -28,7 +30,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -92,8 +93,7 @@ public class BookService {
     /** Resolves active loans once for a page, avoiding one loan lookup per book. */
     private Page<BookResponseDTO> mapPage(Page<Book> books) {
         List<Long> ids = books.getContent().stream().map(Book::getId).toList();
-        Set<Long> activeIds = ids.isEmpty() ? Set.of() :
-                Optional.ofNullable(repository.findActiveBookIds(ids, LoanStatus.ACTIVE)).orElse(Set.of());
+        Set<Long> activeIds = ids.isEmpty() ? Set.of() : repository.findActiveBookIds(ids, LoanStatus.ACTIVE);
         // A lost copy cannot be borrowed even when its loan is terminal.
         return books.map(book -> mapper.toResponseDTO(book,
                 book.getCopyStatus() == BookCopyStatus.IN_COLLECTION && !activeIds.contains(book.getId())));
@@ -101,11 +101,9 @@ public class BookService {
 
     /** Maps a single copy using its current persisted active-loan state. */
     private BookResponseDTO mapBook(Book book) {
-        // Newly constructed copies in isolated service tests have no persistence-assigned ID yet.
-        if (book.getId() == null) return mapper.toResponseDTO(book);
+        // A lost copy cannot be borrowed, and a copy with an active loan is currently out.
         boolean available = book.getCopyStatus() == BookCopyStatus.IN_COLLECTION
-                && !Optional.ofNullable(repository.findActiveBookIds(List.of(book.getId()), LoanStatus.ACTIVE))
-                .orElse(Set.of()).contains(book.getId());
+                && !repository.findActiveBookIds(List.of(book.getId()), LoanStatus.ACTIVE).contains(book.getId());
         return mapper.toResponseDTO(book, available);
     }
 
@@ -172,7 +170,7 @@ public class BookService {
         // Validate using validator method
         validateEntity(newBook);
         repository.save(newBook);
-        audit.record("BOOK_CREATED", "BOOK", newBook.getId().toString(), null);
+        audit.record(AuditAction.BOOK_CREATED, AuditEntityType.BOOK, newBook.getId().toString(), null);
 
         log.info("Successfully added book '{}' to catalogue with ID: {}", newBook.getTitle(), newBook.getId());
         return mapBook(newBook);
@@ -237,7 +235,7 @@ public class BookService {
             log.warn("Failed delete operation: Book with ID {} not found", id);
             throw new BookNotFoundException("Couldn't find book of ID: " + id);
         }
-        audit.record("BOOK_DELETED", "BOOK", id.toString(), null);
+        audit.record(AuditAction.BOOK_DELETED, AuditEntityType.BOOK, id.toString(), null);
     }
 
     /**
@@ -291,7 +289,7 @@ public class BookService {
         }
 
         validateEntity(existingBook);
-        audit.record("BOOK_CHANGED", "BOOK", id.toString(), null);
+        audit.record(AuditAction.BOOK_CHANGED, AuditEntityType.BOOK, id.toString(), null);
         // No repository.save(): the entity is managed, so Hibernate writes the changes when the transaction commits.
         return mapBook(existingBook);
     }
@@ -342,7 +340,7 @@ public class BookService {
 
         // 4. Validate entity using existing validator method
         validateEntity(existingBook);
-        audit.record("BOOK_CHANGED", "BOOK", id.toString(), null);
+        audit.record(AuditAction.BOOK_CHANGED, AuditEntityType.BOOK, id.toString(), null);
 
         // 5. Dirty checking persists the managed entity at commit; return its API view.
         return mapBook(existingBook);

@@ -1,6 +1,8 @@
 package app.audit.service;
 
 import app.audit.dto.AuditEventDTO;
+import app.audit.entity.AuditAction;
+import app.audit.entity.AuditEntityType;
 import app.audit.entity.AuditEvent;
 import app.audit.repository.AuditRepository;
 import app.global.exception.InvalidRequestException;
@@ -29,11 +31,12 @@ public class AuditService {
 
     /** Records an event inside the caller's write transaction, so rollback removes it. */
     @Transactional(propagation = Propagation.MANDATORY)
-    public void record(String action, String entityType, String entityId, UserRole targetRole) {
+    public void record(AuditAction action, AuditEntityType entityType, String entityId, UserRole targetRole) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         boolean anonymous = auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getName());
+        // An anonymous caller is the new account itself during public signup, and the system otherwise.
         String actor = anonymous
-                ? ("ACCOUNT_CREATED".equals(action) && targetRole == UserRole.STUDENT ? entityId : "system")
+                ? (action.actorIsSubject(targetRole) ? entityId : "system")
                 : auth.getName();
         // Spring Security can add non-role authorities such as FACTOR_BEARER, so take the ROLE_ one explicitly;
         // the first authority is not always the role.
@@ -43,7 +46,7 @@ public class AuditService {
                 .map(a -> a.substring("ROLE_".length())).findFirst().orElse("UNKNOWN");
         // Summary comes only from a fixed action token, never from user-controlled content.
         repository.save(new AuditEvent(LibraryTime.now(), actor, actorRole, targetRole,
-                action, entityType, entityId, action.replace('_', ' ').toLowerCase(java.util.Locale.ROOT)));
+                action.name(), entityType.name(), entityId, action.summary()));
     }
 
     /** Returns only events the persisted staff role may see, with filters applied before paging. */

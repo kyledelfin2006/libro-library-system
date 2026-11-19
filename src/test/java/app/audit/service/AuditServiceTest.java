@@ -1,5 +1,7 @@
 package app.audit.service;
 
+import app.audit.entity.AuditAction;
+import app.audit.entity.AuditEntityType;
 import app.audit.entity.AuditEvent;
 import app.audit.repository.AuditRepository;
 import app.user.entity.User;
@@ -27,7 +29,7 @@ class AuditServiceTest {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 "2025-4321", "unused", List.of(new SimpleGrantedAuthority("ROLE_LIBRARIAN"))));
         try {
-            service.record("PASSWORD_RESET", "USER", "2025-8765", UserRole.STUDENT);
+            service.record(AuditAction.PASSWORD_RESET, AuditEntityType.USER, "2025-8765", UserRole.STUDENT);
             var saved = org.mockito.ArgumentCaptor.forClass(AuditEvent.class);
             verify(repository).save(saved.capture());
             assertEquals("2025-4321", saved.getValue().getActorUniversityId());
@@ -47,13 +49,43 @@ class AuditServiceTest {
                 "2020-0002", "unused", List.of(new SimpleGrantedAuthority("FACTOR_BEARER"),
                 new SimpleGrantedAuthority("ROLE_ADMINISTRATOR"))));
         try {
-            service.record("BOOK_CREATED", "BOOK", "13", null);
+            service.record(AuditAction.BOOK_CREATED, AuditEntityType.BOOK, "13", null);
             var saved = org.mockito.ArgumentCaptor.forClass(AuditEvent.class);
             verify(repository).save(saved.capture());
             assertEquals("ADMINISTRATOR", saved.getValue().getActorRole());
         } finally {
             SecurityContextHolder.clearContext();
         }
+    }
+
+    /** Public signup is anonymous, so the new student account is recorded as its own actor. */
+    @Test
+    void anonymousStudentSignupIsAttributedToTheNewAccount() {
+        AuditRepository repository = mock(AuditRepository.class);
+        AuditService service = new AuditService(repository, mock(UserRepository.class));
+        SecurityContextHolder.clearContext();
+
+        service.record(AuditAction.ACCOUNT_CREATED, AuditEntityType.USER, "2025-0001", UserRole.STUDENT);
+
+        var saved = org.mockito.ArgumentCaptor.forClass(AuditEvent.class);
+        verify(repository).save(saved.capture());
+        assertEquals("2025-0001", saved.getValue().getActorUniversityId());
+        assertEquals("SYSTEM", saved.getValue().getActorRole());
+        assertEquals("USER", saved.getValue().getEntityType());
+    }
+
+    /** Any other anonymous change, including creating a privileged account, is attributed to the system. */
+    @Test
+    void anonymousNonSignupChangeIsAttributedToTheSystem() {
+        AuditRepository repository = mock(AuditRepository.class);
+        AuditService service = new AuditService(repository, mock(UserRepository.class));
+        SecurityContextHolder.clearContext();
+
+        service.record(AuditAction.ACCOUNT_CREATED, AuditEntityType.USER, "2025-0002", UserRole.ADMINISTRATOR);
+
+        var saved = org.mockito.ArgumentCaptor.forClass(AuditEvent.class);
+        verify(repository).save(saved.capture());
+        assertEquals("system", saved.getValue().getActorUniversityId());
     }
 
     @Test

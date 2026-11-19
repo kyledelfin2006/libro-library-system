@@ -1,6 +1,8 @@
 package app.user.service;
 
 import app.global.exception.InvalidRequestException;
+import app.audit.entity.AuditAction;
+import app.audit.entity.AuditEntityType;
 import app.audit.service.AuditService;
 import app.user.dto.UserCreateRequestDTO;
 import app.user.dto.UserPatchRequestDTO;
@@ -174,7 +176,7 @@ public class UserService {
 
         // save user
         User savedUser = userRepository.save(user);
-        audit.record("ACCOUNT_CREATED", "USER", savedUser.getUniversityId(), role);
+        audit.record(AuditAction.ACCOUNT_CREATED, AuditEntityType.USER, savedUser.getUniversityId(), role);
         return userMapper.toResponseDTO(savedUser);
     }
 
@@ -246,7 +248,7 @@ public class UserService {
         user.setLastName(lastName);
         user.setMiddleInitial(middleInitial);
         user.setEmail(email);
-        audit.record("PROFILE_CHANGED", "USER", user.getUniversityId(), user.getUserRole());
+        audit.record(AuditAction.PROFILE_CHANGED, AuditEntityType.USER, user.getUniversityId(), user.getUserRole());
         // Return the public DTO and let transaction commit persist dirty changes.
         return userMapper.toResponseDTO(user);
     }
@@ -338,7 +340,7 @@ public class UserService {
         if (newEmail != null) {
             user.setEmail(newEmail);
         }
-        audit.record("PROFILE_CHANGED", "USER", user.getUniversityId(), user.getUserRole());
+        audit.record(AuditAction.PROFILE_CHANGED, AuditEntityType.USER, user.getUniversityId(), user.getUserRole());
 
         // Return a response DTO; dirty checking persists the managed entity.
         return userMapper.toResponseDTO(user);
@@ -407,7 +409,7 @@ public class UserService {
         // Replace only the stored hash; raw password values never reach the entity.
         user.setPasswordHash(encodedPasswordHash);
         user.setMustChangePassword(false);
-        audit.record("PASSWORD_CHANGED", "USER", user.getUniversityId(), user.getUserRole());
+        audit.record(AuditAction.PASSWORD_CHANGED, AuditEntityType.USER, user.getUniversityId(), user.getUserRole());
     }
 
     /** Resets a managed account with a temporary password and records the required follow-up change. */
@@ -430,7 +432,7 @@ public class UserService {
         }
         user.setPasswordHash(passwordEncoder.encode(request.temporaryPassword()));
         user.setMustChangePassword(true);
-        audit.record("PASSWORD_RESET", "USER", user.getUniversityId(), user.getUserRole());
+        audit.record(AuditAction.PASSWORD_RESET, AuditEntityType.USER, user.getUniversityId(), user.getUserRole());
         // Count successful resets without account identifiers or password data in metric labels.
         meterRegistry.counter("libro.auth.password_resets").increment();
     }
@@ -519,23 +521,18 @@ public class UserService {
     /**
      * Returns the role-filtered account directory for an administrator or librarian.
      *
+     * <p>Both filters are optional: a {@code null} role and a blank or {@code null} {@code q} list every
+     * account the caller may see. A requested role outside the caller's scope is rejected.</p>
+     *
      * @param pageable page number, page size, and optional sorting rules
      * @param callerId university ID of the authenticated caller
      * @param authorities roles granted to the authenticated caller
+     * @param role optional role filter
+     * @param q optional case-insensitive literal substring of university ID, name, or email
      * @return the caller's permitted page of public account profiles
-     * @throws AccessDeniedException if the caller is not an administrator or librarian
+     * @throws AccessDeniedException if the caller is not staff or the role is outside the caller's scope
      * @throws InvalidRequestException if pageable is null or contains an unsupported sort field
      */
-    @Transactional(readOnly = true)
-    public Page<UserResponseDTO> getAllUsers(
-            Pageable pageable,
-            String callerId,
-            Collection<? extends GrantedAuthority> authorities
-    ) {
-        return getAllUsers(pageable, callerId, authorities, null, null);
-    }
-
-    /** Lists only scoped accounts, rejecting a requested role outside the caller's scope. */
     @Transactional(readOnly = true)
     public Page<UserResponseDTO> getAllUsers(Pageable pageable, String callerId,
             Collection<? extends GrantedAuthority> authorities, UserRole role, String q) {
@@ -638,7 +635,7 @@ public class UserService {
             throw new app.global.exception.ConflictException(
                     "Account has loan history and must be retained", "RESOURCE_HAS_HISTORY");
         }
-        audit.record("ACCOUNT_DELETED", "USER", normalizedTargetId, user.getUserRole());
+        audit.record(AuditAction.ACCOUNT_DELETED, AuditEntityType.USER, normalizedTargetId, user.getUserRole());
     }
 
     /**
