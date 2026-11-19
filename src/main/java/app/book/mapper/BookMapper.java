@@ -5,25 +5,20 @@ import app.book.dto.BookResponseDTO;
 import app.book.entity.Book;
 import org.springframework.stereotype.Component;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.stream.Collectors;
 
 @Component
 public class BookMapper {
 
 
     /**
-     * Converts a Book entity to a response DTO, including the physical-copy status.
+     * Maps a copy with availability computed from its persisted loan state.
+     *
+     * <p>Availability depends on active loans, which the entity does not hold, so the caller must supply it.</p>
      *
      * @param book the entity to convert (maybe null)
+     * @param available whether the copy can currently be borrowed
      * @return the response DTO, or null if input is null
      */
-    public BookResponseDTO toResponseDTO(Book book) {
-        return toResponseDTO(book, book != null && book.getCopyStatus() == app.book.entity.BookCopyStatus.IN_COLLECTION);
-    }
-
-    /** Maps a copy with availability computed from its persisted loan state. */
     public BookResponseDTO toResponseDTO(Book book, boolean available) {
         if (book == null) {
             return null;
@@ -39,21 +34,6 @@ public class BookMapper {
                 book.getCopyStatus(),
                 available
         );
-    }
-
-    /**
-     * Converts a list of Book entities to a list of BookResponseDTO's.
-     *
-     * @param books the list to convert (could contain null)
-     * @return the list of response DTO's, or null if input is null
-     */
-    public List<BookResponseDTO> toResponseDTOList(List<Book> books){
-        if (books == null || books.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        return books.stream().map(this::toResponseDTO).collect(Collectors.toList());
-
     }
 
     /**

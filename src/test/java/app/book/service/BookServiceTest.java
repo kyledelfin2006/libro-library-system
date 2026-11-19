@@ -298,6 +298,7 @@ class BookServiceTest {
     @Test
     void patchBook_trimsDescription() {
         Book existing = new Book("Old Title", "Old Author", "Old Genre", "Old summary", new BigDecimal("10.0"));
+        existing.setId(BOOK_ID);
         when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(existing));
         BookPatchRequestDTO updates = new BookPatchRequestDTO(null, null, null, "  New summary  ", null);
 
@@ -403,6 +404,7 @@ class BookServiceTest {
     @Test
     void replaceBook_clearsOptionalDescription() {
         Book existing = new Book("Title", "Author", "Genre", "Old summary", REPLACEMENT_COST);
+        existing.setId(BOOK_ID);
         when(repository.findByIdForUpdate(BOOK_ID)).thenReturn(Optional.of(existing));
         BookRequestDTO replacement = new BookRequestDTO("Title", "Author", "Genre", null, REPLACEMENT_COST);
 

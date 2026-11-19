@@ -30,7 +30,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -94,8 +93,7 @@ public class BookService {
     /** Resolves active loans once for a page, avoiding one loan lookup per book. */
     private Page<BookResponseDTO> mapPage(Page<Book> books) {
         List<Long> ids = books.getContent().stream().map(Book::getId).toList();
-        Set<Long> activeIds = ids.isEmpty() ? Set.of() :
-                Optional.ofNullable(repository.findActiveBookIds(ids, LoanStatus.ACTIVE)).orElse(Set.of());
+        Set<Long> activeIds = ids.isEmpty() ? Set.of() : repository.findActiveBookIds(ids, LoanStatus.ACTIVE);
         // A lost copy cannot be borrowed even when its loan is terminal.
         return books.map(book -> mapper.toResponseDTO(book,
                 book.getCopyStatus() == BookCopyStatus.IN_COLLECTION && !activeIds.contains(book.getId())));
@@ -103,11 +101,9 @@ public class BookService {
 
     /** Maps a single copy using its current persisted active-loan state. */
     private BookResponseDTO mapBook(Book book) {
-        // Newly constructed copies in isolated service tests have no persistence-assigned ID yet.
-        if (book.getId() == null) return mapper.toResponseDTO(book);
+        // A lost copy cannot be borrowed, and a copy with an active loan is currently out.
         boolean available = book.getCopyStatus() == BookCopyStatus.IN_COLLECTION
-                && !Optional.ofNullable(repository.findActiveBookIds(List.of(book.getId()), LoanStatus.ACTIVE))
-                .orElse(Set.of()).contains(book.getId());
+                && !repository.findActiveBookIds(List.of(book.getId()), LoanStatus.ACTIVE).contains(book.getId());
         return mapper.toResponseDTO(book, available);
     }
 

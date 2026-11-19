@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -21,7 +20,7 @@ class BookMapperTest {
         book.setId(1L);
         book.prePersist();
 
-        BookResponseDTO response = new BookMapper().toResponseDTO(book);
+        BookResponseDTO response = new BookMapper().toResponseDTO(book, true);
 
         assertEquals(1L, response.getId());
         assertEquals("The Hobbit", response.getTitle());
@@ -50,26 +49,7 @@ class BookMapperTest {
 
     @Test
     void returnsNullWhenBookIsNull() {
-        assertNull(new BookMapper().toResponseDTO(null));
+        assertNull(new BookMapper().toResponseDTO(null, true));
     }
 
-    @Test
-    void mapsBookListToResponseDtoList() {
-        Book first = new Book("The Hobbit", "J.R.R. Tolkien", "Fantasy", new BigDecimal("12.99"));
-        Book second = new Book("1984", "George Orwell", "Dystopian", new BigDecimal("19.99"));
-
-        List<BookResponseDTO> responses = new BookMapper().toResponseDTOList(List.of(first, second));
-
-        assertEquals(2, responses.size());
-        assertEquals("The Hobbit", responses.get(0).getTitle());
-        assertEquals("1984", responses.get(1).getTitle());
-    }
-
-    @Test
-    void returnsEmptyListForNullOrEmptyBookList() {
-        BookMapper mapper = new BookMapper();
-
-        assertTrue(mapper.toResponseDTOList(null).isEmpty());
-        assertTrue(mapper.toResponseDTOList(List.of()).isEmpty());
-    }
 }
