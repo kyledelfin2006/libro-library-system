@@ -67,7 +67,7 @@ public class LoanService {
         if (weeks < 1 || weeks > 52) {
             throw new InvalidRequestException("weeks must be between 1 and 52");
         }
-        boolean librarian = isStaffLibrarian(callerId);
+        boolean librarian = requireStaffRole(callerId) == UserRole.LIBRARIAN;
         LocalDate lastMonday = LocalDate.now(libraryClock).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate firstMonday = lastMonday.minusWeeks(weeks - 1L);
         List<WeeklyLoanActivityProjection> rows = loanRepository.weeklyActivity(firstMonday.atStartOfDay(),
@@ -89,19 +89,32 @@ public class LoanService {
         if (days < 1 || days > 365 || limit < 1 || limit > 10) {
             throw new InvalidRequestException("days must be 1-365 and limit must be 1-10");
         }
-        boolean librarian = isStaffLibrarian(callerId);
+        boolean librarian = requireStaffRole(callerId) == UserRole.LIBRARIAN;
         LocalDateTime end = LocalDateTime.now(libraryClock);
         return loanRepository.topTitles(end.minusDays(days), end, librarian, limit).stream()
                 .map(row -> new TopTitleDTO(row.getTitle(), row.getAuthor(), row.getCheckouts()))
                 .toList();
     }
 
-    /** Verifies stored staff role before permitting aggregate data access. */
-    private boolean isStaffLibrarian(String callerId) {
-        User staff = userRepository.findByUniversityId(callerId)
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
-        visibleLoanRoles(staff.getUserRole());
-        return staff.getUserRole() == UserRole.LIBRARIAN;
+    /**
+     * Requires the caller's stored role to be library staff and returns that role.
+     *
+     * <p>The role is read from the database rather than the token, so a demoted account loses aggregate access
+     * immediately. Callers use the returned role to choose the borrower scope.</p>
+     *
+     * @param callerId university ID of the authenticated caller
+     * @return {@link UserRole#ADMINISTRATOR} or {@link UserRole#LIBRARIAN}
+     * @throws UserNotFoundException if the caller's account no longer exists
+     * @throws AccessDeniedException if the caller is not library staff
+     */
+    private UserRole requireStaffRole(String callerId) {
+        UserRole role = userRepository.findByUniversityId(callerId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"))
+                .getUserRole();
+        if (role != UserRole.ADMINISTRATOR && role != UserRole.LIBRARIAN) {
+            throw new AccessDeniedException("Only library staff may list loans");
+        }
+        return role;
     }
 
     /** Shared borrower-role scope for staff lists and aggregate reports. */

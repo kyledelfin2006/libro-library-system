@@ -73,4 +73,37 @@ class LoanAggregatesTest {
         verify(loans).topTitles(eq(LocalDateTime.parse("2026-07-21T10:30:00")),
                 eq(LocalDateTime.parse("2026-10-19T10:30:00")), eq(true), eq(5));
     }
+
+    /** Patrons and faculty cannot read aggregates, and the loan tables are never queried for them. */
+    @Test
+    void aggregatesRejectNonStaffCallersBeforeQueryingLoans() {
+        LoanRepository loans = mock(LoanRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        for (UserRole role : List.of(UserRole.STUDENT, UserRole.FACULTY)) {
+            User patron = new User();
+            patron.setUserRole(role);
+            when(users.findByUniversityId("2025-1111")).thenReturn(Optional.of(patron));
+            LoanService service = new LoanService(loans, users, mock(BookRepository.class), new LoanMapper(),
+                    Clock.systemUTC(), mock(AuditService.class));
+
+            assertThrows(org.springframework.security.access.AccessDeniedException.class,
+                    () -> service.activity("2025-1111", 4));
+            assertThrows(org.springframework.security.access.AccessDeniedException.class,
+                    () -> service.topTitles("2025-1111", 30, 5));
+        }
+        verifyNoInteractions(loans);
+    }
+
+    /** A deleted account cannot read aggregates even with a still-valid token. */
+    @Test
+    void aggregatesRejectMissingCallerAccount() {
+        LoanRepository loans = mock(LoanRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        when(users.findByUniversityId("2025-2222")).thenReturn(Optional.empty());
+        LoanService service = new LoanService(loans, users, mock(BookRepository.class), new LoanMapper(),
+                Clock.systemUTC(), mock(AuditService.class));
+
+        assertThrows(app.user.exception.UserNotFoundException.class, () -> service.activity("2025-2222", 4));
+        verifyNoInteractions(loans);
+    }
 }
