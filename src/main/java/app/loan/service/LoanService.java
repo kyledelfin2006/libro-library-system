@@ -1,6 +1,8 @@
 package app.loan.service;
 
 import app.global.exception.InvalidRequestException;
+import app.audit.entity.AuditAction;
+import app.audit.entity.AuditEntityType;
 import app.audit.service.AuditService;
 import app.book.entity.Book;
 import app.book.entity.BookCopyStatus;
@@ -245,7 +247,7 @@ public class LoanService {
         LocalDateTime lostAt = LocalDateTime.now(libraryClock);
         loan.markLost(staff, lostAt);
         book.markLost();
-        audit.record("LOAN_MARKED_LOST", "LOAN", loanId.toString(), null);
+        audit.record(AuditAction.LOAN_MARKED_LOST, AuditEntityType.LOAN, loanId.toString(), null);
 
         // The lost loan remains in history and is no longer overdue or active.
         return loanMapper.toResponse(loan, lostAt);

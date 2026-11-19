@@ -5,6 +5,8 @@ import app.book.exception.BookValidationException;
 import app.book.dto.BookResponseDTO;
 import app.book.mapper.BookMapper;
 import app.global.exception.InvalidRequestException;
+import app.audit.entity.AuditAction;
+import app.audit.entity.AuditEntityType;
 import app.audit.service.AuditService;
 import app.book.entity.Book;
 import app.book.dto.BookRequestDTO;
@@ -130,7 +132,7 @@ class BookServiceTest {
         assertEquals(GENRE, result.getGenre());
         assertEquals(0, REPLACEMENT_COST.compareTo(result.getReplacementCost()));
         verify(repository, times(1)).save(any(Book.class));
-        verify(audit).record("BOOK_CREATED", "BOOK", BOOK_ID.toString(), null);
+        verify(audit).record(AuditAction.BOOK_CREATED, AuditEntityType.BOOK, BOOK_ID.toString(), null);
     }
 
     /** Verifies a rejected create leaves no audit event behind. */

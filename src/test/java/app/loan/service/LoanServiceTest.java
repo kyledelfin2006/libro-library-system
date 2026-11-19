@@ -1,5 +1,7 @@
 package app.loan.service;
 
+import app.audit.entity.AuditAction;
+import app.audit.entity.AuditEntityType;
 import app.audit.service.AuditService;
 import app.book.entity.Book;
 import app.book.entity.BookCopyStatus;
@@ -244,7 +246,7 @@ class LoanServiceTest {
         assertEquals(NOW, response.lostAt());
         assertEquals(STAFF_ID, response.lostByUniversityId());
         assertEquals(BookCopyStatus.LOST, copy.getCopyStatus());
-        verify(audit).record("LOAN_MARKED_LOST", "LOAN", String.valueOf(LOAN_ID), null);
+        verify(audit).record(AuditAction.LOAN_MARKED_LOST, AuditEntityType.LOAN, String.valueOf(LOAN_ID), null);
     }
 
     /** Verifies patrons cannot use the staff-only lost-resolution service operation. */

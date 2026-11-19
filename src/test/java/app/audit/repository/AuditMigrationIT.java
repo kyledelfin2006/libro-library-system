@@ -2,6 +2,8 @@ package app.audit.repository;
 
 import app.LibraryApplication;
 import app.audit.entity.AuditEvent;
+import app.audit.entity.AuditAction;
+import app.audit.entity.AuditEntityType;
 import app.audit.service.AuditService;
 import app.user.entity.enums.UserRole;
 import app.support.PostgresTestConfig;
@@ -38,7 +40,7 @@ class AuditMigrationIT {
     void rolledBackChangeLeavesNoAuditEvent() {
         long before = events.count();
         new TransactionTemplate(transactions).execute(status -> {
-            audit.record("BOOK_CHANGED", "BOOK", "999999", null);
+            audit.record(AuditAction.BOOK_CHANGED, AuditEntityType.BOOK, "999999", null);
             status.setRollbackOnly();
             return null;
         });
