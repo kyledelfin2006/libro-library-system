@@ -135,7 +135,7 @@ services:
   # from another machine through an SSH tunnel. Grafana has no admin user and allows anonymous read-only viewing
   # (GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION), so there is no password to manage and nothing to change in the UI.
   prometheus:
-    image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+    image: prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06
     container_name: library-prometheus
     profiles: ["metrics"]
     depends_on:
