@@ -519,23 +519,18 @@ public class UserService {
     /**
      * Returns the role-filtered account directory for an administrator or librarian.
      *
+     * <p>Both filters are optional: a {@code null} role and a blank or {@code null} {@code q} list every
+     * account the caller may see. A requested role outside the caller's scope is rejected.</p>
+     *
      * @param pageable page number, page size, and optional sorting rules
      * @param callerId university ID of the authenticated caller
      * @param authorities roles granted to the authenticated caller
+     * @param role optional role filter
+     * @param q optional case-insensitive literal substring of university ID, name, or email
      * @return the caller's permitted page of public account profiles
-     * @throws AccessDeniedException if the caller is not an administrator or librarian
+     * @throws AccessDeniedException if the caller is not staff or the role is outside the caller's scope
      * @throws InvalidRequestException if pageable is null or contains an unsupported sort field
      */
-    @Transactional(readOnly = true)
-    public Page<UserResponseDTO> getAllUsers(
-            Pageable pageable,
-            String callerId,
-            Collection<? extends GrantedAuthority> authorities
-    ) {
-        return getAllUsers(pageable, callerId, authorities, null, null);
-    }
-
-    /** Lists only scoped accounts, rejecting a requested role outside the caller's scope. */
     @Transactional(readOnly = true)
     public Page<UserResponseDTO> getAllUsers(Pageable pageable, String callerId,
             Collection<? extends GrantedAuthority> authorities, UserRole role, String q) {

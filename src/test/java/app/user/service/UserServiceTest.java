@@ -164,7 +164,7 @@ class UserServiceTest {
                 UserRole.STUDENT, UserRole.FACULTY, UserRole.ADMINISTRATOR);
         when(repository.findByUserRoleIn(visibleRoles, pageable)).thenReturn(Page.empty());
 
-        userService.getAllUsers(pageable, "2025-9999", authorities("LIBRARIAN"));
+        userService.getAllUsers(pageable, "2025-9999", authorities("LIBRARIAN"), null, null);
 
         verify(repository).findByUserRoleIn(visibleRoles, pageable);
     }
@@ -593,7 +593,7 @@ class UserServiceTest {
 
     /** Exercises the student directory as an authorized administrator. */
     private Page<UserResponseDTO> getAllUsers(Pageable pageable) {
-        return userService.getAllUsers(pageable, "2025-4321", authorities("ADMINISTRATOR"));
+        return userService.getAllUsers(pageable, "2025-4321", authorities("ADMINISTRATOR"), null, null);
     }
 
     /** Builds one Spring Security role authority for a service call. */

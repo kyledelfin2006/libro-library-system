@@ -128,10 +128,8 @@ public class UserController {
             @ParameterObject @PageableDefault(size = 12, sort = "universityId") Pageable pageable,
             Authentication authentication) {
         // Forward the verified caller identity and roles for the service authorization check.
-        Page<UserResponseDTO> users = role == null && (q == null || q.isBlank())
-                ? service.getAllUsers(pageable, authentication.getName(), authentication.getAuthorities())
-                : service.getAllUsers(pageable, authentication.getName(), authentication.getAuthorities(), role, q);
-        return ResponseEntity.ok(ApiResponse.ok(users));
+        return ResponseEntity.ok(ApiResponse.ok(service.getAllUsers(
+                pageable, authentication.getName(), authentication.getAuthorities(), role, q)));
     }
 
     /** Returns the authenticated account's current public profile. */
