@@ -56,7 +56,7 @@
 
         <!-- Versions the Boot BOM does not manage. -->
         <testcontainers.version>2.0.5</testcontainers.version>
-        <springdoc.version>3.2.0</springdoc.version>
+        <springdoc.version>3.2.1</springdoc.version>
         <jacoco.version>0.8.16</jacoco.version>
     </properties>
 
