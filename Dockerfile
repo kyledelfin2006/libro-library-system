@@ -7,7 +7,7 @@
 # ---------------------------------------------------------------------------------------------------------------------
 # Stage 1: build
 # ---------------------------------------------------------------------------------------------------------------------
-FROM eclipse-temurin:25-jdk-alpine@sha256:c7c3d0bdf7f2bbc5a05a6712ed334d198360105634ea9adf76fca94f381b1e3f AS build
+FROM eclipse-temurin:25-jdk-alpine@sha256:22edbb1021420ae6e248519d1af07577742314d67d4c60fcbb2e285b7e47fa78 AS build
 ARG LIBRO_COMMIT=unknown
 ARG LIBRO_BUILD_TIME=off
 WORKDIR /build
@@ -31,7 +31,7 @@ RUN --mount=type=cache,target=/root/.m2 \
 # ---------------------------------------------------------------------------------------------------------------------
 # Stage 2: runtime
 # ---------------------------------------------------------------------------------------------------------------------
-FROM eclipse-temurin:25-jre-alpine@sha256:e1898fd6a11fc965a994d8ace186fd3585aeb636cf8f05f47a723fcfee0b0918
+FROM eclipse-temurin:25-jre-alpine@sha256:69c2a26e9894016e274c880fa542956d005b3755f84db765145185e87405bd89
 WORKDIR /app
 
 # A dedicated system account: a compromised API process gets no root privileges.
